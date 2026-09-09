@@ -304,7 +304,7 @@ return view.extend({
 		o.rmempty = false;
 
 		o = s.taboption('routing', form.ListValue, 'tun_dns_mode', _('TUN DNS mode (1.14)'),
-			_('Leave empty to keep current behavior. hijack/native lets sing-box manage platform DNS; may overlap dnsmasq DNS hijack.'));
+			_('Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.'));
 		o.value('default', _('Unset (default)'));
 		o.value('disabled', _('Disabled'));
 		o.value('native', _('Native'));
@@ -692,7 +692,7 @@ return view.extend({
 		so.modalonly = true;
 
 		so = ss.taboption('field_other', hp.CBIStaticList, 'rule_set', _('Rule set'),
-			_('Match rule set.'));
+			_('Match rule set. Since 1.14: a rule-set holding a single default rule is merged into this rule; any other rule-set matches as an OR collection.'));
 		so.load = function(section_id) {
 			delete this.keylist;
 			delete this.vallist;
@@ -1180,7 +1180,7 @@ return view.extend({
 		so.modalonly = true;
 
 		so = ss.taboption('field_other', hp.CBIStaticList, 'rule_set', _('Rule set'),
-			_('Match rule set.'));
+			_('Match rule set. DNS: rules referencing rule-sets that contain query_type are incompatible with legacy address filters (ip_cidr / ip_is_private) — use match_response instead (1.14).'));
 		so.load = function(section_id) {
 			delete this.keylist;
 			delete this.vallist;

@@ -182,6 +182,7 @@ return view.extend({
 		}
 		o.value('mixed', _('Mixed'));
 		o.value('shadowsocks', _('Shadowsocks'));
+		o.value('snell', _('Snell (1.14)'));
 		o.value('socks', _('Socks'));
 		o.value('trojan', _('Trojan'));
 		if (features.with_quic)
@@ -213,12 +214,13 @@ return view.extend({
 		o.depends({'type': /^(http|mixed|naive|socks)$/, 'username': /[\s\S]/});
 		o.depends('type', 'hysteria2');
 		o.depends('type', 'shadowsocks');
+		o.depends('type', 'snell');
 		o.depends('type', 'trojan');
 		o.depends('type', 'tuic');
 		o.validate = function(section_id, value) {
 			if (section_id) {
 				let type = this.section.formvalue(section_id, 'type');
-				let required_type = [ 'anytls', 'http', 'mixed', 'naive', 'socks', 'shadowsocks', 'trojan' ];
+				let required_type = [ 'anytls', 'http', 'mixed', 'naive', 'shadowsocks', 'snell', 'socks', 'trojan' ];
 
 				if (required_type.includes(type)) {
 					if (type === 'shadowsocks') {
@@ -288,6 +290,7 @@ return view.extend({
 		o = s.option(form.ListValue, 'hysteria_obfs_type', _('Obfuscate type'));
 		o.value('', _('Disable'));
 		o.value('salamander', _('Salamander'));
+		o.value('gecko', _('Gecko (1.14)'));
 		o.depends('type', 'hysteria2');
 		o.modalonly = true;
 
@@ -297,30 +300,18 @@ return view.extend({
 		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': /[\s\S]/});
 		o.modalonly = true;
 
-		o = s.option(form.Value, 'hysteria_recv_window_conn', _('QUIC stream receive window'),
-			_('The QUIC stream-level flow control window for receiving data.'));
+		o = s.option(form.Value, 'hysteria_obfs_min_packet_size', _('Min obfs packet size (1.14)'),
+			_('Minimum on-wire packet size in bytes. Gecko only.'));
 		o.datatype = 'uinteger';
-		o.default = '67108864';
-		o.depends('type', 'hysteria');
+		o.placeholder = '512';
+		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
 		o.modalonly = true;
 
-		o = s.option(form.Value, 'hysteria_recv_window_client', _('QUIC connection receive window'),
-			_('The QUIC connection-level flow control window for receiving data.'));
+		o = s.option(form.Value, 'hysteria_obfs_max_packet_size', _('Max obfs packet size (1.14)'),
+			_('Maximum on-wire packet size in bytes. Gecko only.'));
 		o.datatype = 'uinteger';
-		o.default = '15728640';
-		o.depends('type', 'hysteria');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'hysteria_max_conn_client', _('QUIC maximum concurrent bidirectional streams'),
-			_('The maximum number of QUIC concurrent bidirectional streams that a peer is allowed to open.'));
-		o.datatype = 'uinteger';
-		o.default = '1024';
-		o.depends('type', 'hysteria');
-		o.modalonly = true;
-
-		o = s.option(form.Flag, 'hysteria_disable_mtu_discovery', _('Disable Path MTU discovery'),
-			_('Disables Path MTU Discovery (RFC 8899). Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.'));
-		o.depends('type', 'hysteria');
+		o.placeholder = '1200';
+		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
 		o.modalonly = true;
 
 		o = s.option(form.Flag, 'hysteria_ignore_client_bandwidth', _('Ignore client bandwidth'),
@@ -333,6 +324,31 @@ return view.extend({
 		o.depends('type', 'hysteria2');
 		o.modalonly = true;
 		/* Hysteria (2) config end */
+
+		/* Snell config start */
+		o = s.option(form.ListValue, 'snell_version', _('Snell version'),
+			_('The pre-shared key (password) above must be 12-255 bytes for v6.'));
+		o.value('5', _('v5'));
+		o.value('6', _('v6'));
+		o.default = '5';
+		o.depends('type', 'snell');
+		o.modalonly = true;
+
+		o = s.option(form.ListValue, 'snell_obfs_mode', _('Obfuscation mode'),
+			_('HTTP obfuscation. v5 only.'));
+		o.value('', _('none'));
+		o.value('http', _('http'));
+		o.depends({'type': 'snell', 'snell_version': '5'});
+		o.modalonly = true;
+
+		o = s.option(form.ListValue, 'snell_mode', _('Traffic shaping mode'),
+			_('v6 only.'));
+		o.value('', _('default'));
+		o.value('unshaped', _('unshaped'));
+		o.value('unsafe-raw', _('unsafe-raw'));
+		o.depends({'type': 'snell', 'snell_version': '6'});
+		o.modalonly = true;
+		/* Snell config end */
 
 		/* Shadowsocks config */
 		o = s.option(form.ListValue, 'shadowsocks_encrypt_method', _('Encrypt method'));

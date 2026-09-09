@@ -53,6 +53,20 @@
 - 热替换，不中断既有连接；
 - 下载失败时保留旧规则集，不影响分流。
 
+## 新增：Snell 协议与 Hysteria2 增强（r9）
+
+面向 sing-box 1.14 的一轮收敛：补齐新协议、暴露传输层新参数，并修复 1.14 DNS 迁移的一个行为缺陷。
+
+| 领域 | 变更 |
+| --- | --- |
+| **Snell（1.14 新协议）** | 客户端出站 + 自建服务端 inbound 全支持（v4 / v6、psk、多用户 `userkey`、HTTP 混淆、v6 流量整形）；订阅导入 `snell://` |
+| **Hysteria2** | 新增 `disable_chrome_parrot`（Ed25519 证书服务器兼容开关）、`bbr_profile`、`hop_interval_max`（跳变间隔随机化）、`gecko` 混淆与 min/max 包长；服务端同步支持 gecko |
+| **Hysteria v1** | 移除上游已废弃的 QUIC 流控调参（上游 1.16 将删除），回归 sing-box 默认 |
+| **DNS** | 修正 1.14 自动迁移：legacy `ip_cidr` / `ip_is_private` 包装 `evaluate` 时继承原规则查询条件，不再对全部查询预解析 |
+| **连接与交互** | TLS `handshake_timeout`；TUN `dns_mode` 缺省（hijack）与平台 DNS 劫持叠加的界面指引；规则集 merged / OR 匹配语义与 `query_type` 兼容性提示 |
+
+> 设计取舍：Chrome QUIC 指纹（1.14 默认开启）仅在服务器证书为 Ed25519 等握手失败时才需关闭；Snell 采用 sing-box 官方实现（v5 无线协议视同 v4，不支持 v5 QUIC 代理模式）。
+
 ## 运行要求
 
 - ImmortalWrt / OpenWrt ≥ 24.10+（apk 或 opkg 均可安装）

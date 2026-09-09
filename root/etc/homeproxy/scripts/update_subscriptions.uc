@@ -200,6 +200,26 @@ function parse_uri(uri) {
 			};
 
 			break;
+		case 'snell':
+			/* Surge Snell share link: snell://host:port?psk=..&obfs=http&obfs-host=..#name */
+			url = parseURL('http://' + uri[1]) || {};
+			params = url.searchParams || {};
+
+			config = {
+				label: url.hash ? urldecode(url.hash) : null,
+				type: 'snell',
+				address: url.hostname,
+				port: url.port,
+				password: url.username ? urldecode(url.username)
+					: (params.psk ? urldecode(params.psk) : null),
+				snell_version: params.version || '4',
+				snell_userkey: params.userkey,
+				snell_obfs_mode: (params.obfs === 'http') ? 'http' : null,
+				snell_obfs_host: params['obfs-host'],
+				snell_reuse: (params.reuse === '1') ? '1' : '0'
+			};
+
+			break;
 		case 'socks':
 		case 'socks4':
 		case 'socks4a':

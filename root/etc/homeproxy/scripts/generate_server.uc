@@ -42,6 +42,26 @@ uci.foreach(uciconfig, uciserver, (cfg) => {
 	if (cfg.enabled !== '1')
 		return;
 
+	/* Snell (1.14): single-psk inbound; shape differs from the generic users[] block below */
+	if (cfg.type === 'snell') {
+		push(config.inbounds, {
+			type: 'snell',
+			tag: 'cfg-' + cfg['.name'] + '-in',
+
+			listen: cfg.address || '::',
+			listen_port: strToInt(cfg.port),
+			bind_interface: cfg.bind_interface,
+			reuse_addr: strToBool(cfg.reuse_addr),
+			tcp_fast_open: strToBool(cfg.tcp_fast_open),
+			tcp_multi_path: strToBool(cfg.tcp_multi_path),
+			version: strToInt(cfg.snell_version) || 5,
+			psk: cfg.password,
+			obfs_mode: cfg.snell_obfs_mode,
+			mode: cfg.snell_mode
+		});
+		return;
+	}
+
 	push(config.inbounds, {
 		type: cfg.type,
 		tag: 'cfg-' + cfg['.name'] + '-in',
@@ -59,17 +79,15 @@ uci.foreach(uciconfig, uciserver, (cfg) => {
 		/* AnyTLS */
 		padding_scheme: cfg.anytls_padding_scheme,
 
-		/* Hysteria */
+		/* Hysteria (2) */
 		up_mbps: strToInt(cfg.hysteria_up_mbps),
 		down_mbps: strToInt(cfg.hysteria_down_mbps),
 		obfs: cfg.hysteria_obfs_type ? {
 			type: cfg.hysteria_obfs_type,
-			password: cfg.hysteria_obfs_password
+			password: cfg.hysteria_obfs_password,
+			min_packet_size: strToInt(cfg.hysteria_obfs_min_packet_size),
+			max_packet_size: strToInt(cfg.hysteria_obfs_max_packet_size)
 		} : cfg.hysteria_obfs_password,
-		recv_window_conn: strToInt(cfg.hysteria_recv_window_conn),
-		recv_window_client: strToInt(cfg.hysteria_recv_window_client),
-		max_conn_client: strToInt(cfg.hysteria_max_conn_client),
-		disable_mtu_discovery: strToBool(cfg.hysteria_disable_mtu_discovery),
 		ignore_client_bandwidth: strToBool(cfg.hysteria_ignore_client_bandwidth),
 		masquerade: cfg.hysteria_masquerade,
 

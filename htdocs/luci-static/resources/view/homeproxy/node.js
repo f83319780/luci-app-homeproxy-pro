@@ -113,6 +113,26 @@ function parseShareLink(uri, features) {
 			};
 
 			break;
+		case 'snell':
+			/* Surge Snell share link: snell://host:port?psk=..&obfs=http&obfs-host=..#name */
+			url = new URL('http://' + uri[1]);
+			params = url.searchParams;
+
+			config = {
+				label: url.hash ? decodeURIComponent(url.hash.slice(1)) : null,
+				type: 'snell',
+				address: url.hostname,
+				port: url.port || '80',
+				password: url.username ? decodeURIComponent(url.username)
+					: (params.get('psk') ? decodeURIComponent(params.get('psk')) : null),
+				snell_version: params.get('version') || '4',
+				snell_userkey: params.get('userkey'),
+				snell_obfs_mode: (params.get('obfs') === 'http') ? 'http' : null,
+				snell_obfs_host: params.get('obfs-host'),
+				snell_reuse: (params.get('reuse') === '1') ? '1' : '0'
+			};
+
+			break;
 		case 'socks':
 		case 'socks4':
 		case 'socks4a':
@@ -467,6 +487,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.depends('type', 'http');
 	o.depends('type', 'hysteria2');
 	o.depends('type', 'shadowsocks');
+	o.depends('type', 'snell');
 	o.depends('type', 'ssh');
 	o.depends('type', 'trojan');
 	o.depends('type', 'tuic');
@@ -476,7 +497,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.validate = function(section_id, value) {
 		if (section_id) {
 			let type = this.section.formvalue(section_id, 'type');
-			let required_type = [ 'anytls', 'shadowsocks', 'shadowtls', 'trojan' ];
+			let required_type = [ 'anytls', 'shadowsocks', 'shadowtls', 'snell', 'trojan' ];
 
 			if (required_type.includes(type)) {
 				if (type === 'shadowsocks') {
@@ -540,6 +561,13 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.depends({'type': 'hysteria2', 'hysteria_hopping_port': /[\s\S]/});
 	o.modalonly = true;
 
+	o = s.option(form.Value, 'hysteria_hop_interval_max', _('Max hop interval (1.14)'),
+		_('Maximum port hopping interval in seconds; the actual interval is randomized between the two values. Hysteria2 only.'));
+	o.datatype = 'uinteger';
+	o.placeholder = '300';
+	o.depends({'type': 'hysteria2', 'hysteria_hopping_port': /[\s\S]/});
+	o.modalonly = true;
+
 	o = s.option(form.ListValue, 'hysteria_protocol', _('Protocol'));
 	o.value('udp');
 	/* WeChat-Video / FakeTCP are unsupported by sing-box currently
@@ -567,6 +595,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o = s.option(form.ListValue, 'hysteria_obfs_type', _('Obfuscate type'));
 	o.value('', _('Disable'));
 	o.value('salamander', _('Salamander'));
+	o.value('gecko', _('Gecko (1.14)'));
 	o.depends('type', 'hysteria2');
 	o.modalonly = true;
 
@@ -574,6 +603,20 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.password = true;
 	o.depends('type', 'hysteria');
 	o.depends({'type': 'hysteria2', 'hysteria_obfs_type': /[\s\S]/});
+	o.modalonly = true;
+
+	o = s.option(form.Value, 'hysteria_obfs_min_packet_size', _('Min obfs packet size (1.14)'),
+		_('Minimum on-wire packet size in bytes. Gecko only.'));
+	o.datatype = 'uinteger';
+	o.placeholder = '512';
+	o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
+	o.modalonly = true;
+
+	o = s.option(form.Value, 'hysteria_obfs_max_packet_size', _('Max obfs packet size (1.14)'),
+		_('Maximum on-wire packet size in bytes. Gecko only.'));
+	o.datatype = 'uinteger';
+	o.placeholder = '1200';
+	o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
 	o.modalonly = true;
 
 	o = s.option(form.Value, 'hysteria_down_mbps', _('Max download speed'),
@@ -590,21 +633,17 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.depends('type', 'hysteria2');
 	o.modalonly = true;
 
-	o = s.option(form.Value, 'hysteria_recv_window_conn', _('QUIC stream receive window'),
-		_('The QUIC stream-level flow control window for receiving data.'));
-	o.datatype = 'uinteger';
-	o.depends('type', 'hysteria');
+	o = s.option(form.ListValue, 'hysteria_bbr_profile', _('BBR profile (1.14)'),
+		_('BBR congestion control algorithm profile. Hysteria2 only.'));
+	o.value('', _('Standard (default)'));
+	o.value('conservative', _('Conservative'));
+	o.value('aggressive', _('Aggressive'));
+	o.depends('type', 'hysteria2');
 	o.modalonly = true;
 
-	o = s.option(form.Value, 'hysteria_recv_window', _('QUIC connection receive window'),
-		_('The QUIC connection-level flow control window for receiving data.'));
-	o.datatype = 'uinteger';
-	o.depends('type', 'hysteria');
-	o.modalonly = true;
-
-	o = s.option(form.Flag, 'hysteria_disable_mtu_discovery', _('Disable Path MTU discovery'),
-		_('Disables Path MTU Discovery (RFC 8899). Packets will then be at most 1252 (IPv4) / 1232 (IPv6) bytes in size.'));
-	o.depends('type', 'hysteria');
+	o = s.option(form.Flag, 'hysteria_disable_chrome_parrot', _('Disable Chrome QUIC fingerprint (1.14)'),
+		_('Disable Chrome QUIC handshake parroting, which is enabled by default since sing-box 1.14. Turn this on only when the server uses an Ed25519 certificate or the handshake otherwise fails.'));
+	o.depends('type', 'hysteria2');
 	o.modalonly = true;
 	/* Hysteria (2) config end */
 
@@ -999,6 +1038,46 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.modalonly = true;
 	/* Mux config end */
 
+	/* Snell config start */
+	o = s.option(form.ListValue, 'snell_version', _('Snell version'),
+		_('sing-box implements Snell v4/v5 wire as v4 and v6. The pre-shared key (Password above) must be 12-255 bytes for v6.'));
+	o.value('4', _('v4'));
+	o.value('6', _('v6'));
+	o.default = '4';
+	o.depends('type', 'snell');
+	o.modalonly = true;
+
+	o = s.option(form.Value, 'snell_userkey', _('User key'),
+		_('Optional; only required when connecting to a multi-user Snell server.'));
+	o.depends('type', 'snell');
+	o.modalonly = true;
+
+	o = s.option(form.Flag, 'snell_reuse', _('Connection reuse'),
+		_('Enable connection reuse (the Snell v2 CONNECT command).'));
+	o.depends('type', 'snell');
+	o.modalonly = true;
+
+	o = s.option(form.ListValue, 'snell_obfs_mode', _('Obfuscation mode'),
+		_('HTTP obfuscation. v4 only.'));
+	o.value('', _('none'));
+	o.value('http', _('http'));
+	o.depends({'type': 'snell', 'snell_version': '4'});
+	o.modalonly = true;
+
+	o = s.option(form.Value, 'snell_obfs_host', _('Obfuscation host'),
+		_('HTTP Host header sent when obfuscation mode is http. bing.com is used by default.'));
+	o.depends({'type': 'snell', 'snell_version': '4', 'snell_obfs_mode': 'http'});
+	o.modalonly = true;
+
+	o = s.option(form.ListValue, 'snell_mode', _('Traffic shaping mode'),
+		_('v6 only.'));
+	o.value('', _('default'));
+	o.value('unshaped', _('unshaped'));
+	o.value('unsafe-raw', _('unsafe-raw'));
+	o.depends({'type': 'snell', 'snell_version': '6'});
+	o.modalonly = true;
+	/* Snell config end */
+
 	/* TLS config start */
 	o = s.option(form.Flag, 'tls', _('TLS'));
 	o.depends('type', 'anytls');
@@ -1067,6 +1146,13 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 		o.value(i);
 	o.depends('tls', '1');
 	o.optional = true;
+	o.modalonly = true;
+
+	o = s.option(form.Value, 'tls_handshake_timeout', _('Handshake timeout (1.14)'),
+		_('TLS handshake timeout in seconds. 15s is used by default.'));
+	o.datatype = 'uinteger';
+	o.placeholder = '15';
+	o.depends('tls', '1');
 	o.modalonly = true;
 
 	o = s.option(form.Flag, 'tls_self_sign', _('Append self-signed certificate'),
