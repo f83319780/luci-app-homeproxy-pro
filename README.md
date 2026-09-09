@@ -67,6 +67,17 @@
 
 > 设计取舍：Chrome QUIC 指纹（1.14 默认开启）仅在服务器证书为 Ed25519 等握手失败时才需关闭；Snell 采用 sing-box 官方实现（v5 无线协议视同 v4，不支持 v5 QUIC 代理模式）。
 
+## 新增：规则分流与 TLS 能力补全（r10）
+
+补齐 sing-box 1.14 在路由规则与规则集加载侧的剩余能力，并加固一处规则集配置的校验提示。
+
+| 领域 | 变更 |
+| --- | --- |
+| **route `resolve`** | 新增 `disable_optimistic_cache`（关闭本次解析的乐观缓存）、`timeout`（覆盖本次解析超时）两个 1.14 字段及对应 LuCI 控件 |
+| **route / route-options** | 新增 `tls_spoof` / `tls_spoof_method`（注入伪造 ClientHello 干扰按 SNI 过滤的中间盒，需特权），LuCI 提供 SNI 与方式选择（默认 wrong-sequence） |
+| **规则集加载** | 多 tag 时若 `path`/`url` 缺少 `{tag}` 占位，生成器给出 `warn` 提示——配合 LuCI 表单校验与 sing-box 的硬拒绝（`missing {tag} placeholder`），三层防护避免误配 |
+| **i18n** | 重扫 pot，补齐新增文案的 zh_Hans 译文 |
+
 ## 运行要求
 
 - ImmortalWrt / OpenWrt ≥ 24.10+（apk 或 opkg 均可安装）
