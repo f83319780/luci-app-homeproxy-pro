@@ -1001,7 +1001,6 @@ return view.extend({
 
 		so = ss.option(form.Value, 'optimistic_timeout', _('Optimistic cache timeout'),
 			_('Max time an expired entry may be served. Examples: 3d, 1h.'));
-		so.depends('optimistic_cache', '1');
 
 		so = ss.option(form.Value, 'dns_timeout', _('DNS query timeout'),
 			_('Default timeout per DNS query in seconds (sing-box default: 10).'));
@@ -1742,7 +1741,6 @@ return view.extend({
 
 		so = ss.option(form.Value, 'optimistic_timeout', _('Optimistic cache timeout'),
 			_('Max time an expired entry may be served. Examples: 3d, 1h.'));
-		so.depends('optimistic_cache', '1');
 
 		so = ss.option(form.Value, 'dns_timeout', _('DNS query timeout'),
 			_('Default timeout per DNS query in seconds (sing-box default: 10).'));
