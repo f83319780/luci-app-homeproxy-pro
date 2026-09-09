@@ -139,7 +139,13 @@ jobs:
             echo "::error::输入版本 $VERSION 与 Makefile 产物版本 $EXPECTED 不一致，拒绝发布"
             exit 1
           fi
+          # 等位编号：把 -rN 规范为 -rNN（如 r9 -> r09），使 GitHub 按 tag 字符串排序时
+          # r09 < r10 < r11，Release 列表保持从大到小（避免 'r10' 字典序小于 'r9' 的乱序）。
+          BASE="${VERSION%-r*}"
+          R="${VERSION##*-r}"
+          TAG_VERSION="$(printf '%s-r%02d' "$BASE" "$R")"
           echo "VERSION=$VERSION" >> "${GITHUB_ENV:-/dev/null}"
+          echo "TAG_VERSION=$TAG_VERSION" >> "${GITHUB_ENV:-/dev/null}"
 
       - name: Refuse overwriting an existing release
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
@@ -147,8 +153,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::tag/release v$VERSION 已存在。瀑布流不覆盖已有 release，请 bump 版本后重试"
+          if gh release view "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::tag/release v$TAG_VERSION 已存在。瀑布流不覆盖已有 release，请 bump 版本后重试"
             exit 1
           fi
 
@@ -167,10 +173,10 @@ jobs:
           fi
           # shields.io badge：label 与 message 中 "-" 需写作 "--"（path 分隔转义）
           LABEL="luci--app--homeproxy"
-          MSG="v${VERSION//-/--}"
-          NOTES="[![v$VERSION](https://img.shields.io/badge/${LABEL}-${MSG}-blue)](https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION)"
-          gh release create "v$VERSION" \
+          MSG="v${TAG_VERSION//-/--}"
+          NOTES="[![v$TAG_VERSION](https://img.shields.io/badge/${LABEL}-${MSG}-blue)](https://github.com/$GITHUB_REPOSITORY/releases/tag/v$TAG_VERSION)"
+          gh release create "v$TAG_VERSION" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "v$VERSION" \
+            --title "v$TAG_VERSION" \
             --notes "$NOTES" \
             "${apks[@]}" "${ipks[@]}"
