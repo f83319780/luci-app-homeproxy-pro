@@ -1111,6 +1111,8 @@ if (!isEmpty(main_node)) {
 			tls_fragment: strToBool(cfg.tls_fragment),
 			tls_fragment_fallback_delay: strToTime(cfg.tls_fragment_fallback_delay),
 			tls_record_fragment: strToBool(cfg.tls_record_fragment),
+			tls_spoof: cfg.tls_spoof || null,
+			tls_spoof_method: cfg.tls_spoof_method || null,
 			source_mac_address: cfg.source_mac_address,
 			source_hostname: cfg.source_hostname
 		};
@@ -1118,7 +1120,9 @@ if (!isEmpty(main_node)) {
 			rule.server = get_resolver(cfg.resolve_server);
 			rule.strategy = cfg.resolve_strategy;
 			rule.disable_cache = strToBool(cfg.resolve_disable_cache);
+			rule.disable_optimistic_cache = strToBool(cfg.resolve_disable_optimistic_cache);
 			rule.rewrite_ttl = strToInt(cfg.resolve_rewrite_ttl);
+			rule.timeout = strToTime(cfg.resolve_timeout);
 			rule.client_subnet = cfg.resolve_client_subnet;
 		}
 		if (cfg.action === 'reject') {
@@ -1151,6 +1155,10 @@ if (!isEmpty(main_node)) {
 			rs_tag = [rs_tag];
 			for (let t in extra_tags)
 				push(rs_tag, 'cfg-' + t + '-rule');
+			/* sing-box 1.14: multi-tag requires a {tag} placeholder in the fetch source */
+			const fetch_ref = (cfg.type === 'remote') ? (cfg.url || '') : (cfg.path || '');
+			if (!match(fetch_ref, /\{tag\}/))
+				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its %s source lacks a {tag} placeholder.", cfg['.name'], cfg.type));
 		}
 
 		const ruleset = {

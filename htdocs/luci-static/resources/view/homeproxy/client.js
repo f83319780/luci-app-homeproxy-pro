@@ -794,6 +794,25 @@ return view.extend({
 		so.depends('tls_fragment', '1');
 		so.modalonly = true;
 
+		so = ss.taboption('field_other', form.Value, 'tls_spoof', _('TLS spoof SNI (1.14)'),
+			_('Inject a forged TLS ClientHello carrying this SNI before the real one to fool SNI-filtering middleboxes. Requires elevated privileges.'));
+		so.datatype = 'hostname';
+		so.depends('action', 'route');
+		so.depends('action', 'route-options');
+		so.modalonly = true;
+
+		so = ss.taboption('field_other', form.ListValue, 'tls_spoof_method', _('TLS spoof method (1.14)'),
+			_('How the forged segment is rejected by the real server.'));
+		so.value('', _('wrong-sequence (default)'));
+		so.value('wrong-checksum', _('wrong-checksum'));
+		so.value('wrong-ack', _('wrong-ack'));
+		so.value('wrong-md5', _('wrong-md5'));
+		so.value('wrong-timestamp', _('wrong-timestamp'));
+		so.depends('action', 'route');
+		so.depends('action', 'route-options');
+		so.depends('tls_spoof', /[\s\S]/);
+		so.modalonly = true;
+
 		so = ss.taboption('field_other', form.ListValue, 'resolve_server', _('DNS server'),
 			_('Specifies DNS server tag to use instead of selecting through DNS routing.'));
 		so.load = function(section_id) {
@@ -847,6 +866,17 @@ return view.extend({
 			_('Append a <code>edns0-subnet</code> OPT extra record with the specified IP prefix to every query by default.<br/>' +
 			'If value is an IP address instead of prefix, <code>/32</code> or <code>/128</code> will be appended automatically.'));
 		so.datatype = 'or(cidr, ipaddr)';
+		so.depends('action', 'resolve');
+		so.modalonly = true;
+
+		so = ss.taboption('field_other', form.Flag, 'resolve_disable_optimistic_cache', _('Disable optimistic cache'),
+			_('Disable optimistic DNS caching in this lookup (1.14).'));
+		so.depends('action', 'resolve');
+		so.modalonly = true;
+
+		so = ss.taboption('field_other', form.Value, 'resolve_timeout', _('Query timeout'),
+			_('Override dns.timeout for this lookup, in seconds (1.14).'));
+		so.datatype = 'uinteger';
 		so.depends('action', 'resolve');
 		so.modalonly = true;
 

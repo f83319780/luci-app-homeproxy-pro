@@ -13,7 +13,7 @@ msgstr ""
 msgid "/etc/homeproxy/certs/..., /etc/acme/..., /etc/ssl/..."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1257
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1287
 msgid ""
 "1 matches the latest untagged evaluate result; other values match an "
 "evaluate tag (1.14)."
@@ -23,8 +23,8 @@ msgstr ""
 msgid "4 or 6. Not limited if empty."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:823
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1324
+#: htdocs/luci-static/resources/view/homeproxy/client.js:842
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1354
 msgid ""
 "<code>%s</code> will be temporarily overwritten to <code>%s</code> after 50 "
 "triggers in 30s if not enabled."
@@ -61,7 +61,7 @@ msgstr ""
 msgid "Accept any if empty."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1556
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1586
 msgid "Access Control"
 msgstr ""
 
@@ -74,15 +74,15 @@ msgid "Access key secret"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:717
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1205
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1235
 msgid "Action"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1119
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1149
 msgid "Add a DNS rule"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:996
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1026
 msgid "Add a DNS server"
 msgstr ""
 
@@ -98,7 +98,7 @@ msgstr ""
 msgid "Add a routing rule"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1452
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1482
 msgid "Add a rule set"
 msgstr ""
 
@@ -106,11 +106,11 @@ msgstr ""
 msgid "Add a server"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1038
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1068
 msgid "Additional headers to be sent to the DNS server."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1020
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1050
 #: htdocs/luci-static/resources/view/homeproxy/node.js:468
 msgid "Address"
 msgstr ""
@@ -125,11 +125,11 @@ msgstr ""
 msgid "Address dependent"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1051
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1081
 msgid "Address resolver"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1083
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1113
 msgid "Address strategy"
 msgstr ""
 
@@ -197,7 +197,7 @@ msgstr ""
 msgid "An error occurred during updating subscriptions: %s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1341
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1371
 msgid "Answer"
 msgstr ""
 
@@ -210,9 +210,9 @@ msgstr ""
 msgid "AnyTLS padding scheme in array."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:847
-#: htdocs/luci-static/resources/view/homeproxy/client.js:962
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1249
+#: htdocs/luci-static/resources/view/homeproxy/client.js:866
+#: htdocs/luci-static/resources/view/homeproxy/client.js:992
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1279
 msgid ""
 "Append a <code>edns0-subnet</code> OPT extra record with the specified IP "
 "prefix to every query by default.<br/>If value is an IP address instead of "
@@ -287,23 +287,23 @@ msgstr ""
 msgid "Based on google/gvisor."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1473
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1503
 msgid "Binary file"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:501
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1569
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1599
 #: htdocs/luci-static/resources/view/homeproxy/server.js:913
 msgid "Bind interface"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1570
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1600
 msgid ""
 "Bind outbound traffic to specific interface. Leave empty to auto detect."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:665
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1169
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1199
 msgid "BitTorrent"
 msgstr ""
 
@@ -317,8 +317,8 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:660
 #: htdocs/luci-static/resources/view/homeproxy/client.js:688
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1155
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1165
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1185
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1195
 #: htdocs/luci-static/resources/view/homeproxy/server.js:908
 msgid "Both"
 msgstr ""
@@ -456,19 +456,19 @@ msgstr ""
 msgid "DNS"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1704
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1734
 msgid "DNS Cache (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1110
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1140
 msgid "DNS Rules"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:987
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1017
 msgid "DNS Servers"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:929
+#: htdocs/luci-static/resources/view/homeproxy/client.js:959
 msgid "DNS Settings"
 msgstr ""
 
@@ -476,18 +476,18 @@ msgstr ""
 msgid "DNS provider"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:976
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1717
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1006
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1747
 msgid "DNS query timeout"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1119
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1149
 msgid "DNS rule"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:179
-#: htdocs/luci-static/resources/view/homeproxy/client.js:797
-#: htdocs/luci-static/resources/view/homeproxy/client.js:996
+#: htdocs/luci-static/resources/view/homeproxy/client.js:816
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1026
 msgid "DNS server"
 msgstr ""
 
@@ -496,7 +496,7 @@ msgid "DNS01 challenge"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:667
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1170
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1200
 msgid "DTLS"
 msgstr ""
 
@@ -507,23 +507,23 @@ msgstr ""
 #: htdocs/luci-static/resources/homeproxy.js:17
 #: htdocs/luci-static/resources/view/homeproxy/client.js:481
 #: htdocs/luci-static/resources/view/homeproxy/client.js:651
-#: htdocs/luci-static/resources/view/homeproxy/client.js:803
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1146
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1516
+#: htdocs/luci-static/resources/view/homeproxy/client.js:822
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1176
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1546
 #: htdocs/luci-static/resources/view/homeproxy/node.js:749
 msgid "Default"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:430
 #: htdocs/luci-static/resources/view/homeproxy/client.js:482
-#: htdocs/luci-static/resources/view/homeproxy/client.js:804
-#: htdocs/luci-static/resources/view/homeproxy/client.js:944
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1058
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1221
+#: htdocs/luci-static/resources/view/homeproxy/client.js:823
+#: htdocs/luci-static/resources/view/homeproxy/client.js:974
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1088
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1251
 msgid "Default DNS (issued by WAN)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:939
+#: htdocs/luci-static/resources/view/homeproxy/client.js:969
 msgid "Default DNS server"
 msgstr ""
 
@@ -531,7 +531,7 @@ msgstr ""
 msgid "Default DNS server for resolving domain name in the server address."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:934
+#: htdocs/luci-static/resources/view/homeproxy/client.js:964
 msgid "Default DNS strategy"
 msgstr ""
 
@@ -555,41 +555,41 @@ msgstr ""
 msgid "Default server name"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:977
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1718
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1007
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1748
 msgid "Default timeout per DNS query in seconds (sing-box default: 10)."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:412
 #: htdocs/luci-static/resources/view/homeproxy/client.js:514
 #: htdocs/luci-static/resources/view/homeproxy/client.js:732
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1096
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1517
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1126
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1547
 #: htdocs/luci-static/resources/view/homeproxy/node.js:448
 msgid "Direct"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1671
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1701
 msgid "Direct Domain List"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1585
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1630
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1615
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1660
 msgid "Direct IPv4 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1588
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1633
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1618
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1663
 msgid "Direct IPv6 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1591
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1621
 msgid "Direct MAC-s"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:123
 #: htdocs/luci-static/resources/view/homeproxy/client.js:151
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1579
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1609
 #: htdocs/luci-static/resources/view/homeproxy/node.js:520
 #: htdocs/luci-static/resources/view/homeproxy/node.js:583
 #: htdocs/luci-static/resources/view/homeproxy/node.js:596
@@ -615,12 +615,12 @@ msgid ""
 "or the handshake otherwise fails."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:835
-#: htdocs/luci-static/resources/view/homeproxy/client.js:956
+#: htdocs/luci-static/resources/view/homeproxy/client.js:854
+#: htdocs/luci-static/resources/view/homeproxy/client.js:986
 msgid "Disable DNS cache"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:836
+#: htdocs/luci-static/resources/view/homeproxy/client.js:855
 msgid "Disable DNS cache in this query."
 msgstr ""
 
@@ -636,23 +636,28 @@ msgstr ""
 msgid "Disable UDP domain unmapping"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1236
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1266
 msgid "Disable cache and save cache in this query."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:958
+#: htdocs/luci-static/resources/view/homeproxy/client.js:988
 msgid "Disable cache expire"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1235
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1265
 msgid "Disable dns cache"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1278
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1308
 msgid "Disable optimistic DNS caching for this query."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1277
+#: htdocs/luci-static/resources/view/homeproxy/client.js:873
+msgid "Disable optimistic DNS caching in this lookup (1.14)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:872
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1307
 msgid "Disable optimistic cache"
 msgstr ""
 
@@ -660,18 +665,18 @@ msgstr ""
 msgid "Disabled"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:862
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1365
+#: htdocs/luci-static/resources/view/homeproxy/client.js:892
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1395
 msgid "Domain keyword"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:853
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1356
+#: htdocs/luci-static/resources/view/homeproxy/client.js:883
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1386
 msgid "Domain name"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:866
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1369
+#: htdocs/luci-static/resources/view/homeproxy/client.js:896
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1399
 msgid "Domain regex"
 msgstr ""
 
@@ -684,12 +689,12 @@ msgstr ""
 msgid "Domain strategy"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:829
+#: htdocs/luci-static/resources/view/homeproxy/client.js:848
 msgid "Domain strategy for resolving the domain names."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:858
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1361
+#: htdocs/luci-static/resources/view/homeproxy/client.js:888
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1391
 msgid "Domain suffix"
 msgstr ""
 
@@ -697,11 +702,11 @@ msgstr ""
 msgid "Domains"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:822
+#: htdocs/luci-static/resources/view/homeproxy/client.js:841
 msgid "Don't drop packets"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1323
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1353
 msgid "Don't drop requests"
 msgstr ""
 
@@ -715,13 +720,13 @@ msgstr ""
 msgid "Download bandwidth in Mbps."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:818
-#: htdocs/luci-static/resources/view/homeproxy/client.js:824
+#: htdocs/luci-static/resources/view/homeproxy/client.js:837
+#: htdocs/luci-static/resources/view/homeproxy/client.js:843
 msgid "Drop packets"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1318
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1325
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1348
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1355
 msgid "Drop requests"
 msgstr ""
 
@@ -763,9 +768,9 @@ msgstr ""
 msgid "ECH key"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:846
-#: htdocs/luci-static/resources/view/homeproxy/client.js:961
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1248
+#: htdocs/luci-static/resources/view/homeproxy/client.js:865
+#: htdocs/luci-static/resources/view/homeproxy/client.js:991
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1278
 msgid "EDNS Client subnet"
 msgstr ""
 
@@ -793,9 +798,9 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:462
 #: htdocs/luci-static/resources/view/homeproxy/client.js:638
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1005
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1133
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1461
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1035
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1163
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1491
 #: htdocs/luci-static/resources/view/homeproxy/server.js:148
 #: htdocs/luci-static/resources/view/homeproxy/server.js:166
 msgid "Enable"
@@ -879,11 +884,11 @@ msgstr ""
 msgid "Error"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1210
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1240
 msgid "Evaluate (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1261
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1291
 msgid "Evaluate tag"
 msgstr ""
 
@@ -905,14 +910,14 @@ msgstr ""
 #: htdocs/luci-static/resources/view/homeproxy/client.js:552
 #: htdocs/luci-static/resources/view/homeproxy/client.js:566
 #: htdocs/luci-static/resources/view/homeproxy/client.js:569
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1489
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1492
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1497
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1500
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1540
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1543
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1664
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1696
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1519
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1522
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1527
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1530
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1570
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1573
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1694
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1726
 #: htdocs/luci-static/resources/view/homeproxy/node.js:509
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1217
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1388
@@ -936,16 +941,16 @@ msgstr ""
 msgid "External account key ID"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1351
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1381
 msgid "Extra records"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1534
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1564
 msgid ""
 "Extra rule-set tags sharing these options. Requires {tag} in path/url (1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1533
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1563
 msgid "Extra tags"
 msgstr ""
 
@@ -990,7 +995,7 @@ msgstr ""
 msgid "For resolving domain name in the server address."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1472
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1502
 msgid "Format"
 msgstr ""
 
@@ -1019,15 +1024,15 @@ msgstr ""
 msgid "GFWList"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1603
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1633
 msgid "Gaming mode IPv4 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1605
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1635
 msgid "Gaming mode IPv6 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1608
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1638
 msgid "Gaming mode MAC-s"
 msgstr ""
 
@@ -1054,15 +1059,15 @@ msgstr ""
 msgid "Global padding"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1610
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1640
 msgid "Global proxy IPv4 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1613
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1643
 msgid "Global proxy IPv6 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1616
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1646
 msgid "Global proxy MAC-s"
 msgstr ""
 
@@ -1083,7 +1088,7 @@ msgid "Grant access to homeproxy configuration"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:668
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1171
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1201
 #: htdocs/luci-static/resources/view/homeproxy/node.js:450
 #: htdocs/luci-static/resources/view/homeproxy/node.js:816
 #: htdocs/luci-static/resources/view/homeproxy/server.js:177
@@ -1105,7 +1110,7 @@ msgstr ""
 msgid "HTTP obfuscation. v5 only."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1015
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1045
 msgid "HTTP/3"
 msgstr ""
 
@@ -1115,7 +1120,7 @@ msgid ""
 "returned if empty."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1014
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1044
 msgid "HTTPS"
 msgstr ""
 
@@ -1136,7 +1141,7 @@ msgstr ""
 msgid "Handshake timeout (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1037
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1067
 msgid "Headers"
 msgstr ""
 
@@ -1189,7 +1194,7 @@ msgid "Host key algorithms"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:629
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1124
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1154
 msgid "Host/IP fields"
 msgstr ""
 
@@ -1197,6 +1202,10 @@ msgstr ""
 msgid ""
 "How long the server should wait for the client to send the authentication "
 "command (in seconds)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:805
+msgid "How the forged segment is rejected by the real server."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:452
@@ -1209,18 +1218,18 @@ msgstr ""
 msgid "Hysteria2"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:878
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1381
+#: htdocs/luci-static/resources/view/homeproxy/client.js:908
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1411
 msgid "IP CIDR"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:656
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1152
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1182
 msgid "IP version"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:658
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1153
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1183
 msgid "IPv4"
 msgstr ""
 
@@ -1229,7 +1238,7 @@ msgid "IPv4 only"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:659
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1154
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1184
 msgid "IPv6"
 msgstr ""
 
@@ -1329,11 +1338,17 @@ msgstr ""
 msgid "Info"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1527
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1557
 msgid "Initial path"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1562
+#: htdocs/luci-static/resources/view/homeproxy/client.js:798
+msgid ""
+"Inject a forged TLS ClientHello carrying this SNI before the real one to "
+"fool SNI-filtering middleboxes. Requires elevated privileges."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1592
 msgid "Interface Control"
 msgstr ""
 
@@ -1357,16 +1372,16 @@ msgid ""
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:713
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1201
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1231
 msgid "Invert"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:714
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1202
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1232
 msgid "Invert match result."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1267
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1297
 msgid ""
 "Judge this response-dependent rule in parallel; first match wins (1.14)."
 msgstr ""
@@ -1375,15 +1390,15 @@ msgstr ""
 msgid "Key path"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1576
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1606
 msgid "LAN IP Policy"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:457
 #: htdocs/luci-static/resources/view/homeproxy/client.js:633
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1000
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1128
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1456
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1030
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1158
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1486
 #: htdocs/luci-static/resources/view/homeproxy/node.js:442
 #: htdocs/luci-static/resources/view/homeproxy/server.js:160
 msgid "Label"
@@ -1420,15 +1435,15 @@ msgstr ""
 msgid "List of supported application level protocols, in order of preference."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1342
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1372
 msgid "List of text DNS record to respond as answers."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1352
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1382
 msgid "List of text DNS record to respond as extra records."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1347
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1377
 msgid "List of text DNS record to respond as name servers."
 msgstr ""
 
@@ -1436,7 +1451,7 @@ msgstr ""
 msgid "Listen address"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1564
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1594
 msgid "Listen interfaces"
 msgstr ""
 
@@ -1448,7 +1463,7 @@ msgstr ""
 msgid "Loading"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1467
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1497
 msgid "Local"
 msgstr ""
 
@@ -1456,7 +1471,7 @@ msgstr ""
 msgid "Local address"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1528
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1558
 msgid ""
 "Local file with initial rule-set content; avoids blocking startup on first "
 "download (1.14)."
@@ -1486,7 +1501,7 @@ msgstr ""
 msgid "Make IP CIDR in rule set used to match the source IP."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1198
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1228
 msgid "Make IP CIDR in rule sets match the source IP."
 msgstr ""
 
@@ -1494,103 +1509,103 @@ msgstr ""
 msgid "Masquerade"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1404
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1434
 msgid "Match DNSSEC OK"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1382
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1412
 msgid ""
 "Match IP CIDR with the evaluated response (needs match_response; old rules "
 "are auto-wrapped in 1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:879
+#: htdocs/luci-static/resources/view/homeproxy/client.js:909
 msgid "Match IP CIDR."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:887
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1391
+#: htdocs/luci-static/resources/view/homeproxy/client.js:917
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1421
 msgid "Match LAN device by MAC address."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:892
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1396
+#: htdocs/luci-static/resources/view/homeproxy/client.js:922
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1426
 msgid ""
 "Match LAN device hostname via neighbor resolution; enable find_neighbor."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:859
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1362
+#: htdocs/luci-static/resources/view/homeproxy/client.js:889
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1392
 msgid "Match domain suffix."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:863
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1366
+#: htdocs/luci-static/resources/view/homeproxy/client.js:893
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1396
 msgid "Match domain using keyword."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:867
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1370
+#: htdocs/luci-static/resources/view/homeproxy/client.js:897
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1400
 msgid "Match domain using regular expression."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:854
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1357
+#: htdocs/luci-static/resources/view/homeproxy/client.js:884
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1387
 msgid "Match full domain."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:911
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1424
+#: htdocs/luci-static/resources/view/homeproxy/client.js:941
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1454
 msgid "Match port range. Format as START:/:END/START:END."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:906
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1419
+#: htdocs/luci-static/resources/view/homeproxy/client.js:936
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1449
 msgid "Match port."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:883
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1386
+#: htdocs/luci-static/resources/view/homeproxy/client.js:913
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1416
 msgid "Match private IP"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1387
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1417
 msgid "Match private IP with the evaluated response (needs match_response)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:875
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1378
+#: htdocs/luci-static/resources/view/homeproxy/client.js:905
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1408
 msgid "Match private source IP"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:916
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1429
+#: htdocs/luci-static/resources/view/homeproxy/client.js:946
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1459
 msgid "Match process name."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:924
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1437
+#: htdocs/luci-static/resources/view/homeproxy/client.js:954
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1467
 msgid "Match process path using regular expression."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:920
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1433
+#: htdocs/luci-static/resources/view/homeproxy/client.js:950
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1463
 msgid "Match process path."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1405
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1435
 msgid "Match queries with the DNSSEC OK bit set (1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1159
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1189
 msgid "Match query type."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1256
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1286
 msgid "Match response"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1183
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1213
 msgid ""
 "Match rule set. DNS: rules referencing rule-sets that contain query_type are "
 "incompatible with legacy address filters (ip_cidr / ip_is_private) — use "
@@ -1603,31 +1618,31 @@ msgid ""
 "merged into this rule; any other rule-set matches as an OR collection."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:871
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1374
+#: htdocs/luci-static/resources/view/homeproxy/client.js:901
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1404
 msgid "Match source IP CIDR."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:901
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1414
+#: htdocs/luci-static/resources/view/homeproxy/client.js:931
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1444
 msgid "Match source port range. Format as START:/:END/START:END."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:896
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1409
+#: htdocs/luci-static/resources/view/homeproxy/client.js:926
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1439
 msgid "Match source port."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1400
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1430
 msgid "Match the EDNS Client Subnet in the query (1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1297
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1327
 msgid "Match the evaluated response code (requires match_response)."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:691
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1179
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1209
 msgid "Match user name."
 msgstr ""
 
@@ -1650,8 +1665,8 @@ msgstr ""
 msgid "Max obfs packet size (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:973
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1714
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1003
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1744
 msgid "Max time an expired entry may be served. Examples: 3d, 1h."
 msgstr ""
 
@@ -1700,10 +1715,10 @@ msgstr ""
 msgid "Maximum streams"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:816
-#: htdocs/luci-static/resources/view/homeproxy/client.js:824
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1316
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1325
+#: htdocs/luci-static/resources/view/homeproxy/client.js:835
+#: htdocs/luci-static/resources/view/homeproxy/client.js:843
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1346
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1355
 #: htdocs/luci-static/resources/view/homeproxy/node.js:880
 #: htdocs/luci-static/resources/view/homeproxy/server.js:468
 msgid "Method"
@@ -1748,7 +1763,7 @@ msgid "Mixed <code>system</code> TCP stack and <code>gVisor</code> UDP stack."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:643
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1138
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1168
 msgid "Mode"
 msgstr ""
 
@@ -1775,7 +1790,7 @@ msgstr ""
 msgid "NOTE: Save current settings before updating subscriptions."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1346
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1376
 msgid "NS"
 msgstr ""
 
@@ -1789,7 +1804,7 @@ msgid "NaïveProxy"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:685
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1162
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1192
 #: htdocs/luci-static/resources/view/homeproxy/server.js:905
 msgid "Network"
 msgstr ""
@@ -1835,7 +1850,7 @@ msgstr ""
 msgid "Nodes"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1057
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1087
 #: htdocs/luci-static/resources/view/homeproxy/node.js:776
 #: htdocs/luci-static/resources/view/homeproxy/node.js:814
 #: htdocs/luci-static/resources/view/homeproxy/server.js:402
@@ -1862,7 +1877,7 @@ msgstr ""
 msgid "Obfuscation mode"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1565
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1595
 msgid "Only process traffic from specific interfaces. Leave empty for all."
 msgstr ""
 
@@ -1870,17 +1885,17 @@ msgstr ""
 msgid "Only proxy mainland China"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:966
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1709
+#: htdocs/luci-static/resources/view/homeproxy/client.js:996
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1739
 msgid "Optimistic DNS cache"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:972
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1713
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1002
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1743
 msgid "Optimistic cache timeout"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1262
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1292
 msgid "Optional tag for this evaluate result."
 msgstr ""
 
@@ -1889,14 +1904,14 @@ msgid "Optional; only required when connecting to a multi-user Snell server."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:628
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1123
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1153
 msgid "Other fields"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:508
 #: htdocs/luci-static/resources/view/homeproxy/client.js:726
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1090
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1510
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1120
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1540
 msgid "Outbound"
 msgstr ""
 
@@ -1904,7 +1919,7 @@ msgstr ""
 msgid "Outbound node"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1511
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1541
 msgid ""
 "Outbound used to download this rule-set (via sing-box 1.14 http_clients)."
 msgstr ""
@@ -1913,7 +1928,11 @@ msgstr ""
 msgid "Override address"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1284
+#: htdocs/luci-static/resources/view/homeproxy/client.js:878
+msgid "Override dns.timeout for this lookup, in seconds (1.14)."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1314
 msgid "Override dns.timeout for this query, in seconds."
 msgstr ""
 
@@ -1954,8 +1973,8 @@ msgstr ""
 msgid "Password"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1030
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1478
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1060
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1508
 #: htdocs/luci-static/resources/view/homeproxy/node.js:875
 #: htdocs/luci-static/resources/view/homeproxy/node.js:908
 #: htdocs/luci-static/resources/view/homeproxy/server.js:463
@@ -1973,11 +1992,11 @@ msgid ""
 "it is not needed."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1722
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1752
 msgid "Persist DNS cache across restarts (replaces Store RDRC)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:981
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1011
 msgid "Persist DNS cache across restarts (sing-box 1.14, replaces Store RDRC)."
 msgstr ""
 
@@ -1998,9 +2017,9 @@ msgstr ""
 msgid "Plugin opts"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:905
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1025
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1418
+#: htdocs/luci-static/resources/view/homeproxy/client.js:935
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1055
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1448
 #: htdocs/luci-static/resources/view/homeproxy/node.js:473
 msgid "Port"
 msgstr ""
@@ -2010,7 +2029,7 @@ msgid "Port %s alrealy exists!"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:630
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1125
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1155
 msgid "Port fields"
 msgstr ""
 
@@ -2018,8 +2037,8 @@ msgstr ""
 msgid "Port hopping interval in seconds."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:910
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1423
+#: htdocs/luci-static/resources/view/homeproxy/client.js:940
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1453
 msgid "Port range"
 msgstr ""
 
@@ -2027,7 +2046,7 @@ msgstr ""
 msgid "Pre-shared key"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1209
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1239
 msgid "Predefined"
 msgstr ""
 
@@ -2053,27 +2072,27 @@ msgid "Private key type for new certificates (1.14). Empty uses the default."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:631
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1126
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1156
 msgid "Process fields"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:915
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1428
+#: htdocs/luci-static/resources/view/homeproxy/client.js:945
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1458
 msgid "Process name"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:919
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1432
+#: htdocs/luci-static/resources/view/homeproxy/client.js:949
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1462
 msgid "Process path"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:923
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1436
+#: htdocs/luci-static/resources/view/homeproxy/client.js:953
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1466
 msgid "Process path (regex)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:663
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1167
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1197
 #: htdocs/luci-static/resources/view/homeproxy/node.js:571
 #: htdocs/luci-static/resources/view/homeproxy/node.js:990
 #: htdocs/luci-static/resources/view/homeproxy/server.js:252
@@ -2090,33 +2109,33 @@ msgid ""
 "default in v2ray and cannot be disabled)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1639
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1669
 msgid "Proxy Domain List"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1594
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1623
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1624
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1653
 msgid "Proxy IPv4 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1597
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1626
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1627
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1656
 msgid "Proxy IPv6 IP-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1600
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1630
 msgid "Proxy MAC-s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1581
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1611
 msgid "Proxy all except listed"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1578
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1608
 msgid "Proxy filter mode"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1580
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1610
 msgid "Proxy listed only"
 msgstr ""
 
@@ -2129,8 +2148,8 @@ msgid "Proxy protocol"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:669
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1016
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1172
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1046
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1202
 #: htdocs/luci-static/resources/view/homeproxy/node.js:751
 #: htdocs/luci-static/resources/view/homeproxy/node.js:818
 #: htdocs/luci-static/resources/view/homeproxy/server.js:421
@@ -2142,24 +2161,25 @@ msgstr ""
 msgid "QUIC congestion control algorithm."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1399
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1429
 msgid "Query EDNS client subnet"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1283
+#: htdocs/luci-static/resources/view/homeproxy/client.js:877
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1313
 msgid "Query timeout"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1158
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1188
 msgid "Query type"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1329
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1359
 msgid "RCode"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:670
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1173
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1203
 msgid "RDP"
 msgstr ""
 
@@ -2187,7 +2207,7 @@ msgstr ""
 msgid "RUNNING"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1266
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1296
 msgid "Race"
 msgstr ""
 
@@ -2199,7 +2219,7 @@ msgstr ""
 msgid "Recursive outbound detected!"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1076
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1106
 msgid "Recursive resolver detected!"
 msgstr ""
 
@@ -2224,11 +2244,11 @@ msgid "Region ID"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:720
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1208
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1238
 msgid "Reject"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1468
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1498
 msgid "Remote"
 msgstr ""
 
@@ -2236,7 +2256,7 @@ msgstr ""
 msgid "Remove %s nodes"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1290
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1320
 msgid "Remove EDNS client subnet"
 msgstr ""
 
@@ -2244,15 +2264,15 @@ msgstr ""
 msgid "Remove all nodes from subscriptions"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1291
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1321
 msgid "Remove the edns0-subnet record from the query (1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1317
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1347
 msgid "Reply with REFUSED"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:817
+#: htdocs/luci-static/resources/view/homeproxy/client.js:836
 msgid "Reply with TCP RST / ICMP port unreachable"
 msgstr ""
 
@@ -2264,7 +2284,7 @@ msgstr ""
 msgid "Resolve"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:828
+#: htdocs/luci-static/resources/view/homeproxy/client.js:847
 msgid "Resolve strategy"
 msgstr ""
 
@@ -2272,24 +2292,24 @@ msgstr ""
 msgid "Resources management"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1308
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1338
 msgid "Response NS"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1296
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1326
 msgid "Response RCode"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1303
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1333
 msgid "Response answer"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1312
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1342
 msgid "Response extra"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:967
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1710
+#: htdocs/luci-static/resources/view/homeproxy/client.js:997
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1740
 msgid ""
 "Return expired cache immediately and refresh in background (sing-box 1.14)."
 msgstr ""
@@ -2302,23 +2322,23 @@ msgstr ""
 msgid "Reuse listener address."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:840
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1241
+#: htdocs/luci-static/resources/view/homeproxy/client.js:859
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1271
 msgid "Rewrite TTL"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:841
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1242
+#: htdocs/luci-static/resources/view/homeproxy/client.js:860
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1272
 msgid "Rewrite TTL in DNS responses."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:718
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1206
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1236
 msgid "Route"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:719
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1207
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1237
 msgid "Route options"
 msgstr ""
 
@@ -2350,33 +2370,33 @@ msgstr ""
 msgid "Routing rule"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1443
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1473
 msgid "Rule Set"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:694
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1182
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1452
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1212
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1482
 msgid "Rule set"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:709
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1197
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1227
 msgid "Rule set IP CIDR as source IP"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1485
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1515
 msgid "Rule set URL"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:671
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1174
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1204
 #: htdocs/luci-static/resources/view/homeproxy/node.js:458
 msgid "SSH"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:672
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1175
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1205
 msgid "STUN"
 msgstr ""
 
@@ -2410,11 +2430,11 @@ msgstr ""
 msgid "Save subscriptions settings"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1272
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1302
 msgid "Send the query before pending race rules are judged (1.14)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1215
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1245
 #: htdocs/luci-static/resources/view/homeproxy/server.js:156
 msgid "Server"
 msgstr ""
@@ -2472,7 +2492,7 @@ msgid "Sniffed client type (QUIC client type or SSH client name)."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:664
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1168
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1198
 msgid ""
 "Sniffed protocol, see <a target=\"_blank\" href=\"https://sing-"
 "box.sagernet.org/configuration/route/sniff/\">Sniff</a> for details."
@@ -2499,36 +2519,36 @@ msgstr ""
 msgid "Socks5"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:870
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1373
+#: htdocs/luci-static/resources/view/homeproxy/client.js:900
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1403
 msgid "Source IP CIDR"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:886
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1390
+#: htdocs/luci-static/resources/view/homeproxy/client.js:916
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1420
 msgid "Source MAC address"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1474
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1504
 msgid "Source file"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:891
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1395
+#: htdocs/luci-static/resources/view/homeproxy/client.js:921
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1425
 msgid "Source hostname"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:895
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1408
+#: htdocs/luci-static/resources/view/homeproxy/client.js:925
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1438
 msgid "Source port"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:900
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1413
+#: htdocs/luci-static/resources/view/homeproxy/client.js:930
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1443
 msgid "Source port range"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:798
+#: htdocs/luci-static/resources/view/homeproxy/client.js:817
 msgid ""
 "Specifies DNS server tag to use instead of selecting through DNS routing."
 msgstr ""
@@ -2565,7 +2585,7 @@ msgid ""
 "commas."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1271
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1301
 msgid "Speculative"
 msgstr ""
 
@@ -2573,8 +2593,8 @@ msgstr ""
 msgid "Standard (default)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:980
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1721
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1010
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1751
 msgid "Store DNS cache"
 msgstr ""
 
@@ -2621,16 +2641,16 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:431
 #: htdocs/luci-static/resources/view/homeproxy/client.js:483
-#: htdocs/luci-static/resources/view/homeproxy/client.js:805
-#: htdocs/luci-static/resources/view/homeproxy/client.js:945
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1059
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1222
+#: htdocs/luci-static/resources/view/homeproxy/client.js:824
+#: htdocs/luci-static/resources/view/homeproxy/client.js:975
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1089
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1252
 msgid "System DNS"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:686
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1012
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1163
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1042
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1193
 #: htdocs/luci-static/resources/view/homeproxy/server.js:906
 msgid "TCP"
 msgstr ""
@@ -2649,8 +2669,8 @@ msgid "TCP/IP stack."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:673
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1013
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1176
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1043
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1206
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1082
 #: htdocs/luci-static/resources/view/homeproxy/server.js:548
 msgid "TLS"
@@ -2661,7 +2681,7 @@ msgstr ""
 msgid "TLS ALPN"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1043
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1073
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1109
 #: htdocs/luci-static/resources/view/homeproxy/server.js:576
 msgid "TLS SNI"
@@ -2685,6 +2705,14 @@ msgstr ""
 msgid "TLS record fragment"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/homeproxy/client.js:797
+msgid "TLS spoof SNI (1.14)"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:804
+msgid "TLS spoof method (1.14)"
+msgstr ""
+
 #: htdocs/luci-static/resources/view/homeproxy/client.js:317
 msgid "TUN DNS addresses (1.14)"
 msgstr ""
@@ -2693,17 +2721,17 @@ msgstr ""
 msgid "TUN DNS mode (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1052
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1082
 msgid ""
 "Tag of a another server to resolve the domain name in the address. Required "
 "if address contains domain."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1091
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1121
 msgid "Tag of an outbound for connecting to the dns server."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1216
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1246
 msgid "Tag of the target dns server."
 msgstr ""
 
@@ -2741,7 +2769,7 @@ msgstr ""
 msgid "Test tolerance"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1304
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1334
 msgid "Text DNS records to match in the evaluated answer."
 msgstr ""
 
@@ -2749,7 +2777,7 @@ msgstr ""
 msgid "The ACME CA provider to use."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:935
+#: htdocs/luci-static/resources/view/homeproxy/client.js:965
 msgid "The DNS strategy for resolving the domain name in the address."
 msgstr ""
 
@@ -2757,7 +2785,7 @@ msgstr ""
 msgid "The URL to test."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1021
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1051
 msgid "The address of the dns server."
 msgstr ""
 
@@ -2784,7 +2812,7 @@ msgid ""
 "than as a single rule sub-item."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1139
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1169
 msgid ""
 "The default rule uses the following matching logic:<br/><code>(domain || "
 "domain_suffix || domain_keyword || domain_regex)</code> &&<br/><code>(port "
@@ -2800,7 +2828,7 @@ msgid ""
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:495
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1084
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1114
 msgid "The domain strategy for resolving the domain name in the address."
 msgstr ""
 
@@ -2851,7 +2879,7 @@ msgstr ""
 msgid "The network interface to bind to."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1031
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1061
 msgid "The path of the DNS server."
 msgstr ""
 
@@ -2869,7 +2897,7 @@ msgstr ""
 msgid "The port must be unique."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1026
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1056
 msgid "The port of the DNS server."
 msgstr ""
 
@@ -2877,7 +2905,7 @@ msgstr ""
 msgid "The pre-shared key (password) above must be 12-255 bytes for v6."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1330
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1360
 msgid "The response code."
 msgstr ""
 
@@ -2979,16 +3007,16 @@ msgstr ""
 msgid "Tun TCP/UDP"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1010
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1466
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1040
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1496
 #: htdocs/luci-static/resources/view/homeproxy/node.js:447
 #: htdocs/luci-static/resources/view/homeproxy/server.js:175
 msgid "Type"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:687
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1011
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1164
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1041
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1194
 #: htdocs/luci-static/resources/view/homeproxy/server.js:907
 msgid "UDP"
 msgstr ""
@@ -3076,11 +3104,11 @@ msgstr ""
 msgid "Update failed."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1549
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1579
 msgid "Update interval"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1550
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1580
 msgid "Update interval of rule set."
 msgstr ""
 
@@ -3141,12 +3169,12 @@ msgid ""
 "given."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1044
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1074
 msgid "Used to verify the hostname on the returned certificates."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:690
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1178
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1208
 msgid "User"
 msgstr ""
 
@@ -3178,7 +3206,7 @@ msgstr ""
 msgid "WAN DNS (read from interface)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1621
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1651
 msgid "WAN IP Policy"
 msgstr ""
 
@@ -3284,7 +3312,7 @@ msgstr ""
 #: htdocs/luci-static/resources/view/homeproxy/client.js:195
 #: htdocs/luci-static/resources/view/homeproxy/client.js:230
 #: htdocs/luci-static/resources/view/homeproxy/client.js:552
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1489
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1519
 #: htdocs/luci-static/resources/view/homeproxy/node.js:509
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1217
 #: htdocs/luci-static/resources/view/homeproxy/server.js:237
@@ -3418,8 +3446,8 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:566
 #: htdocs/luci-static/resources/view/homeproxy/client.js:569
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1497
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1500
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1527
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1530
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1442
 #: htdocs/luci-static/resources/view/homeproxy/node.js:1445
 msgid "valid URL"
@@ -3429,8 +3457,8 @@ msgstr ""
 msgid "valid base64 key with %d characters"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1664
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1696
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1694
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1726
 msgid "valid hostname"
 msgstr ""
 
@@ -3446,11 +3474,31 @@ msgstr ""
 msgid "valid uuid"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1492
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1540
+#: htdocs/luci-static/resources/view/homeproxy/client.js:808
+msgid "wrong-ack"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:807
+msgid "wrong-checksum"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:809
+msgid "wrong-md5"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:806
+msgid "wrong-sequence (default)"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:810
+msgid "wrong-timestamp"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1522
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1570
 msgid "{tag} in URL when extra tags are used"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:1543
+#: htdocs/luci-static/resources/view/homeproxy/client.js:1573
 msgid "{tag} in initial path when extra tags are used"
 msgstr ""
