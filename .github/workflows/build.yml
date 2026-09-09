@@ -5,6 +5,11 @@ on:
     #branches: [main]
   #pull_request:
   workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号，须等于 Makefile 的 PKG_VERSION-rPKG_RELEASE（如 27.905.1.14-r9）。留空则只构建不发布。'
+        required: false
+        type: string
 
 concurrency:
   group: build-${{ github.ref }}
@@ -113,35 +118,59 @@ jobs:
             .github/*.apk
             .github/*.ipk
 
-      - name: Cleanup old release and tag
-        if: github.event_name != 'pull_request'
+      # ========== 发布（仅 workflow_dispatch 且填写了 version 时执行）==========
+      # 瀑布流策略：每个版本一个独立 tag/release，永不删除、永不覆盖已有 release。
+
+      - name: Validate version input
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+        run: |
+          set -euo pipefail
+          VERSION="${{ github.event.inputs.version }}"
+          # apk-tools v3 合法版本 + 命名约束：仅数字/点/字母与结尾 -r<数字>（无 _、无 ~）
+          if [[ ! "$VERSION" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]]; then
+            echo "::error::版本格式非法（期望形如 27.905.1.14-r9，不允许下划线与波浪号）"
+            exit 1
+          fi
+          # 需求 9：asset 文件名里的版本号必须等于 tag 版本号 → 发布版本必须等于 Makefile 产物版本
+          MK_V="$(sed -n 's/^PKG_VERSION:=//p' Makefile)"
+          MK_R="$(sed -n 's/^PKG_RELEASE:=//p' Makefile)"
+          EXPECTED="${MK_V}-r${MK_R}"
+          if [ "$VERSION" != "$EXPECTED" ]; then
+            echo "::error::输入版本 $VERSION 与 Makefile 产物版本 $EXPECTED 不一致，拒绝发布"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "${GITHUB_ENV:-/dev/null}"
+
+      - name: Refuse overwriting an existing release
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -o pipefail
-          RELEASE_ID=$(curl -fsS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/luci-app-homeproxy" | jq -r '.id' 2>/dev/null) || RELEASE_ID=""
-          if [ -n "$RELEASE_ID" ] && [ "$RELEASE_ID" != "null" ]; then
-            curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-              "https://api.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID" \
-              || echo "::warning::删除旧 release $RELEASE_ID 失败，继续"
+          set -euo pipefail
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::tag/release v$VERSION 已存在。瀑布流不覆盖已有 release，请 bump 版本后重试"
+            exit 1
           fi
-          curl -fsS -X DELETE -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/luci-app-homeproxy" \
-            || echo "::warning::tag luci-app-homeproxy 不存在或删除失败，继续"
 
-      - name: Publish to Latest Build Release
-        if: github.event_name != 'pull_request'
-        uses: softprops/action-gh-release@fe965f7af51af5f2602596916f38a38df2e33de0
-        with:
-          tag_name: luci-app-homeproxy
-          name: HomeProxy 1.14 Latest Build
-          body: |
-            Automatically built on ${{ github.run_id }}.
-            Commit: ${{ github.sha }}
-          files: |
-            .github/luci-app-homeproxy-*.apk
-            .github/luci-app-homeproxy-*.ipk
-            .github/luci-i18n-homeproxy-*.apk
-            .github/luci-i18n-homeproxy-*.ipk
-          token: ${{ github.token }}
+      - name: Publish release (waterfall, never overwrite)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(.github/luci-app-homeproxy-*.apk .github/luci-i18n-homeproxy-*.apk)
+          ipks=(.github/luci-app-homeproxy-*.ipk .github/luci-i18n-homeproxy-*.ipk)
+          if [ "${#apks[@]}" -eq 0 ] || [ "${#ipks[@]}" -eq 0 ]; then
+            echo "::error::找不到待上传的 apk/ipk"
+            exit 1
+          fi
+          # shields.io badge：label 与 message 中 "-" 需写作 "--"（path 分隔转义）
+          LABEL="luci--app--homeproxy"
+          MSG="v${VERSION//-/--}"
+          NOTES="[![v$VERSION](https://img.shields.io/badge/${LABEL}-${MSG}-blue)](https://github.com/$GITHUB_REPOSITORY/releases/tag/v$VERSION)"
+          gh release create "v$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "v$VERSION" \
+            --notes "$NOTES" \
+            "${apks[@]}" "${ipks[@]}"
