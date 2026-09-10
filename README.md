@@ -75,7 +75,7 @@
 | --- | --- |
 | **route `resolve`** | 新增 `disable_optimistic_cache`、`timeout`两个控件,乐观缓存增至四个选项 |
 | **route / route-options** | 新增 `tls_spoof` / `tls_spoof_method`（注入伪造 ClientHello 干扰按 SNI 过滤的中间盒，需特权），LuCI 提供 SNI 与方式选择（默认 wrong-sequence） |
-| **规则集加载** | 多 tag 时若 `path`/`url` 缺少 `{tag}` 占位，sing-box给出警告提示，配合 LuCI 表单校验与 sing-box 的硬拒绝（`missing {tag} placeholder`），三层防护避免误配 |
+| **规则集加载** | 多 tag 时若 `path`/`url`/`initial_path` 缺少 `{tag}` 占位，生成器给出 `warn` 提示，配合 LuCI 表单校验与 sing-box 的硬拒绝（`missing {tag} placeholder`），三层防护避免误配 |
 | **i18n** | 补齐新增文案的 zh_Hans 译文 |
 
 ## 运行要求

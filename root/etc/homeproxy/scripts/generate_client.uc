@@ -1155,10 +1155,13 @@ if (!isEmpty(main_node)) {
 			rs_tag = [rs_tag];
 			for (let t in extra_tags)
 				push(rs_tag, 'cfg-' + t + '-rule');
-			/* sing-box 1.14: multi-tag requires a {tag} placeholder in the fetch source */
+			/* sing-box 1.14: multi-tag requires a {tag} placeholder in the fetch source
+			   (remote: url and initial_path, local: path) */
 			const fetch_ref = (cfg.type === 'remote') ? (cfg.url || '') : (cfg.path || '');
 			if (!match(fetch_ref, /\{tag\}/))
 				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its %s source lacks a {tag} placeholder.", cfg['.name'], cfg.type));
+			if (cfg.type === 'remote' && !isEmpty(cfg.initial_path) && !match(cfg.initial_path, /\{tag\}/))
+				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its initial_path lacks a {tag} placeholder.", cfg['.name']));
 		}
 
 		const ruleset = {
