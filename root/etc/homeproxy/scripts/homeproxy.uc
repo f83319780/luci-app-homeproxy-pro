@@ -91,17 +91,35 @@ export function getTime(epoch) {
 
 };
 
-export function wGET(url, ua) {
+/*
+ * Fetch a URL and report both the body and, on failure, the reason. The
+ * reason is wget's own stderr (whitespace collapsed, length-capped) so the
+ * caller can tell a DNS failure from a timeout or a TLS handshake error.
+ */
+export function wGETVerbose(url, ua) {
 	if (!url || type(url) !== 'string')
-		return null;
+		return { content: null, error: 'invalid URL' };
 
 	if (!ua)
 		ua = 'Wget/1.21 (HomeProxy, like v2rayN)';
 
-	const output = executeCommand(`/usr/bin/wget -qO- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
-	if (output.exitcode !== 0)
-		return null;
-	return trim(output.stdout);
+	/* -nv (not -q) so wget still reports *why* a fetch failed on stderr */
+	const output = executeCommand(`/usr/bin/wget -nv -O- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
+	if (output.exitcode !== 0) {
+		let reason = trim(output.stderr || '');
+		reason = reason ? replace(reason, /\s+/g, ' ') : 'no error output';
+
+		if (length(reason) > 200)
+			reason = substr(reason, 0, 200) + '...';
+
+		return { content: null, error: `wget exited with status ${output.exitcode}: ${reason}` };
+	}
+
+	return { content: trim(output.stdout), error: null };
+};
+
+export function wGET(url, ua) {
+	return wGETVerbose(url, ua).content;
 };
 /* Utilities end */
 

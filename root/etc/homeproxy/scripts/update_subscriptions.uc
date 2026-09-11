@@ -15,7 +15,7 @@ import { cursor } from 'uci';
 import { init_action } from 'luci.sys';
 
 import {
-	wGET, decodeBase64Str, getTime, isEmpty, HP_DIR, RUN_DIR
+	wGETVerbose, decodeBase64Str, getTime, isEmpty, HP_DIR, RUN_DIR
 } from 'homeproxy';
 
 import { parse_uri } from 'parse_uri';
@@ -99,11 +99,12 @@ function main() {
 		const groupHash = md5(url);
 		node_cache[groupHash] = {};
 
-		const res = wGET(url, user_agent);
-		if (isEmpty(res)) {
-			log(sprintf('Failed to fetch resources from %s.', url));
+		const fetched = wGETVerbose(url, user_agent);
+		if (isEmpty(fetched.content)) {
+			log(sprintf('Failed to fetch resources from %s: %s', url, fetched.error || 'empty response'));
 			continue;
 		}
+		const res = fetched.content;
 
 		let nodes;
 		try {
