@@ -151,18 +151,7 @@ jobs:
           echo "VERSION=$VERSION" >> "${GITHUB_ENV:-/dev/null}"
           echo "TAG_VERSION=$TAG_VERSION" >> "${GITHUB_ENV:-/dev/null}"
 
-      - name: Refuse overwriting an existing release
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if gh release view "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "::error::tag/release v$TAG_VERSION 已存在。瀑布流不覆盖已有 release，请 bump 版本后重试"
-            exit 1
-          fi
-
-      - name: Publish release (waterfall, never overwrite)
+      - name: Publish release (replacing an existing one if present)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,6 +168,11 @@ jobs:
           LABEL="luci--app--homeproxy"
           MSG="v${TAG_VERSION//-/--}"
           NOTES="[![v$TAG_VERSION](https://img.shields.io/badge/${LABEL}-${MSG}-blue)](https://github.com/$GITHUB_REPOSITORY/releases/tag/v$TAG_VERSION)"
+          # 同名 tag/release 视为重新发布：先移除旧的（连同 tag），再由下面的 create 重建
+          if gh release view "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "已存在 v$TAG_VERSION，先删除后重新发布"
+            gh release delete "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
           gh release create "v$TAG_VERSION" \
             --repo "$GITHUB_REPOSITORY" \
             --title "v$TAG_VERSION" \
