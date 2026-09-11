@@ -436,3 +436,33 @@ export function buildTransportObject(cfg, is_server) {
 	};
 };
 /* Config generator helper end */
+
+/* PEM validation start */
+/*
+ * Check that `content` is a PEM certificate (is_private_key = false) or an
+ * RSA/EC private key (is_private_key = true): matching BEGIN/END boundaries
+ * with a base64 body in between. Kanged from luci-proto-openconnect; used by
+ * the rpcd certificate upload and available for future certificate features.
+ */
+export function isValidPEM(content, is_private_key) {
+	if (isEmpty(content))
+		return false;
+
+	const beg = is_private_key ? /^-----BEGIN (RSA|EC) PRIVATE KEY-----$/ : /^-----BEGIN CERTIFICATE-----$/,
+	      end = is_private_key ? /^-----END (RSA|EC) PRIVATE KEY-----$/ : /^-----END CERTIFICATE-----$/,
+	      lines = split(trim(content), /[\r\n]/);
+	let start = false, i;
+
+	for (i = 0; i < length(lines); i++) {
+		if (match(lines[i], beg))
+			start = true;
+		else if (start && !b64dec(lines[i]) && length(lines[i]) !== 64)
+			break;
+	}
+
+	if (!start || i < length(lines) - 1 || !match(lines[i], end))
+		return false;
+
+	return true;
+};
+/* PEM validation end */

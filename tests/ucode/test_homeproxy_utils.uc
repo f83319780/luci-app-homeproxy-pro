@@ -12,7 +12,7 @@
 'use strict';
 
 import { lsdir } from 'fs';
-import { executeCommand, shellQuote } from 'homeproxy';
+import { executeCommand, isValidPEM, shellQuote } from 'homeproxy';
 
 let failures = 0,
     checks = 0;
@@ -53,6 +53,16 @@ expect('false.exitcode', executeCommand('false').exitcode, 1);
 const bin = executeCommand('sh', '-c', shellQuote('printf "\\001\\002\\003"'));
 expect('bin.binary', bin.binary, true);
 expect('bin.stdout', bin.stdout, null);
+
+/* isValidPEM(): certificate vs private key, boundaries and body */
+const pem_cert = '-----BEGIN CERTIFICATE-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END CERTIFICATE-----';
+const pem_key = '-----BEGIN RSA PRIVATE KEY-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END RSA PRIVATE KEY-----';
+expect('pem.cert', isValidPEM(pem_cert, false), true);
+expect('pem.cert-as-key', isValidPEM(pem_cert, true), false);
+expect('pem.key', isValidPEM(pem_key, true), true);
+expect('pem.key-as-cert', isValidPEM(pem_key, false), false);
+expect('pem.garbage', isValidPEM('not a pem at all', false), false);
+expect('pem.empty', isValidPEM('', false), false);
 
 /* descriptors must not leak across calls */
 const before = fd_count();

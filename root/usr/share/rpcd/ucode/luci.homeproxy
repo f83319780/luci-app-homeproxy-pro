@@ -9,6 +9,8 @@
 
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
+import { isBinary, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
+
 /* Kanged from ucode/luci */
 function shellquote(s) {
 	return `'${replace(s, "'", "'\\''")}'`;
@@ -78,25 +80,13 @@ const methods = {
 				}
 
 				let filecontent = readfile(tmpcert);
-				if (is_binary(filecontent)) {
+				if (isBinary(filecontent)) {
 					system(`rm -f ${tmpcert}`);
 					return { result: false, error: 'illegal file type: binary' };
 				}
 
-				/* Kanged from luci-proto-openconnect */
-				const beg = priv ? /^-----BEGIN (RSA|EC) PRIVATE KEY-----$/ : /^-----BEGIN CERTIFICATE-----$/,
-				      end = priv ? /^-----END (RSA|EC) PRIVATE KEY-----$/ : /^-----END CERTIFICATE-----$/,
-				      lines = split(trim(filecontent), /[\r\n]/);
-				let start = false, i;
-
-				for (i = 0; i < length(lines); i++) {
-					if (match(lines[i], beg))
-						start = true;
-					else if (start && !b64dec(lines[i]) && length(lines[i]) !== 64)
-						break;
-				}
-
-				if (!start || i < length(lines) - 1 || !match(lines[i], end)) {
+				/* Validate the PEM structure before storing it */
+				if (!isValidPEM(filecontent, priv)) {
 					system(`rm -f ${tmpcert}`);
 					return { result: false, error: 'this does not look like a correct PEM file' };
 				}
