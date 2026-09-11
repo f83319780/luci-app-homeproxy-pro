@@ -78,6 +78,17 @@
 | **规则集加载** | 多 tag 时若 `path`/`url`/`initial_path` 缺少 `{tag}` 占位，生成器给出 `warn` 提示，配合 LuCI 表单校验与 sing-box 的硬拒绝（`missing {tag} placeholder`），三层防护避免误配 |
 | **i18n** | 补齐新增文案的 zh_Hans 译文 |
 
+## 工程化加固（r11）
+
+一轮以可维护性与可验证性为目标的加固：重构不改变行为，测试锁住结果，发布产物经实机验证。
+
+| 轮次 | 做了什么 | 结果 |
+| --- | --- | --- |
+| 1 · 实现 12 项任务 | 重构：前端 TLS/传输表单收敛、generator 共享 TLS/transport 构建、`parse_uri` 拆为 13 个协议函数<br>测试：协议单测 153 条、generator 回归、LuCI 表单快照<br>修复：`executeCommand` 清理、dnsmasq 路径告警、fw4 清单单源、启动日志、PEM 校验、`wGET` 失败原因<br>工程：翻译覆盖率 CI、架构核实 | 12 个 commit<br>parse_uri 91 次对比零差异、generator JSON 逐字节一致、表单快照逐字段一致<br>顺带修复 3 个既有缺陷：证书上传、fw4 清理回滚、dnsmasq 路径 |
+| 2 · 提交推送 | 13 个 commit 推送至 `main` | 翻译覆盖率 CI 首次通过，100% |
+| 3 · 打包验证 | 发布 r11 并实机安装验证 | 发现模板注释被 `{%-` 吞掉换行、fw4 对象丢失；注释移入 ucode 块，新增模板渲染回归测试，`ip rule` 改为删净重复 |
+| 4 · 覆盖发布 | 发布流程支持同名覆盖；重发 r11 并重新安装 | fw4 9 个对象自动加载；`ip rule` 1 条；配置逐字节一致 |
+
 ## 运行要求
 
 - ImmortalWrt / OpenWrt ≥ 24.10+（apk 或 opkg 均可安装）
