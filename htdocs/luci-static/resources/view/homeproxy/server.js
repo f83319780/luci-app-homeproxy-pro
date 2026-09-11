@@ -412,104 +412,7 @@ return view.extend({
 		/* VMess config end */
 
 		/* Transport config start */
-		o = s.option(form.ListValue, 'transport', _('Transport'),
-			_('No TCP transport, plain HTTP is merged into the HTTP transport.'));
-		o.value('', _('None'));
-		o.value('grpc', _('gRPC'));
-		o.value('http', _('HTTP'));
-		o.value('httpupgrade', _('HTTPUpgrade'));
-		o.value('quic', _('QUIC'));
-		o.value('ws', _('WebSocket'));
-		o.depends('type', 'trojan');
-		o.depends('type', 'vless');
-		o.depends('type', 'vmess');
-		o.onchange = function(ev, section_id, value) {
-			let desc = this.map.findElement('id', 'cbid.homeproxy.%s.transport'.format(section_id)).nextElementSibling;
-			if (value === 'http')
-				desc.innerHTML = _('TLS is not enforced. If TLS is not configured, plain HTTP 1.1 is used.');
-			else if (value === 'quic')
-				desc.innerHTML = _('No additional encryption support: It\'s basically duplicate encryption.');
-			else
-				desc.innerHTML = _('No TCP transport, plain HTTP is merged into the HTTP transport.');
-
-			let tls_element = this.map.findElement('id', 'cbid.homeproxy.%s.tls'.format(section_id)).firstElementChild;
-			if ((value === 'http' && tls_element.checked) || (value === 'grpc' && !features.with_grpc))
-				this.map.findElement('id', 'cbid.homeproxy.%s.http_idle_timeout'.format(section_id)).nextElementSibling.innerHTML =
-					_('Specifies the time (in seconds) until idle clients should be closed with a GOAWAY frame. PING frames are not considered as activity.');
-			else if (value === 'grpc' && features.with_grpc)
-				this.map.findElement('id', 'cbid.homeproxy.%s.http_idle_timeout'.format(section_id)).nextElementSibling.innerHTML =
-					_('If the transport doesn\'t see any activity after a duration of this time (in seconds), it pings the client to check if the connection is still active.');
-		}
-		o.modalonly = true;
-
-		/* gRPC config start */
-		o = s.option(form.Value, 'grpc_servicename', _('gRPC service name'));
-		o.depends('transport', 'grpc');
-		o.modalonly = true;
-
-		/* gRPC config end */
-
-		/* HTTP(Upgrade) config start */
-		o = s.option(form.DynamicList, 'http_host', _('Host'));
-		o.datatype = 'hostname';
-		o.depends('transport', 'http');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'httpupgrade_host', _('Host'));
-		o.datatype = 'hostname';
-		o.depends('transport', 'httpupgrade');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'http_path', _('Path'));
-		o.depends('transport', 'http');
-		o.depends('transport', 'httpupgrade');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'http_method', _('Method'));
-		o.depends('transport', 'http');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'http_idle_timeout', _('Idle timeout'),
-			_('Specifies the time (in seconds) until idle clients should be closed with a GOAWAY frame. PING frames are not considered as activity.'));
-		o.datatype = 'uinteger';
-		o.depends('transport', 'grpc');
-		o.depends({'transport': 'http', 'tls': '1'});
-		o.modalonly = true;
-
-		if (features.with_grpc) {
-			o = s.option(form.Value, 'http_ping_timeout', _('Ping timeout'),
-				_('The timeout (in seconds) that after performing a keepalive check, the client will wait for activity. If no activity is detected, the connection will be closed.'));
-			o.datatype = 'uinteger';
-			o.depends('transport', 'grpc');
-			o.modalonly = true;
-		}
-		/* HTTP config end */
-
-		/* WebSocket config start */
-		o = s.option(form.Value, 'ws_host', _('Host'));
-		o.depends('transport', 'ws');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'ws_path', _('Path'));
-		o.depends('transport', 'ws');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'websocket_early_data', _('Early data'),
-			_('Allowed payload size is in the request.'));
-		o.datatype = 'uinteger';
-		o.value('2048');
-		o.depends('transport', 'ws');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'websocket_early_data_header', _('Early data header name'),
-			_('Early data is sent in path instead of header by default.') +
-			'<br/>' +
-			_('To be compatible with Xray-core, set this to <code>Sec-WebSocket-Protocol</code>.'));
-		o.value('Sec-WebSocket-Protocol');
-		o.depends('transport', 'ws');
-		o.modalonly = true;
-		/* WebSocket config end */
-
+		hp.renderTransportOptions(s, { features: features, side: 'server' });
 		/* Transport config end */
 
 		/* Mux config start */
@@ -545,67 +448,11 @@ return view.extend({
 		/* Mux config end */
 
 		/* TLS config start */
-		o = s.option(form.Flag, 'tls', _('TLS'));
-		o.depends('type', 'anytls');
-		o.depends('type', 'http');
-		o.depends('type', 'hysteria');
-		o.depends('type', 'hysteria2');
-		o.depends('type', 'naive');
-		o.depends('type', 'trojan');
-		o.depends('type', 'tuic');
-		o.depends('type', 'vless');
-		o.depends('type', 'vmess');
-		o.rmempty = false;
-		o.validate = function(section_id, value) {
-			if (section_id) {
-				let type = this.map.lookupOption('type', section_id)[0].formvalue(section_id);
-				let tls = this.map.findElement('id', 'cbid.homeproxy.%s.tls'.format(section_id)).firstElementChild;
-
-				if (['hysteria', 'hysteria2', 'tuic'].includes(type)) {
-					tls.checked = true;
-					tls.disabled = true;
-				} else {
-					tls.disabled = null;
-				}
-			}
-
-			return true;
-		}
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'tls_sni', _('TLS SNI'),
-			_('Used to verify the hostname on the returned certificates unless insecure is given.'));
-		o.depends('tls', '1');
-		o.modalonly = true;
-
-		o = s.option(form.DynamicList, 'tls_alpn', _('TLS ALPN'),
-			_('List of supported application level protocols, in order of preference.'));
-		o.depends('tls', '1');
-		o.modalonly = true;
-
-		o = s.option(form.ListValue, 'tls_min_version', _('Minimum TLS version'),
-			_('The minimum TLS version that is acceptable.'));
-		o.value('', _('default'));
-		for (let i of hp.tls_versions)
-			o.value(i);
-		o.depends('tls', '1');
-		o.modalonly = true;
-
-		o = s.option(form.ListValue, 'tls_max_version', _('Maximum TLS version'),
-			_('The maximum TLS version that is acceptable.'));
-		o.value('', _('default'));
-		for (let i of hp.tls_versions)
-			o.value(i);
-		o.depends('tls', '1');
-		o.modalonly = true;
-
-		o = s.option(hp.CBIStaticList, 'tls_cipher_suites', _('Cipher suites'),
-			_('The elliptic curves that will be used in an ECDHE handshake, in preference order. If empty, the default will be used.'));
-		for (let i of hp.tls_cipher_suites)
-			o.value(i);
-		o.depends('tls', '1');
-		o.optional = true;
-		o.modalonly = true;
+		hp.renderTlsOptions(s, {
+			side: 'server',
+			type_depends: [ 'anytls', 'http', 'hysteria', 'hysteria2', 'naive', 'trojan', 'tuic', 'vless', 'vmess' ],
+			tls_forced_types: [ 'hysteria', 'hysteria2', 'tuic' ]
+		});
 
 		if (features.with_acme) {
 			o = s.option(form.Flag, 'tls_acme', _('Enable ACME'),
