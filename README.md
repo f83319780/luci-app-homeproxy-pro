@@ -80,11 +80,11 @@
 
 ## 工程化加固（r11）
 
-一轮以可维护性与可验证性为目标的加固：重构不改变行为，测试锁住结果，发布产物经实机验证。
+一轮以可维护性与可验证性为目标的加固：重构不改变行为，测试锁住结果，经实机验证。
 
 | 轮次 | 做了什么 | 结果 |
 | --- | --- | --- |
-| 重构和修复错误 | 重构：前端 TLS/传输表单收敛、generator 共享 TLS/transport 构建、`parse_uri` 拆为 13 个协议函数<br>测试：协议单测 153 条、generator 回归、LuCI 表单快照<br>修复：`executeCommand` 清理、dnsmasq 路径告警、fw4 清单单源、启动日志、PEM 校验、`wGET` 失败原因<br>工程：翻译覆盖率 CI、架构核实 | 12 个 commit<br>parse_uri 91 次对比零差异、generator JSON 逐字节一致、表单快照逐字段一致<br>顺带修复 3 个既有缺陷：证书上传、fw4 清理回滚、dnsmasq 路径 |
+| 重构和修复错误 | 重构：前端 TLS/传输表单收敛、generator 共享 TLS/transport 构建、`parse_uri` 拆为 13 个协议函数<br>测试：协议单测 153 条、generator 回归、LuCI 表单快照<br>修复：`executeCommand` 清理、dnsmasq 路径告警、fw4 清单单源、启动日志、PEM 校验、`wGET` 失败原因<br>工程：提高中文翻译率 CI、架构核实 | 12 个 commit<br>parse_uri 91 次对比零差异、generator JSON 逐字节一致、表单快照逐字段一致<br>顺带修复 3 个既有缺陷：证书上传、fw4 清理回滚、dnsmasq 路径 |
 
 ## 运行要求
 
