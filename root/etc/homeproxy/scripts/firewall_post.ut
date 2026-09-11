@@ -1,11 +1,17 @@
 #!/usr/bin/utpl -S
-#
-# Declares every homeproxy_* fw4 chain/set. The inventory of those objects is
-# tracked in scripts/fw4_names.sh, which init.d/homeproxy uses to clean them up
-# on stop; add/remove entries there together with any change below.
-# tests/ucode/test_fw4_names.sh fails when the two lists drift apart.
 
 {%-
+/*
+ * Declares every homeproxy_* fw4 chain/set. The inventory of those objects is
+ * tracked in scripts/fw4_names.sh, which init.d/homeproxy uses to clean them up
+ * on stop; add/remove entries there together with any change below.
+ * tests/ucode/test_fw4_names.sh compares both lists, and
+ * tests/ucode/test_firewall_template.sh renders this template and checks the
+ * objects actually survive into the generated nftables script.
+ *
+ * Keep this comment inside the ucode block: text placed before `{%-` has its
+ * trailing newline trimmed, which would glue it onto the first nft statement.
+ */
 import { readfile } from 'fs';
 import { cursor } from 'uci';
 import { isEmpty, isValidCIDR } from '/etc/homeproxy/scripts/homeproxy.uc';

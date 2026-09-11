@@ -324,16 +324,19 @@ stop_service() {
 	config_get tun_mark "infra" "tun_mark" "102"
 	config_get tun_name "infra" "tun_name" "singtun0"
 
-	ip rule del fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null"
+	# ip rule del removes a single matching rule, so a repeated start (or an
+	# upgrade that starts before the old instance stopped) leaves duplicates
+	# behind. Delete every match instead of only the first one.
+	while ip rule del fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null"; do :; done
 	ip route del local 0.0.0.0/0 dev lo table "$table_mark" 2>"/dev/null"
-	ip -6 rule del fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null"
+	while ip -6 rule del fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null"; do :; done
 	ip -6 route del local ::/0 dev lo table "$table_mark" 2>"/dev/null"
 
 	ip route del default dev "$tun_name" table "$table_mark" 2>"/dev/null"
-	ip rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"
+	while ip rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"; do :; done
 
 	ip -6 route del default dev "$tun_name" table "$table_mark" 2>"/dev/null"
-	ip -6 rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"
+	while ip -6 rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"; do :; done
 
 	# Flush and delete every fw4 object homeproxy owns. Deleting one at a
 	# time matters: `nft -f` batches are atomic, so a single object that
