@@ -84,6 +84,22 @@
 - sing-box ≥ 1.14.0（ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1）
 - 低于 1.14 时服务会拒绝启动并记录明确日志
 
+## 支持架构
+
+本包是纯 LuCI 应用（ucode 脚本 + JS 视图 + 配置），**不含任何编译产物**，因此 `Makefile` 里的 `LUCI_PKGARCH:=all` 是准确的，也不会把包错误地装到不支持的设备上：真正的架构约束来自运行时依赖 `+sing-box`，由所用 feed 决定——某个架构若没有 `sing-box` 包，包管理器会因依赖不满足而拒绝安装。
+
+"仅 ARM64 / AMD64"是上游 sing-box **官方 release 二进制**的覆盖范围；ImmortalWrt 的 `sing-box` 由源码构建，覆盖架构更广。以 ImmortalWrt 25.12.1 官方源实测：
+
+| 架构 | sing-box 1.14.0-r1 |
+| --- | --- |
+| `x86_64` | ✓ |
+| `aarch64_cortex-a53` | ✓ |
+| `arm_cortex-a9` | ✓ |
+| `mipsel_24kc` | ✓ |
+| `riscv64_generic` | ✓ |
+
+安装前请确认所用 feed 为你的设备架构提供了 `sing-box`（`apk search sing-box` 或 `opkg list sing-box`）；只要依赖可满足即可正常使用，不需要额外的架构限制。
+
 ## 测试
 
 改动 `parse_uri`、配置生成器或前端表单后，请运行：

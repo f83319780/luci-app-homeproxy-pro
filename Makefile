@@ -6,6 +6,10 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=The modern ImmortalWrt proxy platform for ARM64/AMD64 (sing-box 1.14)
+# Pure ucode/JS payload with no compiled code, so the package itself is arch
+# independent. The real arch constraint comes from the +sing-box dependency,
+# which the feed builds for every architecture Go supports (aarch64, arm,
+# mipsel, riscv64, x86_64, ...). See the "支持架构" section in README.md.
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:= \
 	+sing-box \
