@@ -11,8 +11,8 @@ import { writefile } from 'fs';
 import { cursor } from 'uci';
 
 import {
-	isEmpty, strToBool, strToInt, strToTime,
-	removeBlankAttrs, HP_DIR, RUN_DIR
+	strToBool, strToInt, strToTime,
+	removeBlankAttrs, buildTLSObject, buildTransportObject, HP_DIR, RUN_DIR
 } from 'homeproxy';
 
 /* UCI config start */
@@ -131,73 +131,9 @@ uci.foreach(uciconfig, uciserver, (cfg) => {
 			} : null
 		} : null,
 
-		tls: (cfg.tls === '1') ? {
-			enabled: true,
-			server_name: cfg.tls_sni,
-			alpn: cfg.tls_alpn,
-			min_version: cfg.tls_min_version,
-			max_version: cfg.tls_max_version,
-			cipher_suites: cfg.tls_cipher_suites,
-			certificate_path: cfg.tls_cert_path,
-			key_path: cfg.tls_key_path,
-			certificate_provider: (cfg.tls_acme === '1') ? {
-				type: 'acme',
-				domain: (type(cfg.tls_acme_domain) === 'array') ? cfg.tls_acme_domain
-					: (isEmpty(cfg.tls_acme_domain) ? [] : [cfg.tls_acme_domain]),
-				data_directory: HP_DIR + '/certs',
-				default_server_name: cfg.tls_acme_dsn,
-				email: cfg.tls_acme_email,
-				provider: cfg.tls_acme_provider,
-				account_key: cfg.tls_acme_account_key,
-				key_type: cfg.tls_acme_key_type,
-				profile: cfg.tls_acme_profile,
-				disable_http_challenge: strToBool(cfg.tls_acme_dhc),
-				disable_tls_alpn_challenge: strToBool(cfg.tls_acme_dtac),
-				alternative_http_port: strToInt(cfg.tls_acme_ahp),
-				alternative_tls_port: strToInt(cfg.tls_acme_atp),
-				external_account: (cfg.tls_acme_external_account === '1') ? {
-					key_id: cfg.tls_acme_ea_keyid,
-					mac_key: cfg.tls_acme_ea_mackey
-				} : null,
-				dns01_challenge: (cfg.tls_dns01_challenge === '1') ? {
-					provider: cfg.tls_dns01_provider,
-					access_key_id: cfg.tls_dns01_ali_akid,
-					access_key_secret: cfg.tls_dns01_ali_aksec,
-					region_id: cfg.tls_dns01_ali_rid,
-					api_token: cfg.tls_dns01_cf_api_token
-				} : null
-			} : null,
-			ech: (cfg.tls_ech_key) ? {
-				enabled: true,
-				key: split(cfg.tls_ech_key, '\n'),
-				// config: split(cfg.tls_ech_config, '\n')
-			} : null,
-			reality: (cfg.tls_reality === '1') ? {
-				enabled: true,
-				private_key: cfg.tls_reality_private_key,
-				short_id: cfg.tls_reality_short_id,
-				max_time_difference: strToTime(cfg.tls_reality_max_time_difference),
-				handshake: {
-					server: cfg.tls_reality_server_addr,
-					server_port: strToInt(cfg.tls_reality_server_port)
-					}
-			} : null
-		} : null,
+		tls: buildTLSObject(cfg, true),
 
-		transport: !isEmpty(cfg.transport) ? {
-			type: cfg.transport,
-			host: cfg.http_host || cfg.httpupgrade_host,
-			path: cfg.http_path || cfg.ws_path,
-			headers: cfg.ws_host ? {
-				Host: cfg.ws_host
-			} : null,
-			method: cfg.http_method,
-			max_early_data: strToInt(cfg.websocket_early_data),
-			early_data_header_name: cfg.websocket_early_data_header,
-			service_name: cfg.grpc_servicename,
-			idle_timeout: strToTime(cfg.http_idle_timeout),
-			ping_timeout: strToTime(cfg.http_ping_timeout)
-		} : null
+		transport: buildTransportObject(cfg, true)
 	});
 });
 

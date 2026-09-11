@@ -14,7 +14,8 @@ import { cursor } from 'uci';
 
 import {
 	isEmpty, parseURL, strToBool, strToInt, strToTime,
-	removeBlankAttrs, validation, HP_DIR, RUN_DIR
+	removeBlankAttrs, validation, buildTLSObject, buildTransportObject,
+	HP_DIR, RUN_DIR
 } from 'homeproxy';
 
 const ubus = connect();
@@ -311,46 +312,8 @@ function generate_outbound(node) {
 				down_mbps: strToInt(node.multiplex_brutal_down)
 			} : null
 		} : null,
-		tls: (node.tls === '1') ? {
-			enabled: true,
-			server_name: node.tls_sni,
-			insecure: strToBool(node.tls_insecure),
-			alpn: node.tls_alpn,
-			min_version: node.tls_min_version,
-			max_version: node.tls_max_version,
-			handshake_timeout: strToTime(node.tls_handshake_timeout),
-			cipher_suites: node.tls_cipher_suites,
-			certificate_path: node.tls_cert_path,
-			ech: (node.tls_ech === '1') ? {
-				enabled: true,
-				config: node.tls_ech_config,
-				config_path: node.tls_ech_config_path
-			} : null,
-			utls: !isEmpty(node.tls_utls) ? {
-				enabled: true,
-				fingerprint: node.tls_utls
-			} : null,
-			reality: (node.tls_reality === '1') ? {
-				enabled: true,
-				public_key: node.tls_reality_public_key,
-				short_id: node.tls_reality_short_id
-			} : null
-		} : null,
-		transport: !isEmpty(node.transport) ? {
-			type: node.transport,
-			host: node.http_host || node.httpupgrade_host,
-			path: node.http_path || node.ws_path,
-			headers: node.ws_host ? {
-				Host: node.ws_host
-			} : null,
-			method: node.http_method,
-			max_early_data: strToInt(node.websocket_early_data),
-			early_data_header_name: node.websocket_early_data_header,
-			service_name: node.grpc_servicename,
-			idle_timeout: strToTime(node.http_idle_timeout),
-			ping_timeout: strToTime(node.http_ping_timeout),
-			permit_without_stream: strToBool(node.grpc_permit_without_stream)
-		} : null,
+		tls: buildTLSObject(node, false),
+		transport: buildTransportObject(node, false),
 		udp_over_tcp: (node.udp_over_tcp === '1') ? {
 			enabled: true,
 			version: strToInt(node.udp_over_tcp_version)
