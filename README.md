@@ -84,6 +84,27 @@
 - sing-box ≥ 1.14.0（ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1）
 - 低于 1.14 时服务会拒绝启动并记录明确日志
 
+## 测试
+
+改动 `parse_uri`、配置生成器或前端表单后，请运行：
+
+```sh
+tests/run.sh
+```
+
+- **前端表单快照**：本地 `node` 即可，重新渲染 node/server 视图并与
+  `tests/snapshots/*.json` 对比，字段名、依赖（depends）、默认值、文案有任何变化都会失败。
+- **ucode 测试**：`parse_uri()` 各协议单元测试（153 条断言）+ 用 `tests/fixtures/generators/`
+  样例 UCI 配置跑 `generate_client.uc` / `generate_server.uc` 并用 `sing-box check` 校验。
+  本机没有 `ucode` / `sing-box` 时，会把当前 checkout 通过 ssh 复制到
+  `$HP_TEST_HOST`（默认 `root@192.168.1.1`）执行：
+
+  ```sh
+  HP_TEST_HOST=root@192.168.1.1 tests/run.sh
+  ```
+
+详见 [tests/README.md](tests/README.md)。
+
 ---
 
 <div align="center">
