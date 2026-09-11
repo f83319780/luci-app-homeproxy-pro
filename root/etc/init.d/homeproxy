@@ -116,16 +116,19 @@ start_service() {
 		config_get_bool auto_update "subscription" "auto_update" "0"
 		if [ "$auto_update" = "1" ]; then
 			config_get auto_update_time "subscription" "auto_update_time" "2"
-			sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null"
-			echo -e "0 $auto_update_time * * * $HP_DIR/scripts/update_crond.sh #${CONF}_autosetup" >> "/etc/crontabs/root"
-			/etc/init.d/cron restart
+			sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null" \
+				|| log "Warning: failed to drop the previous auto-update cron entry."
+			echo -e "0 $auto_update_time * * * $HP_DIR/scripts/update_crond.sh #${CONF}_autosetup" >> "/etc/crontabs/root" \
+				|| log "Warning: failed to install the auto-update cron entry."
+			/etc/init.d/cron restart >"/dev/null" 2>&1 || log "Warning: failed to restart cron."
 		fi
 
 		local ipv6_support dns_port
 		config_get_bool ipv6_support "config" "ipv6_support" "0"
 		config_get dns_port "infra" "dns_port" "5333"
-		mkdir -p "$DNSMASQ_DIR"
-		echo -e "conf-dir=$DNSMASQ_DIR" > "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf"
+		mkdir -p "$DNSMASQ_DIR" || log "Warning: failed to create ${DNSMASQ_DIR}."
+		echo -e "conf-dir=$DNSMASQ_DIR" > "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" \
+			|| log "Warning: failed to write the dnsmasq conf-dir file."
 		case "$routing_mode" in
 		"bypass_mainland_china"|"custom"|"global")
 			cat <<-EOF > "$DNSMASQ_DIR/redirect-dns.conf"
@@ -152,7 +155,8 @@ start_service() {
 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
 				"$HP_DIR/resources/proxy_list.txt" > "$DNSMASQ_DIR/proxy_list.conf"
 		fi
-		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
+		/etc/init.d/dnsmasq restart >"/dev/null" 2>&1 \
+			|| log "Warning: failed to restart dnsmasq, DNS-based routing may be stale."
 
 		local table_mark
 		config_get table_mark "infra" "table_mark" "100"
@@ -164,12 +168,16 @@ start_service() {
 				local tproxy_mark
 				config_get tproxy_mark "infra" "tproxy_mark" "101"
 
-				ip rule add fwmark "$tproxy_mark" table "$table_mark"
-				ip route add local 0.0.0.0/0 dev lo table "$table_mark"
+				ip rule add fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null" \
+					|| log "Error: failed to add the tproxy ip rule (fwmark ${tproxy_mark}, table ${table_mark})."
+				ip route add local 0.0.0.0/0 dev lo table "$table_mark" 2>"/dev/null" \
+					|| log "Error: failed to add the tproxy local route (table ${table_mark})."
 
 				if [ "$ipv6_support" -eq "1" ]; then
-					ip -6 rule add fwmark "$tproxy_mark" table "$table_mark"
-					ip -6 route add local ::/0 dev lo table "$table_mark"
+					ip -6 rule add fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null" \
+						|| log "Error: failed to add the tproxy IPv6 rule (fwmark ${tproxy_mark}, table ${table_mark})."
+					ip -6 route add local ::/0 dev lo table "$table_mark" 2>"/dev/null" \
+						|| log "Error: failed to add the tproxy IPv6 local route (table ${table_mark})."
 				fi
 			fi
 			;;
@@ -178,16 +186,22 @@ start_service() {
 			config_get tun_name "infra" "tun_name" "singtun0"
 			config_get tun_mark "infra" "tun_mark" "102"
 
-			ip tuntap add mode tun user root name "$tun_name"
+			ip tuntap add mode tun user root name "$tun_name" 2>"/dev/null" \
+				|| log "Error: failed to create the TUN device ${tun_name}."
 			sleep 1s
-			ip link set "$tun_name" up
+			ip link set "$tun_name" up 2>"/dev/null" \
+				|| log "Error: failed to bring up the TUN device ${tun_name}."
 
-			ip route replace default dev "$tun_name" table "$table_mark"
-			ip rule add fwmark "$tun_mark" lookup "$table_mark"
+			ip route replace default dev "$tun_name" table "$table_mark" 2>"/dev/null" \
+				|| log "Error: failed to set the TUN default route (table ${table_mark})."
+			ip rule add fwmark "$tun_mark" lookup "$table_mark" 2>"/dev/null" \
+				|| log "Error: failed to add the TUN ip rule (fwmark ${tun_mark}, table ${table_mark})."
 
 			if [ "$ipv6_support" -eq "1" ]; then
-				ip -6 route replace default dev "$tun_name" table "$table_mark"
-				ip -6 rule add fwmark "$tun_mark" lookup "$table_mark"
+				ip -6 route replace default dev "$tun_name" table "$table_mark" 2>"/dev/null" \
+					|| log "Error: failed to set the TUN IPv6 default route (table ${table_mark})."
+				ip -6 rule add fwmark "$tun_mark" lookup "$table_mark" 2>"/dev/null" \
+					|| log "Error: failed to add the TUN IPv6 rule (fwmark ${tun_mark}, table ${table_mark})."
 			fi
 			;;
 		esac
@@ -270,20 +284,23 @@ start_service() {
 
 	case "$routing_mode" in
 	"bypass_mainland_china")
-		[ -e "$HP_DIR/cache.db" ] || touch "$HP_DIR/cache.db"
+		[ -e "$HP_DIR/cache.db" ] || touch "$HP_DIR/cache.db" \
+			|| log "Warning: failed to create ${HP_DIR}/cache.db."
 		;;
 	"custom")
-		[ -d "$HP_DIR/ruleset" ] || mkdir -p "$HP_DIR/ruleset"
+		[ -d "$HP_DIR/ruleset" ] || mkdir -p "$HP_DIR/ruleset" \
+			|| log "Warning: failed to create ${HP_DIR}/ruleset."
 		;;
 	esac
 
 	[ "$outbound_node" = "nil" ] || echo > "$RUN_DIR/sing-box-c.log"
 	if [ "$server_enabled" = "1" ]; then
 		echo > "$RUN_DIR/sing-box-s.log"
-		mkdir -p "$HP_DIR/certs"
+		mkdir -p "$HP_DIR/certs" || log "Warning: failed to create ${HP_DIR}/certs."
 	fi
 
-	chown sing-box:sing-box "$RUN_DIR"/sing-box-*.json "$RUN_DIR"/sing-box-*.log "$HP_DIR"/cache.db 2>"/dev/null"
+	chown sing-box:sing-box "$RUN_DIR"/sing-box-*.json "$RUN_DIR"/sing-box-*.log "$HP_DIR"/cache.db 2>"/dev/null" \
+		|| log "Warning: failed to change the ownership of the runtime files to sing-box."
 
 	ucode "$HP_DIR/scripts/firewall_pre.uc" 2>"/dev/null" || log "Error: firewall pre-script failed."
 	if [ "$outbound_node" != "nil" ]; then
@@ -296,8 +313,9 @@ start_service() {
 }
 
 stop_service() {
-	sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null"
-	/etc/init.d/cron restart >"/dev/null" 2>&1
+	sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null" \
+		|| log "Warning: failed to drop the auto-update cron entry."
+	/etc/init.d/cron restart >"/dev/null" 2>&1 || log "Warning: failed to restart cron."
 
 	config_load "$CONF"
 	local table_mark tproxy_mark tun_mark tun_name
@@ -336,7 +354,8 @@ stop_service() {
 	restore_upnp_mappings
 
 	rm -rf "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" "$DNSMASQ_DIR"
-	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1
+	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1 \
+		|| log "Warning: failed to restart dnsmasq after removing the homeproxy snippets."
 
 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log"
