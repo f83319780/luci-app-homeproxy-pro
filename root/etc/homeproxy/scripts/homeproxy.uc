@@ -26,30 +26,55 @@ export function isBinary(str) {
 	return false;
 };
 
+/* Close a file descriptor, swallowing secondary errors (e.g. an already
+   closed fd). ucode has no `finally` clause, so both the normal and the
+   exceptional path of executeCommand() have to close explicitly. */
+function closeFD(fd) {
+	if (fd) {
+		try {
+			fd.close();
+		} catch (e) {
+			/* already closed */
+		}
+	}
+};
+
 export function executeCommand(...args) {
-	let outfd = mkstemp();
-	let errfd = mkstemp();
+	let outfd = null, errfd = null;
 
-	const exitcode = system(`${join(' ', args)} >&${outfd.fileno()} 2>&${errfd.fileno()}`);
+	try {
+		outfd = mkstemp();
+		errfd = mkstemp();
 
-	outfd.seek(0);
-	errfd.seek(0);
+		const exitcode = system(`${join(' ', args)} >&${outfd.fileno()} 2>&${errfd.fileno()}`);
 
-	const stdout = outfd.read(1024 * 512) ?? '';
-	const stderr = errfd.read(1024 * 512) ?? '';
+		outfd.seek(0);
+		errfd.seek(0);
 
-	outfd.close();
-	errfd.close();
+		const stdout = outfd.read(1024 * 512) ?? '';
+		const stderr = errfd.read(1024 * 512) ?? '';
 
-	const binary = isBinary(stdout);
+		const binary = isBinary(stdout);
 
-	return {
-		command: join(' ', args),
-		stdout: binary ? null : stdout,
-		stderr,
-		exitcode,
-		binary
-	};
+		/* mkstemp() returns delete-on-close files, so closing is enough */
+		closeFD(outfd);
+		closeFD(errfd);
+
+		return {
+			command: join(' ', args),
+			stdout: binary ? null : stdout,
+			stderr,
+			exitcode,
+			binary
+		};
+	} catch (e) {
+		/* Never leak the temporary descriptors on a failing run. ucode has
+		   no `finally` clause, so the exception is re-raised by hand. */
+		closeFD(outfd);
+		closeFD(errfd);
+
+		die(e);
+	}
 };
 
 export function getTime(epoch) {
