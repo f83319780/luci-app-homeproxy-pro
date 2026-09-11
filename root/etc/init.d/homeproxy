@@ -18,16 +18,30 @@ LOG_PATH="$RUN_DIR/homeproxy.log"
 # fw4 chain/set inventory; single source of truth shared with firewall_post.ut
 [ -f "$HP_DIR/scripts/fw4_names.sh" ] && . "$HP_DIR/scripts/fw4_names.sh"
 
-DNSMASQ_UCI_CONFIG="$(uci -q show "dhcp.@dnsmasq[0]" | awk 'NR==1 {split($0, conf, /[.=]/); print conf[2]}')"
-if [ -f "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG" ]; then
-	DNSMASQ_DIR="$(awk -F '=' '/^conf-dir=/ {print $2}' "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG")/dnsmasq-homeproxy.d"
-else
-	DNSMASQ_DIR="/tmp/dnsmasq.d/dnsmasq-homeproxy.d"
-fi
-
 log() {
 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
 }
+
+# Locate the directory dnsmasq reads the homeproxy snippets from. The UCI
+# section name of the dnsmasq config is part of /tmp/etc/dnsmasq.conf.<name>,
+# but `uci get` cannot return a section name (there is no `__name__`), so it is
+# derived from the first `uci show` line. Either step can fail on an unusual
+# setup; fall back to the generic directory and say so in the log instead of
+# silently writing dnsmasq snippets nobody reads.
+DNSMASQ_UCI_CONFIG="$(uci -q show "dhcp.@dnsmasq[0]" 2>"/dev/null" | head -n1)"
+DNSMASQ_UCI_CONFIG="${DNSMASQ_UCI_CONFIG#*.}"
+DNSMASQ_UCI_CONFIG="${DNSMASQ_UCI_CONFIG%%=*}"
+
+DNSMASQ_DIR=""
+if [ -n "$DNSMASQ_UCI_CONFIG" ] && [ -f "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG" ]; then
+	DNSMASQ_CONF_DIR="$(awk -F '=' '/^conf-dir=/ {print $2; exit}' "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG")"
+	[ -n "$DNSMASQ_CONF_DIR" ] && DNSMASQ_DIR="$DNSMASQ_CONF_DIR/dnsmasq-homeproxy.d"
+fi
+
+if [ -z "$DNSMASQ_DIR" ]; then
+	log "WARNING: unable to derive the dnsmasq conf-dir (section '${DNSMASQ_UCI_CONFIG:-unknown}'), using /tmp/dnsmasq.d/dnsmasq-homeproxy.d."
+	DNSMASQ_DIR="/tmp/dnsmasq.d/dnsmasq-homeproxy.d"
+fi
 
 restore_upnp_mappings() {
 	[ -x /etc/init.d/miniupnpd ] && /etc/init.d/miniupnpd enabled && /etc/init.d/miniupnpd running \
