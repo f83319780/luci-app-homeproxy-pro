@@ -5,9 +5,9 @@
 #
 #   tests/run.sh
 #
-# LuCI form snapshots always run locally (they only need node). The ucode
-# tests run locally when ucode and sing-box are available, otherwise the
-# checkout is copied to $HP_TEST_HOST and executed there.
+# Translation coverage and the LuCI form snapshots run locally (they only need
+# python3 / node). The ucode tests run locally when ucode and sing-box are
+# available, otherwise the checkout is copied to $HP_TEST_HOST and run there.
 #
 #   HP_TEST_HOST=root@192.168.1.1 tests/run.sh
 #   HP_TEST_DIR=/tmp/hp-tests      tests/run.sh
@@ -16,6 +16,9 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 HOST="${HP_TEST_HOST:-root@192.168.1.1}"
 REMOTE_DIR="${HP_TEST_DIR:-/tmp/hp-tests}"
 FAILED=0
+
+echo "== zh_Hans translation coverage =="
+python3 "$ROOT/tests/i18n-coverage.py" --warn-below 100
 
 echo "== LuCI form snapshots =="
 for target in node server; do

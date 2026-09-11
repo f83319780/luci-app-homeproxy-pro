@@ -30,6 +30,10 @@ jobs:
         with:
           fetch-depth: 0   # build-pkg.sh 的 git describe/rev-parse 兜底需要完整历史
 
+      # 发布前确认新增文案已同步进 zh_Hans（豁免项见 tests/i18n-ignore.txt）
+      - name: Check zh_Hans translation coverage
+        run: python3 tests/i18n-coverage.py --warn-below 100
+
       - name: Cache apk-tools binary
         id: cache-apk-tools
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
