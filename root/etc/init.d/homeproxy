@@ -15,6 +15,9 @@ HP_DIR="/etc/homeproxy"
 RUN_DIR="/var/run/homeproxy"
 LOG_PATH="$RUN_DIR/homeproxy.log"
 
+# fw4 chain/set inventory; single source of truth shared with firewall_post.ut
+[ -f "$HP_DIR/scripts/fw4_names.sh" ] && . "$HP_DIR/scripts/fw4_names.sh"
+
 DNSMASQ_UCI_CONFIG="$(uci -q show "dhcp.@dnsmasq[0]" | awk 'NR==1 {split($0, conf, /[.=]/); print conf[2]}')"
 if [ -f "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG" ]; then
 	DNSMASQ_DIR="$(awk -F '=' '/^conf-dir=/ {print $2}' "/tmp/etc/dnsmasq.conf.$DNSMASQ_UCI_CONFIG")/dnsmasq-homeproxy.d"
@@ -300,58 +303,18 @@ stop_service() {
 	ip -6 route del default dev "$tun_name" table "$table_mark" 2>"/dev/null"
 	ip -6 rule del fwmark "$tun_mark" table "$table_mark" 2>"/dev/null"
 
-	nft -f - 2>"/dev/null" <<-EOF
-		flush chain inet fw4 homeproxy_dstnat_redir
-		delete chain inet fw4 homeproxy_dstnat_redir
-		flush chain inet fw4 homeproxy_output_redir
-		delete chain inet fw4 homeproxy_output_redir
-		flush chain inet fw4 homeproxy_redirect
-		delete chain inet fw4 homeproxy_redirect
-		flush chain inet fw4 homeproxy_redirect_proxy
-		delete chain inet fw4 homeproxy_redirect_proxy
-		flush chain inet fw4 homeproxy_redirect_proxy_port
-		delete chain inet fw4 homeproxy_redirect_proxy_port
-		flush chain inet fw4 homeproxy_redirect_lanac
-		delete chain inet fw4 homeproxy_redirect_lanac
-		flush chain inet fw4 homeproxy_mangle_prerouting
-		delete chain inet fw4 homeproxy_mangle_prerouting
-		flush chain inet fw4 homeproxy_mangle_output
-		delete chain inet fw4 homeproxy_mangle_output
-		flush chain inet fw4 homeproxy_mangle_tproxy
-		delete chain inet fw4 homeproxy_mangle_tproxy
-		flush chain inet fw4 homeproxy_mangle_tproxy_port
-		delete chain inet fw4 homeproxy_mangle_tproxy_port
-		flush chain inet fw4 homeproxy_mangle_tproxy_lanac
-		delete chain inet fw4 homeproxy_mangle_tproxy_lanac
-		flush chain inet fw4 homeproxy_mangle_mark
-		delete chain inet fw4 homeproxy_mangle_mark
-		flush chain inet fw4 homeproxy_mangle_tun
-		delete chain inet fw4 homeproxy_mangle_tun
-		flush chain inet fw4 homeproxy_mangle_tun_mark
-		delete chain inet fw4 homeproxy_mangle_tun_mark
-		flush set inet fw4 homeproxy_local_addr_v4
-		delete set inet fw4 homeproxy_local_addr_v4
-		flush set inet fw4 homeproxy_local_addr_v6
-		delete set inet fw4 homeproxy_local_addr_v6
-		flush set inet fw4 homeproxy_gfw_list_v4
-		delete set inet fw4 homeproxy_gfw_list_v4
-		flush set inet fw4 homeproxy_gfw_list_v6
-		delete set inet fw4 homeproxy_gfw_list_v6
-		flush set inet fw4 homeproxy_mainland_addr_v4
-		delete set inet fw4 homeproxy_mainland_addr_v4
-		flush set inet fw4 homeproxy_mainland_addr_v6
-		delete set inet fw4 homeproxy_mainland_addr_v6
-		flush set inet fw4 homeproxy_wan_proxy_addr_v4
-		delete set inet fw4 homeproxy_wan_proxy_addr_v4
-		flush set inet fw4 homeproxy_wan_proxy_addr_v6
-		delete set inet fw4 homeproxy_wan_proxy_addr_v6
-		flush set inet fw4 homeproxy_wan_direct_addr_v4
-		delete set inet fw4 homeproxy_wan_direct_addr_v4
-		flush set inet fw4 homeproxy_wan_direct_addr_v6
-		delete set inet fw4 homeproxy_wan_direct_addr_v6
-		flush set inet fw4 homeproxy_routing_port
-		delete set inet fw4 homeproxy_routing_port
-	EOF
+	# Flush and delete every fw4 object homeproxy owns. Deleting one at a
+	# time matters: `nft -f` batches are atomic, so a single object that
+	# does not exist in the current proxy mode would roll back the rest.
+	local fw4_name
+	for fw4_name in $HP_FW4_CHAINS; do
+		nft flush chain inet fw4 "$fw4_name" 2>"/dev/null"
+		nft delete chain inet fw4 "$fw4_name" 2>"/dev/null"
+	done
+	for fw4_name in $HP_FW4_SETS; do
+		nft flush set inet fw4 "$fw4_name" 2>"/dev/null"
+		nft delete set inet fw4 "$fw4_name" 2>"/dev/null"
+	done
 	: > "$RUN_DIR/fw4_forward.nft"
 	: > "$RUN_DIR/fw4_input.nft"
 	: > "$RUN_DIR/fw4_post.nft"

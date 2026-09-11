@@ -1,9 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# Run the ucode-level tests: the parse_uri unit tests and the generator
-# regression fixtures. Requires ucode; sing-box is needed for the generator
-# cases (they validate the emitted config with `sing-box check`).
+# Run the ucode-level tests: the parse_uri unit tests, the fw4 inventory check
+# and the generator regression fixtures. Requires ucode; sing-box is needed for
+# the generator cases (they validate the emitted config with `sing-box check`).
 #
 # Usage: sh tests/ucode/run.sh <repo-root> [work-dir]
 
@@ -12,6 +12,9 @@ WORK="${2:-/tmp/hp-ucode-tests}"
 
 ROOT="$(cd "$ROOT" && pwd)"
 FAILED=0
+
+echo "== fw4 chain/set inventory =="
+sh "$ROOT/tests/ucode/test_fw4_names.sh" "$ROOT" || FAILED=1
 
 echo "== parse_uri unit tests =="
 rm -rf "$WORK/parse_uri"

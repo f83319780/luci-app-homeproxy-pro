@@ -1,4 +1,9 @@
 #!/usr/bin/utpl -S
+#
+# Declares every homeproxy_* fw4 chain/set. The inventory of those objects is
+# tracked in scripts/fw4_names.sh, which init.d/homeproxy uses to clean them up
+# on stop; add/remove entries there together with any change below.
+# tests/ucode/test_fw4_names.sh fails when the two lists drift apart.
 
 {%-
 import { readfile } from 'fs';
