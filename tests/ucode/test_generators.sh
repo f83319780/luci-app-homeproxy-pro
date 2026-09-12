@@ -23,10 +23,22 @@ run_case() {
 	dir="$WORK/$name"
 
 	rm -rf "$dir"
-	mkdir -p "$dir/config" "$dir/run" "$dir/scripts" "$dir/resources"
-	cp "$fixture" "$dir/config/homeproxy"
+	mkdir -p "$dir/config" "$dir/run" "$dir/scripts" "$dir/resources" "$dir/ruleset"
 	: > "$dir/resources/direct_list.txt"
 	: > "$dir/resources/proxy_list.txt"
+
+	if grep -q "__RULESET_DIR__" "$fixture"; then
+		# The fixture needs a real local rule-set on disk.
+		printf '%s' '{"version":1,"rules":[{"domain_suffix":["example.com"]}]}' > "$dir/ruleset/src.json"
+		if ! sing-box rule-set compile "$dir/ruleset/src.json" -o "$dir/ruleset/test.srs"; then
+			echo "FAIL: $name: could not compile the local rule-set fixture"
+			FAILED=1
+			return
+		fi
+		sed "s#__RULESET_DIR__#$dir/ruleset#" "$fixture" > "$dir/config/homeproxy"
+	else
+		cp "$fixture" "$dir/config/homeproxy"
+	fi
 
 	sed -e "s#^export const HP_DIR = '/etc/homeproxy';#export const HP_DIR = '$dir';#" \
 	    -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$dir/run';#" \
@@ -57,6 +69,7 @@ run_case() {
 }
 
 run_case client "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 
 exit $FAILED

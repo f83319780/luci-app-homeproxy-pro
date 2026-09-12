@@ -148,6 +148,14 @@ const tun_dns_mode = (tun_dns_mode_raw === 'default') ? '' : tun_dns_mode_raw,
       udp_filtering = (udp_filtering_raw === 'default') ? '' : udp_filtering_raw;
 
 /* Config helper start */
+/*
+ * Direct-node destination override, keyed by node section name. It must be
+ * declared before the helpers that touch it: ucode resolves let/const
+ * lexically and does not hoist them, so a function defined earlier would
+ * resolve the name as an undeclared global and throw under strict mode.
+ */
+const direct_overrides = {};
+
 function parse_port(strport) {
 	if (type(strport) !== 'array' || isEmpty(strport))
 		return null;
@@ -731,9 +739,6 @@ if (match(proxy_mode, /tun/))
 /* Outbound start */
 config.endpoints = [];
 
-/* Direct-node destination override, keyed by node section name */
-const direct_overrides = {};
-
 /* Default outbounds */
 config.outbounds = [
 	{
@@ -1133,9 +1138,14 @@ if (!isEmpty(main_node)) {
 			format: cfg.format,
 			path: cfg.path,
 			url: cfg.url,
-			download_detour: get_outbound(cfg.outbound) || get_outbound(default_outbound),
 			update_interval: cfg.update_interval
 		};
+		/* download_detour is a pre-1.14 option that only makes sense for
+		   remote rule-sets; emitting it for local/inline ones makes sing-box
+		   1.14 reject the whole config. It is translated into http_clients
+		   right below. */
+		if (cfg.type === 'remote')
+			ruleset.download_detour = get_outbound(cfg.outbound) || get_outbound(default_outbound);
 		if (cfg.type === 'remote' && !isEmpty(cfg.initial_path))
 			ruleset.initial_path = cfg.initial_path;
 		push(config.route.rule_set, ruleset);
@@ -1147,11 +1157,15 @@ if (!isEmpty(main_node)) {
 const http_clients = [];
 const http_seen = {};
 for (let rs in (config.route.rule_set || [])) {
+	/* Strip the legacy field from every entry first, including the
+	   local/inline ones: sing-box 1.14 rejects it everywhere except on
+	   remote rule-sets, where it is replaced by http_client below. */
+	let detour = rs.download_detour;
+	delete rs.download_detour;
+
 	if (rs.type !== 'remote')
 		continue;
 
-	let detour = rs.download_detour;
-	delete rs.download_detour;
 	if (isEmpty(detour))
 		detour = (routing_mode === 'custom') ? (get_outbound(default_outbound) || 'direct-out') : 'direct-out';
 
