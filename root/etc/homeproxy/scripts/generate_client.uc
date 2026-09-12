@@ -985,29 +985,36 @@ if (!isEmpty(main_node)) {
 		});
 
 	if (routing_mode === 'bypass_mainland_china') {
+		/*
+		 * Fetched straight from the upstream SagerNet repositories and
+		 * downloaded through the selected node. A direct fetch depends on
+		 * the CDN staying reachable from mainland China, where DNS pollution
+		 * makes it fail intermittently; the three files total ~250 KB per
+		 * day, so proxying the download costs almost nothing.
+		 */
 		push(config.route.rule_set, {
 			type: 'remote',
 			tag: 'geoip-cn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geoip@rule-set/geoip-cn.srs',
+			url: 'https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs',
 			update_interval: '24h',
-			download_detour: 'direct-out'
+			download_detour: 'main-out'
 		});
 		push(config.route.rule_set, {
 			type: 'remote',
 			tag: 'geosite-cn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-geolocation-cn.srs',
+			url: 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-cn.srs',
 			update_interval: '24h',
-			download_detour: 'direct-out'
+			download_detour: 'main-out'
 		});
 		push(config.route.rule_set, {
 			type: 'remote',
 			tag: 'geosite-noncn',
 			format: 'binary',
-			url: 'https://fastly.jsdelivr.net/gh/SagerNet/sing-geosite@rule-set/geosite-geolocation-!cn.srs',
+			url: 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-!cn.srs',
 			update_interval: '24h',
-			download_detour: 'direct-out'
+			download_detour: 'main-out'
 		});
 	}
 

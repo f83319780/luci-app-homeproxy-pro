@@ -69,6 +69,20 @@ run_case() {
 }
 
 run_case client "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+
+# The preset remote rule-sets must be fetched through the node. A direct
+# download depends on the CDN staying reachable from mainland China and fails
+# intermittently under DNS pollution, which shows up as "open connection to
+# <ip>:443 using outbound/direct[direct]: i/o timeout" in sing-box-c.log.
+if grep -q '"detour": "direct-out"' "$WORK/client/run/sing-box-c.json"; then
+	echo "FAIL: client: a remote rule-set would still be downloaded directly"
+	FAILED=1
+fi
+if ! grep -q '"detour": "main-out"' "$WORK/client/run/sing-box-c.json"; then
+	echo "FAIL: client: no remote rule-set is configured to download through main-out"
+	FAILED=1
+fi
+
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 
