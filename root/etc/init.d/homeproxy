@@ -15,8 +15,18 @@ HP_DIR="/etc/homeproxy"
 RUN_DIR="/var/run/homeproxy"
 LOG_PATH="$RUN_DIR/homeproxy.log"
 
+# Last configuration that passed `sing-box check` and started successfully.
+# start_service falls back to it when a regeneration fails, and
+# reload_service restores it when a reload does not come up.
+GOOD_DIR="$RUN_DIR/known-good"
+
 # fw4 chain/set inventory; single source of truth shared with firewall_post.ut
 [ -f "$HP_DIR/scripts/fw4_names.sh" ] && . "$HP_DIR/scripts/fw4_names.sh"
+
+# Configuration transaction (known-good copy, restore, rollback) and the
+# health probe that decides whether a reload needs to roll back.
+[ -f "$HP_DIR/scripts/runtime/config.sh" ] && . "$HP_DIR/scripts/runtime/config.sh"
+[ -f "$HP_DIR/scripts/runtime/health.sh" ] && . "$HP_DIR/scripts/runtime/health.sh"
 
 log() {
 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
@@ -102,14 +112,33 @@ start_service() {
 			sleep 1
 		done
 
-		ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
+		if [ "${HP_USE_KNOWN_GOOD:-0}" = "1" ] && [ -s "$GOOD_DIR/sing-box-c.json" ]; then
+			# Rollback path: start from the recorded configuration instead
+			# of regenerating.  Regenerating would rebuild the very config
+			# that just failed to come up, because the generator is a pure
+			# function of UCI.
+			log "Starting with the last known-good client configuration."
+			cp -f "$GOOD_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.json"
+		else
+			ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
 
-		if [ ! -e "$RUN_DIR/sing-box-c.json" ]; then
-			log "Error: failed to generate client configuration."
-			return 1
-		elif ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
-			log "Error: wrong client configuration detected."
-			return 1
+			# The generator is transactional on its own: it writes a
+			# temporary file and only renames it over the live one once
+			# `sing-box check` accepted it.  A failed generation therefore
+			# leaves the previous file untouched - and that is the only
+			# `sing-box check` in this path (the runtime used to run a
+			# second one on the same file).
+			hp_ensure_live "$RUN_DIR/sing-box-c.json" "$GOOD_DIR/sing-box-c.json"
+			case "$?" in
+			0)
+				hp_known_good "$RUN_DIR/sing-box-c.json" "$GOOD_DIR/sing-box-c.json" \
+					|| log "Warning: could not refresh the known-good client configuration." ;;
+			1)
+				log "Error: failed to generate a valid client configuration; falling back to the last known-good one." ;;
+			*)
+				log "Error: failed to generate client configuration."
+				return 1 ;;
+			esac
 		fi
 
 		local auto_update auto_update_time
@@ -237,14 +266,23 @@ start_service() {
 	fi
 
 	if [ "$server_enabled" = "1" ]; then
-		ucode -S "$HP_DIR/scripts/generate_server.uc" 2>>"$LOG_PATH"
+		if [ "${HP_USE_KNOWN_GOOD:-0}" = "1" ] && [ -s "$GOOD_DIR/sing-box-s.json" ]; then
+			log "Starting with the last known-good server configuration."
+			cp -f "$GOOD_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.json"
+		else
+			ucode -S "$HP_DIR/scripts/generate_server.uc" 2>>"$LOG_PATH"
 
-		if [ ! -e "$RUN_DIR/sing-box-s.json" ]; then
-			log "Error: failed to generate server configuration."
-			return 1
-		elif ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
-			log "Error: wrong server configuration detected."
-			return 1
+			hp_ensure_live "$RUN_DIR/sing-box-s.json" "$GOOD_DIR/sing-box-s.json"
+			case "$?" in
+			0)
+				hp_known_good "$RUN_DIR/sing-box-s.json" "$GOOD_DIR/sing-box-s.json" \
+					|| log "Warning: could not refresh the known-good server configuration." ;;
+			1)
+				log "Error: failed to generate a valid server configuration; falling back to the last known-good one." ;;
+			*)
+				log "Error: failed to generate server configuration."
+				return 1 ;;
+			esac
 		fi
 
 		procd_open_instance "sing-box-s"
@@ -389,10 +427,13 @@ reload_service() {
 		config_get outbound_node "routing" "default_outbound" "nil"
 	fi
 
+	# Generate first, tear down later.  If the new configuration is invalid
+	# the generator leaves the running one in place, so the reload is
+	# aborted *before* stop_service() - the old configuration keeps running
+	# instead of the router ending up with no service at all.
 	if [ "$outbound_node" != "nil" ]; then
-		ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"
-		if ! "$PROG" check --config "$RUN_DIR/sing-box-c.json" 2>>"$LOG_PATH"; then
-			log "Error: new client config is invalid, reload aborted."
+		if ! ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"; then
+			log "Error: new client configuration is invalid, reload aborted; the running configuration is kept."
 			return 1
 		fi
 	fi
@@ -400,15 +441,74 @@ reload_service() {
 	local server_enabled
 	config_get_bool server_enabled "server" "enabled" "0"
 	if [ "$server_enabled" = "1" ]; then
-		ucode -S "$HP_DIR/scripts/generate_server.uc" 2>>"$LOG_PATH"
-		if ! "$PROG" check --config "$RUN_DIR/sing-box-s.json" 2>>"$LOG_PATH"; then
-			log "Error: new server config is invalid, reload aborted."
+		if ! ucode -S "$HP_DIR/scripts/generate_server.uc" 2>>"$LOG_PATH"; then
+			log "Error: new server configuration is invalid, reload aborted; the running configuration is kept."
 			return 1
 		fi
 	fi
 
+	# Both configurations passed `sing-box check`; now it is safe to restart.
+	# The known-good copy is deliberately NOT refreshed yet: it still holds
+	# the previous configuration, which is what a failed reload rolls back
+	# to.
 	stop
 	start
+
+	# ... and now prove the instances actually came up.  A configuration can
+	# pass check and still fail at run time; without this gate the router
+	# would silently stay down because stop_service() removed the previous
+	# files.
+	local failed=""
+	if [ "$outbound_node" != "nil" ]; then
+		hp_wait_instance "sing-box-c" "$RUN_DIR/sing-box-c.json" 10 || failed="sing-box-c"
+	fi
+	if [ "$server_enabled" = "1" ] && [ -z "$failed" ]; then
+		hp_wait_instance "sing-box-s" "$RUN_DIR/sing-box-s.json" 10 || failed="sing-box-s"
+	fi
+
+	if [ -z "$failed" ]; then
+		# The new configuration is proven good; record it as the fallback.
+		[ "$outbound_node" = "nil" ] || hp_known_good "$RUN_DIR/sing-box-c.json" "$GOOD_DIR/sing-box-c.json"
+		[ "$server_enabled" != "1" ] || hp_known_good "$RUN_DIR/sing-box-s.json" "$GOOD_DIR/sing-box-s.json"
+		log "Reload completed."
+		return 0
+	fi
+
+	log "Error: $failed did not come up with the new configuration, rolling back."
+
+	local good="$GOOD_DIR/$failed.json"
+	local live="$RUN_DIR/$failed.json"
+	local rolled_back=0
+
+	if hp_same_file "$live" "$good"; then
+		log "Error: the failing configuration is already the known-good one; nothing to roll back to."
+	elif hp_rollback "$live" "$good"; then
+		rolled_back=1
+	else
+		log "Error: no known-good configuration to roll back to."
+	fi
+
+	if [ "$rolled_back" = "0" ]; then
+		log "Error: rollback was not possible; the service may be down. Check $LOG_PATH."
+		return 1
+	fi
+
+	# Start from the recorded file rather than regenerating: the generator
+	# is a pure function of UCI, so it would rebuild the config that just
+	# failed.
+	HP_USE_KNOWN_GOOD=1
+	export HP_USE_KNOWN_GOOD
+
+	stop
+	start
+
+	if hp_wait_instance "$failed" "$RUN_DIR/$failed.json" 10; then
+		log "Rollback completed; the previous configuration is running."
+		return 0
+	fi
+
+	log "Error: rollback did not restore the service; manual intervention required."
+	return 1
 }
 
 service_triggers() {

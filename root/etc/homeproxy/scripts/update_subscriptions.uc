@@ -8,7 +8,7 @@
 'use strict';
 
 import { md5 } from 'digest';
-import { open } from 'fs';
+import { open, readfile, writefile } from 'fs';
 import { connect } from 'ubus';
 import { cursor } from 'uci';
 
@@ -28,6 +28,7 @@ import { apply as repository_apply } from './subscription/repository.uc';
 /* UCI config start */
 const uci = cursor();
 
+const CONFIG_FILE = '/etc/config/homeproxy';
 const uciconfig = 'homeproxy';
 uci.load(uciconfig);
 
@@ -40,8 +41,7 @@ const allow_insecure = uci.get(uciconfig, ucisubscription, 'allow_insecure') || 
       filter_keywords = uci.get(uciconfig, ucisubscription, 'filter_keywords') || [],
       packet_encoding = uci.get(uciconfig, ucisubscription, 'packet_encoding') || 'xudp',
       subscription_urls = uci.get(uciconfig, ucisubscription, 'subscription_url') || [],
-      user_agent = uci.get(uciconfig, ucisubscription, 'user_agent'),
-      via_proxy = uci.get(uciconfig, ucisubscription, 'update_via_proxy') || '0';
+      user_agent = uci.get(uciconfig, ucisubscription, 'user_agent');
 
 const routing_mode = uci.get(uciconfig, ucimain, 'routing_mode') || 'bypass_mainland_china';
 let main_node, main_udp_node;
@@ -80,11 +80,12 @@ function log(...args) {
 }
 
 function main() {
-	if (via_proxy !== '1') {
-		log('Stopping service...');
-		init_action('homeproxy', 'stop');
-	}
-
+	/* Fetch, decode, parse and filter everything BEFORE touching the
+	 * service or UCI.  The previous version stopped the proxy first, so a
+	 * slow or failing subscription left the router without a proxy for the
+	 * whole fetch - the stop -> modify -> discover-an-error pattern the
+	 * refactor guide forbids.  Nothing below runs until a full candidate
+	 * set exists in memory. */
 	for (let url in subscription_urls) {
 		url = replace(url, /#.*$/, '');
 		const groupHash = md5(url);
@@ -141,13 +142,9 @@ function main() {
 	}
 
 	if (isEmpty(node_result)) {
+		/* Nothing was touched yet (the fetch phase never writes), so the
+		 * running service and the stored configuration stay as they are. */
 		log('Failed to update subscriptions: no valid node found.');
-
-		if (via_proxy !== '1') {
-			log('Starting service...');
-			init_action('homeproxy', 'start');
-		}
-
 		return false;
 	}
 
@@ -166,7 +163,6 @@ function main() {
 	const added = repository_result.added,
 	      removed = repository_result.removed;
 
-	let need_restart = (via_proxy !== '1');
 	if (!isEmpty(main_node)) {
 		const first_server = uci.get_first(uciconfig, ucinode);
 		if (first_server) {
@@ -183,14 +179,12 @@ function main() {
 				if (length(main_urltest_nodes) !== length(old_urltest_nodes)) {
 					uci.set(uciconfig, ucimain, 'main_urltest_nodes', main_urltest_nodes);
 					uci.commit(uciconfig);
-					need_restart = true;
 				}
 			}
 
 			if ((main_node === 'urltest') ? !length(main_urltest_nodes) : !uci.get(uciconfig, main_node)) {
 				uci.set(uciconfig, ucimain, 'main_node', first_server);
 				uci.commit(uciconfig);
-				need_restart = true;
 
 				log('Main node is gone, switching to the first node.');
 			}
@@ -209,14 +203,12 @@ function main() {
 					if (length(main_udp_urltest_nodes) !== length(old_udp_urltest_nodes)) {
 						uci.set(uciconfig, ucimain, 'main_udp_urltest_nodes', main_udp_urltest_nodes);
 						uci.commit(uciconfig);
-						need_restart = true;
 					}
 				}
 
 				if ((main_udp_node === 'urltest') ? !length(main_udp_urltest_nodes) : !uci.get(uciconfig, main_udp_node)) {
 					uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
 					uci.commit(uciconfig);
-					need_restart = true;
 
 					log('Main UDP node is gone, switching to the first node.');
 				}
@@ -225,7 +217,6 @@ function main() {
 			uci.set(uciconfig, ucimain, 'main_node', 'nil');
 			uci.set(uciconfig, ucimain, 'main_udp_node', 'nil');
 			uci.commit(uciconfig);
-			need_restart = true;
 
 			log('No available node, disable tproxy.');
 		}
@@ -240,21 +231,30 @@ function main() {
 		if (length(cleaned_nodes) !== length(cfg.urltest_nodes)) {
 			uci.set(uciconfig, cfg['.name'], 'urltest_nodes', cleaned_nodes);
 			uci.commit(uciconfig);
-			need_restart = true;
 
 			log(sprintf('Routing node %s: removed gone nodes from urltest list.', cfg['.name']));
 		}
 	});
 
-	if (need_restart) {
-		log('Restarting service...');
-		init_action('homeproxy', 'stop');
-		init_action('homeproxy', 'start');
-	}
+	/* Reload once, after the whole candidate set is committed and stale
+	 * references are scrubbed.  The old code stopped the service before
+	 * fetching and then did stop+start; the reload path now validates the
+	 * new configuration and rolls back if an instance fails to come up, so
+	 * the service is only ever restarted onto a config that passed
+	 * `sing-box check`. */
+	log('Reloading service...');
+	init_action('homeproxy', 'reload');
 
 	log(sprintf('%s nodes added, %s removed.', added, removed));
 	log('Successfully updated subscriptions.');
 }
+
+/* Snapshot of the UCI file taken before main() commits anything.  The
+ * repository commits once and the reconciliation below commits several more
+ * times, so a failure part-way through would leave a file the running
+ * service does not match.  Restoring the snapshot in the catch puts the
+ * stored configuration back to what the service actually loaded. */
+const config_backup = readfile(CONFIG_FILE);
 
 if (!isEmpty(subscription_urls))
 	try {
@@ -264,7 +264,8 @@ if (!isEmpty(subscription_urls))
 		log(sprintf('%s: %s', e.type, e.message));
 		log(e.stacktrace[0].context);
 
-		log('Restarting service...');
-		init_action('homeproxy', 'stop');
-		init_action('homeproxy', 'start');
+		if (config_backup != null) {
+			writefile(CONFIG_FILE, config_backup);
+			log('Restored the previous configuration; the running service was not stopped.');
+		}
 	}
