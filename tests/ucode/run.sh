@@ -92,7 +92,7 @@ for module in homeproxy parse_uri; do
 		FAILED=1
 	fi
 done
-for module in subscription/filter subscription/decoder; do
+for module in subscription/filter subscription/decoder subscription/fetcher subscription/repository; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$ROOT/root/etc/homeproxy/scripts/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
@@ -154,6 +154,13 @@ else
 	echo "FAIL: subscription decoder unit tests"
 	FAILED=1
 fi
+
+echo "== subscription repository integration test =="
+# The repository writes to a real UCI cursor, so its testbed needs
+# the uci + digest shared objects. tests/ucode/run.sh exports
+# UCODE_MODULES_DIR for that; the test runner script itself stages
+# a sandboxed config dir with seed sections.
+sh "$ROOT/tests/ucode/test_subscription_repository.sh" "$ROOT" "$WORK/subscription_repo" || FAILED=1
 
 echo "== homeproxy helper tests =="
 rm -rf "$WORK/homeproxy"

@@ -22,6 +22,8 @@ import { parse_uri } from 'parse_uri';
 
 import { check as filter_check, apply_policy } from './subscription/filter.uc';
 import { decode as decode_subscription } from './subscription/decoder.uc';
+import { fetch as fetch_subscription } from './subscription/fetcher.uc';
+import { apply as repository_apply } from './subscription/repository.uc';
 
 /* UCI config start */
 const uci = cursor();
@@ -88,15 +90,14 @@ function main() {
 		const groupHash = md5(url);
 		node_cache[groupHash] = {};
 
-		const fetched = wGETVerbose(url, user_agent);
-		if (isEmpty(fetched.content)) {
-			log(sprintf('Failed to fetch resources from %s: %s', url, fetched.error || 'empty response'));
+		/* B1.2: fetch + decode pipeline. The fetcher logs its
+		 * own failure (so the orchestrator does not need to know
+		 * the wGETVerbose error shape) and returns null content
+		 * on failure; the decoder handles JSON/SIP008/base64. */
+		const fetched = fetch_subscription(url, user_agent, log);
+		if (fetched.content === null)
 			continue;
-		}
 
-		/* B1.1: JSON / SIP008 / base64 handling lives in
-		 * subscription/decoder.uc. Same three shapes, same fallback
-		 * order, same log message on the JSON-failure branch. */
 		const nodes = decode_subscription(fetched.content, log, url);
 
 		let count = 0;
@@ -150,44 +151,14 @@ function main() {
 		return false;
 	}
 
-	let added = 0, removed = 0;
-	uci.foreach(uciconfig, ucinode, (cfg) => {
-		/* Nodes created by the user */
-		if (!cfg.grouphash)
-			return null;
-
-		/* Empty object - failed to fetch nodes, or subscription URL not yet processed */
-		if (!node_cache[cfg.grouphash] || length(node_cache[cfg.grouphash]) === 0)
-			return null;
-
-		if (!node_cache[cfg.grouphash][cfg['.name']]) {
-			uci.delete(uciconfig, cfg['.name']);
-			removed++;
-
-			log(sprintf('Removing node: %s.', cfg.label || cfg['name']));
-		} else {
-			map(keys(cfg), (v) => {
-				if (v in node_cache[cfg.grouphash][cfg['.name']])
-					uci.set(uciconfig, cfg['.name'], v, node_cache[cfg.grouphash][cfg['.name']][v]);
-				else
-					uci.delete(uciconfig, cfg['.name'], v);
-			});
-			node_cache[cfg.grouphash][cfg['.name']].isExisting = true;
-		}
-	});
-	for (let nodes in node_result)
-		map(nodes, (node) => {
-			if (node.isExisting)
-				return null;
-
-			const nameHash = md5(node.grouphash + node.label);
-			uci.set(uciconfig, nameHash, 'node');
-			map(keys(node), (v) => uci.set(uciconfig, nameHash, v, node[v]));
-
-			added++;
-			log(sprintf('Adding node: %s.', node.label));
-		});
-	uci.commit(uciconfig);
+	/* B1.2: the add / update / remove walk and the final commit
+	 * now live in subscription/repository.uc. The orchestrator
+	 * just hands it the cache + result built during the fetch
+	 * phase and uses the { added, removed } counts for the
+	 * end-of-run log. */
+	const { added, removed } = repository_apply(
+		uci, uciconfig, ucinode, node_cache, node_result, log
+	);
 
 	let need_restart = (via_proxy !== '1');
 	if (!isEmpty(main_node)) {
