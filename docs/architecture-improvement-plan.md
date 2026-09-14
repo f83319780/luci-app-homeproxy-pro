@@ -43,7 +43,9 @@ Subscription Failure → Candidate Rejected → Old Config Preserved → Old Run
 2. ~~**P0-2 WireGuard 节点在 `Node` 化之后必然生成非法配置**~~ **已修复**（§1.2）+ 新 fixture 守护。
 3. ~~**P0-3 前端 `parseShareLink` 与后端 `parse_uri` 双实现且已经漂移**~~ **已修复**（§1.3，改为后端 RPC）。
 4. **P0-4 订阅更新时新增字段写不进已有节点** **已修复**（§1.4）。
-5. **P0-5 单个非法节点 `die()` 掉整份配置**（§1.5）**仍未修** —— 这是剩下唯一的 P0。
+5. ~~**P0-5 单个非法节点 `die()` 掉整份配置**~~ **已修复**（§1.5）。
+6. **P0-6 各协议 outbound 存在 sing-box 1.14 不接受的字段** —— 由新的 golden schema 检查发现，
+   **已修复**（§1.6）。
 
 ---
 
@@ -221,7 +223,7 @@ expect('kept: port not added (quirk)', 'port' in cfg, false);
 测试从 `expect('kept: port not added (quirk)', ... false)` 改为
 `expect('kept: new field added', cfg.port, '443')`——目标设备 14 checks / 0 failures。
 
-### 1.5 单个非法节点 `die()` 掉整份配置
+### 1.5 单个非法节点 `die()` 掉整份配置 ✅ 已修复
 
 **证据**：`config/adapter.uc:301-308`
 
@@ -236,9 +238,39 @@ if (length(problems))
 **影响**：任一节点缺 uuid / 端口越界 / TLS 无 SNI，整份 sing-box 配置就生成失败，服务**完全起不来**，
 而不是"跳过这个坏节点、其余正常工作"。考虑到 §1.3 前端导入不做后端校验，这条很容易被触发。
 
-**修复**：区分"致命"与"可跳过"。`main_node` / 路由引用的节点出错才致命；
-仅出现在 urltest 候选列表里的坏节点应 `log()` + skip。至少在 `init.d` 层做到
-"新配置不可用时保留旧配置"（见 §6 candidate/rollback）。
+**已实施的修复**：
+- `adapter.uc` 拆出 `problems(node)` / `buildable(node)` / `tryCreate(node, mark)`，
+  `create()` 仍 `die()`（路由/DNS 真正解析经过的节点必须致命），但 **urltest 候选列表改用可构建性过滤**。
+- `generate_client.uc` 新增 `keep_candidate()` / `buildable_candidates()`，三处候选列表
+  （main urltest、main UDP urltest、custom routing_node 的 urltest）都会剔除无法构建的节点并 `warn()`；
+  若过滤后整个组为空，则 `die()` 给出明确原因（而不是发出一个没有成员的 urltest）。
+- WireGuard 的必填字段（local_address / private_key / peer_public_key）补进 `protocol_problems()`，
+  所以它也会被这条路径正确剔除。
+- 新增 `tests/fixtures/generators/partial_invalid.uci`（urltest 组里一个好节点 + 一个缺 uuid 的坏节点），
+  断言：生成成功、坏节点不在组里、好节点在组里、并且**有对应的 warning**。
+  设备实测：`PASS: partial_invalid (3512 bytes)`。
+
+---
+
+### 1.6 各协议 outbound 含 sing-box 1.14 拒绝的字段 ✅ 已修复（本轮新增发现）
+
+把 golden 快照喂给真实的 `sing-box check`（详见 §2.9）后，一次就暴露出 4 个字段级缺陷。
+它们都属于同一类：**Adapter 表里的字段 sing-box 1.14 根本不接受**，而此前没有任何测试会执行到它们
+（fixture 大多没有设置这些选项）。每一个都会让整份配置被 sing-box 拒绝 ⇒ 服务起不来。
+
+| # | 协议 | 字段 | sing-box 1.14 的行为 | 触发条件 | 修复 |
+|---|---|---|---|---|---|
+| 1 | vless | `udp_over_tcp` | `json: unknown field`（只有 shadowsocks/socks 支持） | 节点类型从 shadowsocks 改成 vless 后，残留的 `udp_over_tcp` UCI 选项 | 从 `PROTOCOL_OPTIONS.vless` / `OPTION_FIELDS.vless` 移除；UI 本来也只对 socks/shadowsocks 显示 |
+| 2 | hysteria (v1) | `obfs` | 必须是**字符串**（obfs 口令）；对象形式报 `cannot unmarshal object ... of type string` | 任何设置了 `hysteria_obfs_password` 的 v1 节点 | 改为直接发口令字符串；同时不再映射 v1 不存在的 `hysteria_obfs_type` |
+| 3 | snell | `mode` | outbound 与 inbound 都 `unknown field`（曾是 v6-only 选项，目标 sing-box 不支持 v6） | 从 v6 切回 v4/v5 后残留的 `snell_mode`；或 v6 节点本身 | 从 loader/adapter/`generate_server.uc`/两个表单中移除 |
+| 4 | ssh | `private_key` | 需要**单个字符串**，但表单用 DynamicList 存储（每行一个 UCI list 条目），发出的是数组 | 任何 SSH 节点 | `ssh_private_key()` 用 `join('\n', ...)` 还原成完整密钥 |
+
+顺带修正：**socks** 的 `udp_over_tcp`（表单有、sing-box 也接受）此前 Adapter 从未发出，
+设置被静默忽略，现已补上。
+
+**防回归**：`tests/ucode/test_golden_outbounds.sh` 现在不只是比对快照，还会把所有 14 个协议的
+outbound 包成一份配置交给 `sing-box check`。快照只能发现"变化"，这一步才能发现"值本身是错的"。
+本节 4 个缺陷全部由它捕获。SSH fixture 用的是**一次性测试密钥**（非真实凭据）。
 
 ---
 
@@ -338,7 +370,16 @@ if (length(problems))
    这里应该复用 `Loader`（否则"Loader 拥有唯一 cursor"的注释是假的，见 §4）。
 4. **`stop → fetch → commit → start` 反模式**（§6）。
 
-### 2.6 PHASE 6 — Candidate Configuration + Rollback（最高优先级的新功能）
+### 2.6 PHASE 6 — Candidate Configuration + Rollback（最高优先级的新功能）✅ 已实施（见下）
+
+> **已实施**：`scripts/runtime/config.sh` 提供 known-good / ensure-live / rollback / same-file 原语，
+> `scripts/runtime/health.sh` 提供实例健康探测。`init.d/homeproxy` 改为：
+> 先生成（生成器本身是"写临时文件 → check → 原子 rename"，失败则旧文件原样保留）→
+> 校验失败就在 `stop` **之前**中止 reload（旧配置继续运行）→ 通过后 `stop; start` →
+> **健康门**：实例没起来就把 known-good 副本放回并用 `HP_USE_KNOWN_GOOD=1` 重新 start
+> （必须绕过重新生成，否则生成器会按同一份 UCI 再造出刚失败的那份配置）→ 成功后才刷新 known-good 副本。
+> 订阅侧：见 §2.5 的实施说明（先抓取、失败恢复配置文件、成功才 reload）。
+> `tests/runtime/test_config_transaction.sh` 覆盖 16 项；`init.d` 本身只在设备上执行（procd 无法离机测）。
 
 这是文档的核心可靠性目标，目前完全缺失。现状：
 
@@ -382,7 +423,13 @@ runtime/candidate.uc 或 init.d 内的小函数:
 > 文档特别提醒的"不得假设未 commit 的 candidate 会被另一个 ucode cursor 自动看到"——本仓库目前
 > 没有踩这个坑（`repository.uc` 是在同一个 cursor 上 set 完再 commit），设计新事务时请保持这一点。
 
-### 2.7 PHASE 7 — Runtime 抽离
+### 2.7 PHASE 7 — Runtime 抽离🟡 部分实施
+
+> **已实施**：抽出 `scripts/runtime/config.sh`（配置事务）与 `scripts/runtime/health.sh`（健康探测），
+> `init.d/homeproxy` 只保留 procd 外壳 + dnsmasq/fw4/ip rule 编排，并去掉了重复的 `sing-box check`。
+> **未实施**：`runtime/{service,dns,firewall}.uc` 的进一步抽离（把 dnsmasq 片段生成、tproxy/tun 规则
+> 也搬出 init.d）。原因：这部分与 procd 生命周期耦合最紧，且离机无法验证——按"不要为了拆文件而拆文件"
+> 的原则留待有 on-target CI 时再做。
 
 `init.d/homeproxy` 417 行里混了 5 类职责：服务生命周期、版本闸门、dnsmasq 片段生成、
 ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文档抽到
@@ -452,29 +499,40 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
    pin + 金丝雀两者一起，既复现目标，又能在有人改 pin 时立刻报警。
 4. `config/*.uc` 已加入 run.sh 的 import 检查（之前只在 generator 测试里被间接覆盖）。
 
-仍未做的：
-5. **修掉 vacuous 断言**（§3.1）：`test_demo_architecture.sh` 仍是自己比自己。
-6. **协议覆盖不变量测试**：`grep PROTOCOL_OPTIONS|OPTION_FIELDS` 在 `tests/` 下仍是零命中。
-   新增 `tests/ucode/test_protocol_inventory.uc`，断言各协议表与 fixture 覆盖一致
-   （这条本可以发现 §1.2 的 wireguard 缺口）。
-7. **golden JSON 快照**：`tests/snapshots/generator/.gitkeep` 仍为空。每个协议一份 outbound
-   黄金 JSON，替换 §3.1 的自比较。
-8. `client.json` 表单快照：`luci-form-snapshot.js:13,196-202` 仍只接受 `node|server`，
-   `client.js`（1755 行）无快照。
-9. TLS/Transport 单测：仍没有直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject` 的测试。
-10. `tests/ucode/test_demo_architecture.sh:158-159` 的两条 sed 仍是空操作（见 §3.1）。
-11. `tests/README.md` 已同步更新（pin/金丝雀/无 SKIP/demo 自比较），但 `demo/architecture/`
-    相关的历史描述只做了标注，未彻底清除。
+本轮补齐的：
+5. ✅ **vacuous 断言已删除**（§3.1）：`test_demo_architecture.sh` 及其 `HP_TEST_HOOK` 已移除。
+6. ✅ **协议覆盖不变量**：`tests/ucode/test_protocol_inventory.sh`，122 项断言，跨
+   `parse_uri` / `CREDENTIALS` / `PROTOCOL_OPTIONS` / `REQUIRED_CREDENTIALS` / `OPTION_FIELDS`
+   / golden 快照 / endpoint-only 协议。ssh 与 wireguard 的缺口正是这类。
+7. ✅ **golden JSON 快照**：`tests/snapshots/generator/outbounds.json`（14 协议），
+   并额外跑真实 `sing-box check`（找出 §1.6 的 4 个缺陷）。
+8. ⬜ `client.json` 表单快照：`luci-form-snapshot.js` 仍只接受 `node|server`，`client.js` 无快照。
+9. ⬜ TLS/Transport 单测：仍没有直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject` 的测试
+   （目前由 golden 快照 + generator fixture 间接覆盖）。
+10. ✅ demo 测试的两条空操作 sed 随测试一起删除。
+11. ✅ `tests/README.md` 已彻底改写，不再残留 `demo/architecture/` 的描述。
+12. 🟡 `tests/ucode/run.sh` 新增 **shell 语法检查**（`init.d/homeproxy` + `runtime/*.sh`），
+    补上了这类文件此前完全不被检查的空白。
 
-完全无测试的文件：`client.js`、`status.js`、`migrate_config.uc`、`update_resources.sh`、
-`update_crond.sh`、`clean_log.sh`、`init.d/homeproxy`、`firewall_pre.uc`、`luci.homeproxy`、
-`subscription/fetcher.uc`。（`generate_server.uc` 有 smoke test，但只断言 `sing-box check`。）
+仍然无测试的文件（未变）：`client.js`、`status.js`、`migrate_config.uc`、`update_resources.sh`、
+`update_crond.sh`、`clean_log.sh`、`firewall_pre.uc`。
+`init.d/homeproxy` 现在有 shell 语法检查 + 事务语义测试，但 procd 行为仍需 on-target CI；
+`luci.homeproxy` 的 RPC 已在设备上跑过真实 rpcd（见附录）；`subscription/fetcher.uc` 仍无单测。
 
 ---
 
 ## 3. 测试诚信问题（文档 FINAL SELF REVIEW 明确要求）
 
-### 3.1 `test_demo_architecture.sh` 的等价性断言是恒真的
+### 3.1 ~~`test_demo_architecture.sh` 的等价性断言是恒真的~~ ✅ 已删除并替换
+
+> **已实施**：删除 `tests/ucode/test_demo_architecture.sh`、`tests/fixtures/architecture/`
+> 与 `generate_client.uc` 里的 `/* HP_TEST_HOOK */` 标记（它只服务于那个测试）。
+> 替换为两项真正有效的测试：
+> * `tests/ucode/test_golden_outbounds.sh` —— 14 个协议各一份 outbound，冻结在
+>   `tests/snapshots/generator/outbounds.json`，并额外把所有 outbound 交给真实 `sing-box check`
+>   （这一步立刻找出了 §1.6 的 4 个字段缺陷）。
+> * `tests/ucode/test_protocol_inventory.sh` —— 122 项跨层一致性断言。
+> 源码头部与 `tests/README.md` 中"demo/architecture 必须保持同步"的过时描述也一并清掉。
 
 ```
 tests/ucode/test_demo_architecture.sh:62   import { OutboundFactory as DemoOutboundFactory } from '<repo>/config/adapter.uc'
@@ -540,33 +598,38 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 按"先能让项目跑起来，再谈架构"排序：
 
 ```
-P0（本周）
-1. ✅ fix(ucode): make the refactored modules parse on the target ucode   # §1.1 + §1.1b  6 文件
+P0
+1. ✅ fix(ucode): make the refactored modules parse on the target ucode   # §1.1 + §1.1b
 2. ✅ test(toolchain): pin ucode, drop target-only SKIPs, add grammar canary,
       import-check config/*.uc                                            # §2.9
 3. ✅ fix(generator): model WireGuard endpoint fields on Node + fixture    # §1.2
 4. ✅ fix(sub): update newly-added fields on existing subscription nodes    # §1.4
 5. ✅ refactor(luci): parse share links through the backend (drop the JS copy)# §1.3
-6. ⬜ test(arch): protocol inventory invariant                            # §2.9
-7. ⬜ fix(generator): skip invalid candidate nodes instead of die()        # §1.5
+6. ✅ fix(generator): prune unbuildable urltest candidates instead of die() # §1.5
+7. ✅ fix(protocol): drop/repair fields sing-box 1.14 rejects               # §1.6
+      vless udp_over_tcp, hysteria obfs, snell mode, ssh private_key,
+      socks udp_over_tcp (was silently ignored)
+8. ✅ test(arch): protocol inventory invariant + golden outbound snapshot
+      + real sing-box check on every golden outbound                       # §2.9
 
 P1（可靠性 — 文档 PHASE 6/7 的核心目标）
-8. reliability: generate to candidate, keep rollback copy, health-check     # §2.6
-9. reliability: back up + restore /etc/config/homeproxy on failed commit    # §2.6
-10. refactor(sub): stop-before-fetch -> fetch-then-reload                   # §2.5
-11. reliability: single sing-box check per generation                       # §2.4
+9. ✅ reliability: known-good copy + fallback + health gate + rollback       # §2.6
+10. ✅ reliability: restore /etc/config/homeproxy on a failed subscription update # §2.6
+11. ✅ refactor(sub): stop-before-fetch -> fetch-then-reload                 # §2.5
+12. ✅ reliability: single sing-box check per generation                     # §2.4
+13. ✅ test: runtime config-transaction + health probe tests                 # §2.9
+14. ⬜ reliability: exercise the reload/rollback path in an on-target CI job
+      (procd cannot be driven off-device)
 
 P2（结构）
-12. refactor(gen): split generate_client.uc into generator/*.uc             # §2.4
-13. refactor(gen): generator becomes an importable library (drop sed hooks) # §2.4
-14. refactor(parser): parser/ dir + single canonical field mapping          # §2.2
-15. refactor(gen): server inbound through domain model + InboundFactory     # §2.3
-16. refactor(runtime): extract runtime/*.uc, thin init.d                    # §2.7
-17. refactor(luci): shared/rpc.js + components/ + protocol registry         # §2.8
-18. security: split ACL wildcard; backend path allowlist                    # §4
-19. test: golden protocol snapshots; client.json snapshot                   # §2.9
-20. test: delete or repair test_demo_architecture.sh                        # §3.1
-21. docs: drop remaining demo/ references; refresh architecture-review claims # §3.1
+15. refactor(gen): split generate_client.uc into generator/*.uc             # §2.4
+16. refactor(gen): generator becomes an importable library (drop sed hooks) # §2.4
+17. refactor(parser): parser/ dir + single canonical field mapping          # §2.2
+18. refactor(gen): server inbound through domain model + InboundFactory     # §2.3
+19. refactor(runtime): extract runtime/{service,dns,firewall}.uc            # §2.7
+20. refactor(luci): shared/rpc.js + components/ + protocol registry         # §2.8
+21. security: split ACL wildcard; backend path allowlist                    # §4
+22. test: client.json form snapshot; TLS/Transport unit tests               # §2.9
 ```
 
 ---
@@ -620,3 +683,44 @@ P2（结构）
 目标设备环境：ImmortalWrt x86_64，`ucode-2026.01.16~85922056-r1`，
 `libucode20230711-2026.01.16~85922056-r1`，`ucode-mod-uci/-fs/-ubus/-uloop/-digest` 同版本，
 `sing-box 1.14.0`。
+
+---
+
+## 附二：P0-5 / PHASE 6-7 / 测试替换 的验证记录
+
+目标设备实跑 `sh tests/ucode/run.sh`：**`SUITE_RC=0`，`grep -c '^FAIL'` = 0**。
+
+| 检查 | 结果 |
+|---|---|
+| `== ucode grammar canary ==` | **PASS** |
+| `== ucode syntax check ==` | **PASS** — all ucode sources compile |
+| `== shell syntax check ==`（`init.d/homeproxy` + `runtime/*.sh`，新增） | **PASS** |
+| `== runtime configuration transaction ==`（新增） | **PASS** — 16 checks, 0 failures |
+| fw4 chain/set inventory + firewall_post.ut 渲染 | **PASS** |
+| parse_uri / subscription filter / decoder / repository | **PASS** — 153 / 18 / 12 / 14 checks |
+| homeproxy helper + executeCommand 失败路径 | **PASS** — 18 checks |
+| generator regression（client / custom / server / wireguard / **partial_invalid**） | **PASS** — 5 个 fixture + `sing-box check` |
+| `== golden protocol snapshot ==`（新增） | **PASS** — 14 protocol outbounds match；**sing-box check accepted every golden outbound** |
+| `== protocol inventory ==`（新增） | **PASS** — 122 checks, 0 failures |
+| domain model skeleton | **PASS** — 63 checks, 0 failures |
+| 本机 `python3 tests/i18n-coverage.py` | **PASS** 724/724 |
+| 本机 `node tests/luci-form-snapshot.js` node/server | **PASS**（node.json 未变；server.json 因移除 snell_mode 少 29 行） |
+
+**真实 rpcd 验证 `node_parse`**（把改造后的 `luci.homeproxy` 临时装入 `/usr/share/rpcd/ucode/`、
+重启 rpcd、用 `ubus call` 调用、然后恢复原文件并 `cmp` 校验一致）：
+
+| 输入 | 结果 |
+|---|---|
+| `trojan://pw@a.example.com:443#t` | **PASS** — 返回完整 config（type/address/port/password/tls） |
+| vmess 分享链接 | **PASS** — 含 `"vmess_global_padding": "1"`（旧前端副本缺的正是这个字段） |
+| `nonsense` | **PASS** — `{config: null, error: "unsupported or invalid share link"}` |
+| 5000 字符超长输入 | **PASS** — `{config: null, error: "illegal share link"}`（长度上限生效） |
+| 恢复原文件 | **PASS** — `cmp` 一致，rpcd 已重启 |
+
+**仍然 NOT RUN 的**：
+- 浏览器里"导入分享链接"的点击流程本身（无浏览器/LuCI 环境）。经 rpcd 验证后，剩余未覆盖的只有
+  `node.js` 的 DOM/Promise 接线，以及 `rpc.declare` 在真实 LuCI 会话下的行为。
+- `init.d/homeproxy` 的 procd 生命周期（start/stop/reload 的真机行为）。事务**语义**由
+  `tests/runtime/test_config_transaction.sh` 覆盖，shell 语法由 run.sh 覆盖，但 procd 本身
+  只能在设备上跑——建议后续加一个 on-target CI job。
+- `sing-box check` 的 runtime 行为（只验证了 schema/初始化，未真正启动进程）。
