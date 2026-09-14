@@ -35,7 +35,9 @@ Subscription Failure → Candidate Rejected → Old Config Preserved → Old Run
 
 ### 0.2 必须先处理的三件事
 
-1. **P0-1 目标设备上 5 个新模块无法被 ucode 解析 ⇒ 生成器无法编译 ⇒ 服务根本无法启动**（已实测复现，见 §1.1）。
+1. ~~**P0-1 目标设备 ucode 无法解析重构模块 ⇒ 生成器 / 订阅更新无法编译 ⇒ 服务无法启动**~~
+   **已修复**（§1.1 `export function` 缺 `;`、§1.1b 对象解构），目标设备全套 ucode 测试已 **PASS**（见附录）。
+   但 §1.1 的**防回归措施（pin ucode + import-check `config/*.uc` + 不把 SKIP 当 PASS）尚未落地**。
 2. **P0-2 WireGuard 节点在 `Node` 化之后必然生成非法配置**（见 §1.2）。
 3. **P0-3 前端 `parseShareLink` 与后端 `parse_uri` 双实现且已经漂移，导入链路完全绕过后端校验**（见 §1.3）。
 
@@ -71,17 +73,17 @@ export function f(){ return 1; };   → rc=0
 
 **影响**：`generate_client.uc:20` 与 `generate_server.uc:17` 都 `import { Loader } from './config/loader.uc'`。
 模块编译失败 ⇒ 生成器非零退出 ⇒ `init.d/homeproxy:105,240` 拿不到配置文件 ⇒ 客户端/服务端都起不来。
-**当前 HEAD 在目标设备上是不可用的。**
+（修复前 HEAD `599a10b` 在目标设备上完全不可用；§1.1 + §1.1b 修复后已实测恢复。）
 
 **修复**：给以下 7 处补 `;`（改成 `};`）：
 
 | 文件 | 行（闭括号） | 函数 |
 |---|---|---|
 | `root/etc/homeproxy/scripts/config/loader.uc` | 111 / 132 | `load_tls` / `load_transport` |
-| `root/etc/homeproxy/scripts/subscription/filter.uc` | 55 / 75 | `check` / `apply_policy` |
-| `root/etc/homeproxy/scripts/subscription/decoder.uc` | 57 | `decode` |
-| `root/etc/homeproxy/scripts/subscription/fetcher.uc` | 32 | `fetch` |
-| `root/etc/homeproxy/scripts/subscription/repository.uc` | 92 | `apply` |
+| `root/etc/homeproxy/scripts/subscription/filter.uc` | 55 / 76 | `check` / `apply_policy` |
+| `root/etc/homeproxy/scripts/subscription/decoder.uc` | 58 | `decode` |
+| `root/etc/homeproxy/scripts/subscription/fetcher.uc` | 33 | `fetch` |
+| `root/etc/homeproxy/scripts/subscription/repository.uc` | 93 | `apply` |
 
 **防回归（重要）**：
 - `tests/ucode/run.sh:69` 把 `*/config/*.uc` 从语法检查循环里排除了，且 import 循环（`:88-101`）也不含 `config/*.uc`。
@@ -90,8 +92,25 @@ export function f(){ return 1; };   → rc=0
   CI 用的 ucode 可能比目标设备宽松，于是 CI 绿、设备红——正好是文档里"不得伪造 PASS"要防的情况。
   **pin 到 ImmortalWrt 实际打包的 ucode 版本，并在 `tests/run.sh:47` 旁边加一条 ucode 版本断言。**
 
-> 建议把这条单独作为一个 commit：`fix(ucode): terminate exported function declarations with ';'`，
-> 因为它直接决定项目当前能否运行。
+### 1.1b 同类第二处语法阻断：对象解构（修完 1.1 后在设备上继续跑才暴露）
+
+补完上面 7 处 `;` 之后，`tests/ucode/run.sh` 在目标设备上仍然失败，这次是
+`update_subscriptions.uc:159`：
+
+```
+const { added, removed } = repository_apply(
+        ^-- Syntax error: Expecting variable name
+```
+
+目标设备的 ucode **不支持对象解构赋值**（`const { a, b } = ...`），而 `b524492`（B1.2 抽出
+Fetcher + Repository）引入了它。这是全仓唯一一处解构（`grep -rn "const {" root/` 只有这一行）。
+
+**影响**：`update_subscriptions.uc` 是订阅更新（cron / 手动）的入口，编译失败 ⇒ 订阅永远不更新。
+该文件被 `tests/ucode/run.sh:41-45` 标为 target-only，CI（`ON_TARGET=0`）把它 SKIP 掉，
+所以这是第二次"CI 全绿、设备红"。
+
+**修复**：改成按名取值。与 §1.1 一起构成
+`fix(ucode): make the refactored modules parse on the target ucode`。
 
 ### 1.2 WireGuard 节点在 Node 化之后必然失败
 
@@ -484,8 +503,8 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 
 ```
 P0（本周）
-1. fix(ucode): terminate exported function declarations with ';'          # §1.1  5 文件 7 处
-2. test(toolchain): pin ucode + import-check config/*.uc                  # §1.1
+1. ✅ fix(ucode): make the refactored modules parse on the target ucode   # §1.1 + §1.1b  6 文件
+2. test(toolchain): pin ucode + import-check config/*.uc                  # §1.1   ← 尚未落地
 3. fix(generator): model WireGuard endpoint fields on Node                # §1.2
 4. test(arch): protocol inventory invariant + wireguard fixture           # §2.9 / §1.2
 5. fix(sub): update newly-added fields on existing subscription nodes      # §1.4
@@ -531,10 +550,28 @@ P2（结构）
 | `python3 tests/i18n-coverage.py --warn-below 100` | **PASS** 724/724，10 条 ignore |
 | `node tests/luci-form-snapshot.js . node` / `server` | **PASS**（与 `tests/snapshots/*.json` 一致） |
 | `sh tests/ucode/run.sh`（本机） | **NOT RUN** — 无 ucode，脚本未守卫，误报 FAIL |
+
+**修复前**（HEAD `599a10b`）：
+
+| 检查 | 结果 |
+|---|---|
 | 目标设备 ucode module import：`config/loader.uc`、`subscription/{filter,decoder,fetcher,repository}.uc` | **FAIL** — `Expecting ';'` |
 | 目标设备 ucode module import：`config/model.uc`、`config/adapter.uc`、`homeproxy.uc`、`parse_uri.uc` | **PASS** |
-| 目标设备：`generate_client.uc` / `generate_server.uc` 能否运行 | **FAIL**（因 loader.uc 无法编译） |
+| 目标设备：`generate_client.uc` / `generate_server.uc` / `update_subscriptions.uc` 能否运行 | **FAIL**（loader.uc 无法编译 / 解构语法） |
 | WireGuard 生成路径 | 静态确定的缺陷，**建议按 §1.2 加 fixture 后复测** |
+
+**修复 §1.1 + §1.1b 后**（目标设备实跑 `sh tests/ucode/run.sh`）：
+
+| 检查 | 结果 |
+|---|---|
+| `== ucode syntax check ==`（全部 4 个 .uc 目录，ON_TARGET=1 不 SKIP） | **PASS** — all ucode sources compile |
+| fw4 chain/set inventory + firewall_post.ut 渲染 | **PASS** |
+| parse_uri unit / subscription filter / decoder / repository | **PASS** — 153 / 18 / 12 / 14 checks, 0 failures |
+| homeproxy helper + executeCommand 失败路径 | **PASS** — 18 checks, 0 failures |
+| generator regression（client / custom / server） | **PASS** — 6791 / 1916 / 3888 bytes + `sing-box check` |
+| architecture demo equivalence | **PASS** — 11/11 nodes（注：该断言恒真，见 §3.1） |
+| domain model skeleton | **PASS** — 63 checks, 0 failures |
+| `tests/ucode/run.sh` 退出码 | **0**，`grep -c '^FAIL'` = 0 |
 
 目标设备环境：ImmortalWrt x86_64，`ucode-2026.01.16~85922056-r1`，
 `libucode20230711-2026.01.16~85922056-r1`，`ucode-mod-uci/-fs/-ubus/-uloop/-digest` 同版本。
