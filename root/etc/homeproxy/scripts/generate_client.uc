@@ -312,6 +312,40 @@ function generate_outbound(node) {
 	return OutboundFactory.create(node, self_mark);
 }
 
+/* Keep only the candidate ids the Adapter can actually build.
+ *
+ * urltest member lists are the one place a broken node must not be fatal:
+ * a single bad node in a 200-node subscription used to make the Adapter
+ * die(), which aborted the whole generator, so the service could not start
+ * at all.  The node stays in UCI (the UI shows it and the next
+ * subscription update can repair or drop it); it is only left out of the
+ * urltest group, and the reason is logged.
+ *
+ * Nodes that routing rules or DNS actually resolve through are NOT pruned:
+ * a rule pointing at a missing tag is invalid sing-box config, so those
+ * stay fatal on purpose. */
+function keep_candidate(id) {
+	const node = ConfigQuery.node_by_id(dm, id);
+
+	if (!node) {
+		warn(sprintf("homeproxy: urltest candidate '%s' no longer exists, skipping.", id));
+		return false;
+	}
+
+	const problems = OutboundFactory.problems(node);
+	if (length(problems)) {
+		warn(sprintf("homeproxy: skipping urltest candidate '%s': %s.", id, join(', ', problems)));
+		return false;
+	}
+
+	return true;
+}
+
+/* map over a candidate id list, dropping the unbuildable ones. */
+function buildable_candidates(ids) {
+	return filter(ids || [], keep_candidate);
+}
+
 function get_outbound(cfg) {
 	if (isEmpty(cfg))
 		return null;
@@ -397,13 +431,6 @@ function isDirectOutboundTag(tag) {
 	return !!(node && node.type === 'direct');
 }
 /* Config helper end */
-
-/* Injection point for architecture regression tests: at this line every
-   module-level option has been read and every builder is defined, but no
-   outbound has been emitted yet. A test may insert a hook here to compare the
-   builders above against another implementation, then exit. Keep this marker
-   when refactoring. */
-/* HP_TEST_HOOK */
 
 const config = {};
 
@@ -742,9 +769,15 @@ if (!isEmpty(main_node)) {
 	let urltest_nodes = [];
 
 	if (main_node === 'urltest') {
-		const main_urltest_nodes = g('main_urltest_nodes') || [];
+		const main_urltest_nodes = buildable_candidates(g('main_urltest_nodes'));
 		const main_urltest_interval = g('main_urltest_interval');
 		const main_urltest_tolerance = g('main_urltest_tolerance');
+
+		/* An empty group means every candidate was unbuildable: there is
+		 * nothing left to route through, so fail with the reason instead
+		 * of emitting an urltest outbound with no members. */
+		if (isEmpty(main_urltest_nodes))
+			die("no buildable node in the main urltest group, please check your configuration.\n");
 
 		push(config.outbounds, {
 			type: 'urltest',
@@ -767,9 +800,12 @@ if (!isEmpty(main_node)) {
 	}
 
 	if (main_udp_node === 'urltest') {
-		const main_udp_urltest_nodes = g('main_udp_urltest_nodes') || [];
+		const main_udp_urltest_nodes = buildable_candidates(g('main_udp_urltest_nodes'));
 		const main_udp_urltest_interval = g('main_udp_urltest_interval');
 		const main_udp_urltest_tolerance = g('main_udp_urltest_tolerance');
+
+		if (isEmpty(main_udp_urltest_nodes))
+			die("no buildable node in the main UDP urltest group, please check your configuration.\n");
 
 		push(config.outbounds, {
 			type: 'urltest',
@@ -812,8 +848,7 @@ if (!isEmpty(main_node)) {
 			return;
 
 		if (cfg.node === 'urltest') {
-			const cfg_urltest_nodes = (cfg.urltest_nodes || [])
-				.filter((k) => ConfigQuery.node_by_id(dm, k));
+			const cfg_urltest_nodes = buildable_candidates(cfg.urltest_nodes);
 			push(config.outbounds, {
 				type: 'urltest',
 				tag: 'cfg-' + cfg['.name'] + '-out',

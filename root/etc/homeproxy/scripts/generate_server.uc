@@ -76,8 +76,9 @@ iter_servers((cfg) => {
 			tcp_multi_path: strToBool(cfg.tcp_multi_path),
 			version: strToInt(cfg.snell_version) || 5,
 			psk: cfg.password,
-			obfs_mode: cfg.snell_obfs_mode,
-			mode: cfg.snell_mode
+			obfs_mode: cfg.snell_obfs_mode
+			/* no `mode`: sing-box 1.14 rejects it on a snell inbound (it
+			 * was a v6-only option, and v6 is not supported). */
 		});
 		return;
 	}

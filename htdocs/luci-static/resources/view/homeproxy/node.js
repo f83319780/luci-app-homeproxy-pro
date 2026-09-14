@@ -560,14 +560,6 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 		_('HTTP Host header sent when obfuscation mode is http. bing.com is used by default.'));
 	o.depends({'type': 'snell', 'snell_version': '4', 'snell_obfs_mode': 'http'});
 	o.modalonly = true;
-
-	o = s.option(form.ListValue, 'snell_mode', _('Traffic shaping mode'),
-		_('v6 only.'));
-	o.value('', _('default'));
-	o.value('unshaped', _('unshaped'));
-	o.value('unsafe-raw', _('unsafe-raw'));
-	o.depends({'type': 'snell', 'snell_version': '6'});
-	o.modalonly = true;
 	/* Snell config end */
 
 	/* TLS config start */

@@ -131,22 +131,31 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/toolchain/validate-data.sh` | Off-target stand-in for `/sbin/validate_data`, used through `HP_VALIDATE_DATA`; not part of `tests/run.sh`. |
 | `tests/ucode/test_ucode_grammar.sh` | Pins the ucode dialect: the toolchain must reject `export function ... }` without `;` and object/array destructuring, and must accept the constructs the package uses (`?.`/`??`, object spread, computed keys, template literals). |
 | `tests/ucode/test_generators.sh` (wireguard case) | Asserts the WireGuard fixture keeps its private key, peer public key and local address list, so the endpoint builder cannot silently regress to reading flat UCI option names. |
-| `tests/ucode/test_demo_architecture.sh` | **Self-comparison, not an equivalence check.** `generate_outbound()` now delegates to the same `OutboundFactory` the test imports, so both sides are one code path and its assertions cannot fail. Kept only until golden per-protocol snapshots replace it (see `docs/architecture-improvement-plan.md` §3.1); the `demo/architecture/` tree it names no longer exists. |
+| `tests/ucode/test_golden_outbounds.sh` | Builds one outbound per protocol from `tests/fixtures/generators/outbounds.uci` and diffs the result against `tests/snapshots/generator/outbounds.json`, so a field change for any protocol is a reviewable diff. Regenerate with `HP_UPDATE_SNAPSHOTS=1`. |
+| `tests/ucode/test_protocol_inventory.sh` | Cross-checks the protocol surface: every type named by `parse_uri.uc`, `CREDENTIALS`, `PROTOCOL_OPTIONS`, `REQUIRED_CREDENTIALS`, `OPTION_FIELDS` and the golden snapshot must agree. This is the check that catches "added a protocol to one table and forgot another". |
+| `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
 
 `tests/ucode/mocks/homeproxy.uc` is a test double for the real module: only
 `validation()` is stubbed (the real one runs `/sbin/validate_data`, which does
 not exist outside OpenWrt), everything else is a copy of the production code.
 
-## Architecture demo (stale)
+## Architecture regression coverage
 
-`demo/architecture/` no longer exists in the tree, and
-`tests/ucode/test_demo_architecture.sh` now compares the production
-`OutboundFactory` against itself, so it proves nothing. The layering it was
-meant to guard (Config Loader -> Domain Model -> Protocol Adapter) is the
-production code now, and the regression value has moved to
-`tests/fixtures/generators/` plus the per-protocol snapshots proposed in
-`docs/architecture-improvement-plan.md`. The test and the `/* HP_TEST_HOOK */`
-marker it relies on are kept only until that replacement lands.
+The old `test_demo_architecture.sh` compared the production `OutboundFactory`
+against itself (via `generate_outbound()`, which delegates to it) and could
+therefore never fail; it is gone, along with the `/* HP_TEST_HOOK */` marker it
+relied on. Two tests replaced it:
+
+* `tests/ucode/test_golden_outbounds.sh` pins the actual emitted JSON per
+  protocol in `tests/snapshots/generator/outbounds.json`.
+* `tests/ucode/test_protocol_inventory.sh` asserts that the parser, the model,
+  the loader option table, the adapter tables and the golden snapshot all name
+  the same set of protocols.
+
+`root/etc/init.d/homeproxy` is now exercised for what can be checked off-target:
+`tests/ucode/run.sh` syntax-checks it and the `runtime/` helpers, and
+`tests/runtime/test_config_transaction.sh` covers the transaction semantics.
+procd itself is still only exercised on a target.
 
 ## Adding cases
 

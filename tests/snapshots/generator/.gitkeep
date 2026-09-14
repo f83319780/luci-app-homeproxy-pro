@@ -1,8 +1,0 @@
-# SPDX-License-Identifier: GPL-2.0-only
-#
-# Reserved for Stage A1.2+ golden JSON baselines (per-protocol
-# OutboundFactory outputs). Empty in A1.1 because the skeleton test
-# only asserts the HomeProxyConfig shape, not generated JSON.
-# Each protocol PR (A4.1 - A4.11) will add <protocol>.json here once
-# that protocol's adapter is verified against the production
-# generate_outbound().

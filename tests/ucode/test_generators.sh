@@ -68,8 +68,11 @@ run_case() {
 	sed -e "$sed_expr" \
 	    "$ROOT/root/etc/homeproxy/scripts/$generator" > "$dir/scripts/$generator"
 
-	if ! ( cd "$dir/scripts" && ucode -L "$dir/scripts" "$generator" ); then
+	# stderr is kept so a test can assert on warnings (e.g. a pruned urltest
+	# candidate) as well as on the generated JSON.
+	if ! ( cd "$dir/scripts" && ucode -L "$dir/scripts" "$generator" 2> "$dir/generate.err" ); then
 		echo "FAIL: $name: $generator exited non-zero"
+		head -5 "$dir/generate.err"
 		FAILED=1
 		return
 	fi
@@ -134,6 +137,29 @@ else
 	fi
 	if ! grep -qF '"172.16.0.2/32"' "$wg_json"; then
 		echo "FAIL: wireguard: the endpoint lost its local address list"
+		FAILED=1
+	fi
+fi
+
+# A broken urltest candidate must be pruned, not fatal: the old behaviour was
+# a die() that left the router with no configuration at all.
+run_case partial_invalid "$ROOT/tests/fixtures/generators/partial_invalid.uci" generate_client.uc sing-box-c.json
+
+pi_json="$WORK/partial_invalid/run/sing-box-c.json"
+if [ ! -f "$pi_json" ]; then
+	echo "FAIL: partial_invalid: a single broken urltest node aborted the whole config"
+	FAILED=1
+else
+	if ! grep -qF '"cfg-n_ok-out"' "$pi_json"; then
+		echo "FAIL: partial_invalid: the buildable candidate was dropped too"
+		FAILED=1
+	fi
+	if grep -qF '"cfg-n_broken-out"' "$pi_json"; then
+		echo "FAIL: partial_invalid: the broken candidate was emitted"
+		FAILED=1
+	fi
+	if ! grep -q "skipping urltest candidate 'n_broken'" "$WORK/partial_invalid/generate.err"; then
+		echo "FAIL: partial_invalid: the broken candidate was dropped without a warning"
 		FAILED=1
 	fi
 fi
