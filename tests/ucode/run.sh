@@ -12,7 +12,14 @@ WORK="${2:-/tmp/hp-ucode-tests}"
 
 ROOT="$(cd "$ROOT" && pwd)"
 FAILED=0
-SKIPPED=0
+
+if ! command -v ucode > "/dev/null" 2>&1; then
+	echo "NOT RUN: ucode is not on PATH."
+	echo "         Build the testbed toolchain first, or use tests/run.sh which"
+	echo "         copies the checkout to a device when the host has no ucode:"
+	echo "           sh tests/toolchain/build-ucode-linux.sh   # or -macos.sh"
+	exit 2
+fi
 
 # homeproxy.uc validates data through /sbin/validate_data, which only exists on
 # a target. Off-target the generator cases would fail on the very first
@@ -24,43 +31,26 @@ if [ ! -x /sbin/validate_data ] && [ -x "$ROOT/tests/toolchain/validate-data.sh"
 	export HP_VALIDATE_DATA
 fi
 
-# Two sources import through an absolute OpenWrt path
-# (/etc/homeproxy/scripts/homeproxy.uc), which only exists on a target. They
-# are compile-checked in CI on the device; on a development host `ucode -c`
-# cannot resolve the import and would report a false failure. The list is
-# reported at the end so a local run never silently drops coverage.
-# On a target /etc/homeproxy exists, so the absolute imports resolve and the
-# full check runs. On a development host they cannot, and the target-only
-# sources are skipped instead of reported as failures.
-ON_TARGET=0
-[ -d /etc/homeproxy/scripts ] && ON_TARGET=1
+# Nothing in this suite is target-only any more.  Every source compiles with
+# the toolchain from tests/toolchain/build-ucode-*.sh (which ships utpl, the
+# luci.* ucode modules and a matching sing-box), and the files that import
+# through an absolute /etc/homeproxy/... path are rewritten to the checkout
+# below.  A missing piece of the toolchain now FAILS instead of being skipped:
+# the old target-only skips are exactly what let a non-compiling
+# update_subscriptions.uc, and a destructuring statement, reach the device.
+SCRIPTS_DIR="$ROOT/root/etc/homeproxy/scripts"
+mkdir -p "$WORK/syntax"
 
-is_target_only() {
-	case "$1" in
-	# Import through an absolute /etc/... path that only exists on a target.
-	*/etc/homeproxy/scripts/firewall_pre.uc|*/usr/share/rpcd/ucode/luci.homeproxy) return 0 ;;
-	# Imports init_action from luci.sys (three start/stop calls around a
-	# subscription update) and stops/starts the real service, which cannot be
-	# staged off-target.
-	*/etc/homeproxy/scripts/update_subscriptions.uc) return 0 ;;
-	esac
-	return 1
-}
-
-skip_reason() {
-	case "$1" in
-	*/etc/homeproxy/scripts/firewall_pre.uc|*/usr/share/rpcd/ucode/luci.homeproxy|*/etc/homeproxy/scripts/firewall_post.ut)
-		echo "imports an absolute /etc/... path" ;;
-	*/etc/homeproxy/scripts/update_subscriptions.uc)
-		echo "imports init_action from luci.sys and drives the service" ;;
-	*) echo "needs a target" ;;
-	esac
-}
+echo "== ucode grammar canary =="
+if ! sh "$ROOT/tests/ucode/test_ucode_grammar.sh"; then
+	echo "FAIL: ucode grammar does not match the target dialect"
+	FAILED=1
+fi
 
 echo "== ucode syntax check =="
-for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc \
-           "$ROOT"/root/etc/homeproxy/scripts/subscription/*.uc \
-           "$ROOT"/root/etc/homeproxy/scripts/config/*.uc \
+for file in "$SCRIPTS_DIR"/*.uc \
+           "$SCRIPTS_DIR"/subscription/*.uc \
+           "$SCRIPTS_DIR"/config/*.uc \
            "$ROOT"/root/usr/share/rpcd/ucode/*; do
 	[ -f "$file" ] || continue
 	# Modules (with export statements) cannot be compiled as a program; they
@@ -68,13 +58,19 @@ for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc \
 	case "$file" in
 	*homeproxy.uc|*parse_uri.uc|*/subscription/*.uc|*/config/*.uc) continue ;;
 	esac
-	if is_target_only "$file" && [ "$ON_TARGET" -eq 0 ]; then
-		echo "SKIP: ${file#"$ROOT"/} ($(skip_reason "$file"), needs a target)"
-		SKIPPED=$((SKIPPED + 1))
-		continue
-	fi
-	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -c -o "/dev/null" "$file" 2> "/tmp/hp-ucode-syntax.err"; then
-		echo "FAIL: $file"
+
+	# luci.homeproxy imports homeproxy.uc through an absolute /etc/... path
+	# that does not exist off-target.  Compile a rewritten copy instead of
+	# skipping the file.
+	target="$file"
+	case "$file" in
+	*/usr/share/rpcd/ucode/*)
+		target="$WORK/syntax/$(basename "$file")"
+		sed "s#'/etc/homeproxy/scripts/#'$SCRIPTS_DIR/#g" "$file" > "$target" ;;
+	esac
+
+	if ! ucode -L "$SCRIPTS_DIR" -c -o "/dev/null" "$target" 2> "/tmp/hp-ucode-syntax.err"; then
+		echo "FAIL: ${file#"$ROOT"/}"
 		head -8 "/tmp/hp-ucode-syntax.err"
 		FAILED=1
 	fi
@@ -92,8 +88,12 @@ for module in homeproxy parse_uri; do
 		FAILED=1
 	fi
 done
-for module in subscription/filter subscription/decoder subscription/fetcher subscription/repository; do
-	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$ROOT/root/etc/homeproxy/scripts/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
+# `config/*.uc` is imported through a relative `./config/*.uc` by both
+# generators, so a syntax error there only surfaces when a generator runs;
+# import it explicitly too so the failure names the module.
+for module in subscription/filter subscription/decoder subscription/fetcher subscription/repository \
+              config/loader config/model config/adapter; do
+	if ! ucode -L "$SCRIPTS_DIR" -e "import * as m from \"$SCRIPTS_DIR/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
 		FAILED=1
@@ -105,9 +105,12 @@ echo "== fw4 chain/set inventory =="
 sh "$ROOT/tests/ucode/test_fw4_names.sh" "$ROOT" || FAILED=1
 
 echo "== firewall template rendering =="
-if [ "$ON_TARGET" -eq 0 ]; then
-	echo "SKIP: firewall_post.ut ($(skip_reason "$ROOT/root/etc/homeproxy/scripts/firewall_post.ut"), needs a target)"
-	SKIPPED=$((SKIPPED + 1))
+# utpl ships with ucode (it is a symlink to the same binary), so this check
+# runs off-target too.  A toolchain without it is incomplete, not a reason to
+# skip the only test that guards the fw4 statement layout.
+if ! command -v utpl > "/dev/null" 2>&1; then
+	echo "FAIL: utpl is missing; build the toolchain (tests/toolchain/build-ucode-*.sh)"
+	FAILED=1
 else
 	sh "$ROOT/tests/ucode/test_firewall_template.sh" "$ROOT" || FAILED=1
 fi
@@ -195,10 +198,5 @@ sh "$ROOT/tests/ucode/test_demo_architecture.sh" "$ROOT" "$WORK/demo" || FAILED=
 
 echo "== domain model skeleton =="
 sh "$ROOT/tests/ucode/test_domain_model_skeleton.sh" "$ROOT" "$WORK/domain_model" || FAILED=1
-
-if [ "$SKIPPED" -gt 0 ]; then
-	echo
-	echo "$SKIPPED check(s) skipped: they need an OpenWrt target (see SKIP lines above)."
-fi
 
 exit $FAILED
