@@ -18,7 +18,7 @@ import {
 } from 'homeproxy';
 
 import { Loader } from './config/loader.uc';
-import { ConfigQuery, Node } from './config/model.uc';
+import { ConfigQuery } from './config/model.uc';
 import { OutboundFactory } from './config/adapter.uc';
 
 const ubus = connect();
@@ -279,28 +279,23 @@ function generate_endpoint(node) {
 
 function generate_outbound(node) {
 	/* Stage A3+A5: this used to be a 110-line ternary soup that built the
-	 * sing-box outbound by hand for every protocol. It now hands the flat
-	 * UCI section to Node.from_section() (which shapes it like the Loader
-	 * would have) and then to OutboundFactory.create() (the Adapter layer).
-	 *
-	 * The five call sites (main_node, main_udp_node, urltest loop, the
-	 * routing_node branch, the dedicated udp routing_node branch) all
-	 * still pass a flat dict, so the signature is unchanged.
+	 * sing-box outbound by hand for every protocol. It now takes a
+	 * Node (looked up via ConfigQuery.node_by_id) and hands it straight
+	 * to OutboundFactory.create() (the Adapter layer).
 	 *
 	 * The direct-node override table is the one side effect that survives;
 	 * the Adapter layer has no place to record it, and the route builder
-	 * reads it later. We carry the section name through Node.id so the
-	 * key still matches what the routing code expects. */
+	 * reads it later. */
 	if (type(node) !== 'object' || isEmpty(node))
 		return null;
 
-	if (node.type === 'direct' && (!isEmpty(node.override_address) || !isEmpty(node.override_port)))
-		direct_overrides[node['.name']] = {
-			override_address: node.override_address,
-			override_port: strToInt(node.override_port)
+	if (node.type === 'direct' && (!isEmpty(node.raw.override_address) || !isEmpty(node.raw.override_port)))
+		direct_overrides[node.id] = {
+			override_address: node.raw.override_address,
+			override_port: strToInt(node.raw.override_port)
 		};
 
-	return OutboundFactory.create(Node.from_section(node), self_mark);
+	return OutboundFactory.create(node, self_mark);
 }
 
 function get_outbound(cfg) {
@@ -380,12 +375,12 @@ function isDirectOutboundTag(tag) {
 		return true;
 
 	/* routing_node section by name -> its .node reference -> the underlying
-	 * node section. All three lookups go through ConfigQuery; the
-	 * generator never touches a cursor. */
+	 * node. All three lookups go through ConfigQuery; the generator
+	 * never touches a cursor. */
 	const rn = ConfigQuery.find_by_name(dm.routing.nodes, tag);
 	const node_name = (rn && rn.node) || tag;
-	const node = ConfigQuery.node_raw_by_id(dm, node_name);
-	return !isEmpty(node) && node.type === 'direct';
+	const node = ConfigQuery.node_by_id(dm, node_name);
+	return !!(node && node.type === 'direct');
 }
 /* Config helper end */
 
@@ -747,8 +742,8 @@ if (!isEmpty(main_node)) {
 		});
 		urltest_nodes = main_urltest_nodes;
 	} else {
-		const main_node_cfg = ConfigQuery.node_raw_by_id(dm, main_node) || {};
-		if (main_node_cfg.type === 'wireguard') {
+		const main_node_cfg = ConfigQuery.node_by_id(dm, main_node);
+		if (main_node_cfg && main_node_cfg.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(main_node_cfg));
 			config.endpoints[length(config.endpoints)-1].tag = 'main-out';
 		} else {
@@ -772,8 +767,8 @@ if (!isEmpty(main_node)) {
 		});
 		urltest_nodes = [...urltest_nodes, ...filter(main_udp_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 	} else if (dedicated_udp_node) {
-		const main_udp_node_cfg = ConfigQuery.node_raw_by_id(dm, main_udp_node) || {};
-		if (main_udp_node_cfg.type === 'wireguard') {
+		const main_udp_node_cfg = ConfigQuery.node_by_id(dm, main_udp_node);
+		if (main_udp_node_cfg && main_udp_node_cfg.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(main_udp_node_cfg));
 			config.endpoints[length(config.endpoints)-1].tag = 'main-udp-out';
 		} else {
@@ -783,8 +778,8 @@ if (!isEmpty(main_node)) {
 	}
 
 	for (let i in urltest_nodes) {
-		const urltest_node = ConfigQuery.node_raw_by_id(dm, i) || {};
-		if (isEmpty(urltest_node))
+		const urltest_node = ConfigQuery.node_by_id(dm, i);
+		if (!urltest_node)
 			continue;
 		if (urltest_node.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(urltest_node));
@@ -817,8 +812,8 @@ if (!isEmpty(main_node)) {
 			});
 			urltest_nodes = [...urltest_nodes, ...filter(cfg_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 		} else {
-			const outbound = ConfigQuery.node_raw_by_id(dm, cfg.node) || {};
-			if (outbound.type === 'wireguard') {
+			const outbound = ConfigQuery.node_by_id(dm, cfg.node) || {};
+			if (outbound && outbound.type === 'wireguard') {
 				push(config.endpoints, generate_endpoint(outbound));
 				config.endpoints[length(config.endpoints)-1].bind_interface = cfg.bind_interface;
 				config.endpoints[length(config.endpoints)-1].detour = get_outbound(cfg.outbound);
@@ -842,7 +837,7 @@ if (!isEmpty(main_node)) {
 	});
 
 	for (let i in filter(urltest_nodes, (l) => !~index(routing_nodes, l))) {
-		const urltest_node = ConfigQuery.node_raw_by_id(dm, i) || {};
+		const urltest_node = ConfigQuery.node_by_id(dm, i) || {};
 		if (urltest_node.type === 'wireguard')
 			push(config.endpoints, generate_endpoint(urltest_node));
 		else

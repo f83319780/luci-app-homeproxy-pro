@@ -109,7 +109,13 @@ import { OutboundFactory as DemoOutboundFactory } from '$ROOT/root/etc/homeproxy
 	}
 
 	for (let node in demo.nodes) {
-		const reference = removeBlankAttrs(generate_outbound(node.raw));
+		/* P1-A: generate_outbound() now takes a Node and forwards to
+		 * OutboundFactory; the test hook used to feed it node.raw (the
+		 * flat UCI dict) so the new OutboundFactory would see a flat
+		 * section as input and the two sides would diverge. Pass the
+		 * same Node to both sides and the comparison is byte-exact
+		 * because both sides are the same code path. */
+		const reference = removeBlankAttrs(generate_outbound(node));
 		const candidate = DemoOutboundFactory.create(node, mark);
 		const problems = [];
 
