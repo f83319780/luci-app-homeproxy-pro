@@ -26,9 +26,9 @@
  *     failure for that URL) are left in place; we don't delete
  *     a node just because today's fetch didn't return it
  *   - a node in UCI but not in the cache is deleted
- *   - a node in both has its fields updated to the new config;
- *     fields present in the old section but not in the new are
- *     removed
+ *   - a node in both has every field of the new config written
+ *     (including options the stored section did not have), and the
+ *     options the new config no longer carries are removed
  *   - nodes not yet in UCI are added under name = md5(groupHash
  *     + label), which is the same hash the cache uses, so a
  *     subsequent re-fetch recognises them as existing
@@ -58,19 +58,34 @@ export function apply(uci, uciconfig, ucinode, node_cache, node_result, log) {
 		if (!node_cache[cfg.grouphash] || length(node_cache[cfg.grouphash]) === 0)
 			return null;
 
-		if (!node_cache[cfg.grouphash][cfg['.name']]) {
+		const incoming = node_cache[cfg.grouphash][cfg['.name']];
+
+		if (!incoming) {
 			uci.delete(uciconfig, cfg['.name']);
 			removed++;
 			log(sprintf('Removing node: %s.', cfg.label || cfg['name']));
 		} else {
-			map(keys(cfg), (v) => {
-				if (v in node_cache[cfg.grouphash][cfg['.name']])
-					uci.set(uciconfig, cfg['.name'], v,
-						node_cache[cfg.grouphash][cfg['.name']][v]);
-				else
+			/* Write every option the new config carries, including ones
+			 * the stored section does not have yet.  The previous version
+			 * walked only the OLD section's keys, so an option that a
+			 * subscription started sending after the node was first
+			 * imported (plugin, tls_sni, packet_encoding, ...) was never
+			 * written to existing nodes - the user had to delete and
+			 * re-import the whole subscription to pick it up. */
+			for (let v in keys(incoming))
+				uci.set(uciconfig, cfg['.name'], v, incoming[v]);
+
+			/* Then drop the options the new config no longer carries.
+			 * `.name` / `.type` / `.index` are section metadata, not
+			 * options; deleting them is meaningless at best. */
+			for (let v in keys(cfg)) {
+				if (substr(v, 0, 1) === '.')
+					continue;
+				if (!(v in incoming))
 					uci.delete(uciconfig, cfg['.name'], v);
-			});
-			node_cache[cfg.grouphash][cfg['.name']].isExisting = true;
+			}
+
+			incoming.isExisting = true;
 		}
 	});
 

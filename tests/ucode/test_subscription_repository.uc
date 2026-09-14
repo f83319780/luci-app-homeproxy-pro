@@ -129,18 +129,19 @@ uci.load(CFG);
 		'grouphash' in cfg, false);
 }
 
-/* Updated node: new address, no stale_field. Note: the
- * repository's update loop walks the OLD section's keys, not the
- * new config's keys, so fields that are new in the cache (port,
- * in this fixture) are NOT added to an existing section. The
- * pre-B1.2 inline code had the same behaviour. Kept here to lock
- * the semantics so a future cleanup knows what to fix. */
+/* Updated node: the new address is written, the field the new config
+ * no longer carries is dropped, and a field that exists only in the
+ * new config (port, in this fixture) is ADDED. The old
+ * implementation walked only the stored section's keys, so a
+ * subscription that started sending a new option could never update
+ * an existing node; that behaviour was previously locked in here as a
+ * "quirk" and is now asserted to be fixed. */
 {
 	const cfg = uci.get_all(CFG, u_keep);
 	expect('kept: section exists',    'address' in cfg,  true);
 	expect('kept: address updated',   cfg.address,       'new.example.com');
 	expect('kept: stale_field gone',  'stale_field' in cfg, false);
-	expect('kept: port not added (quirk)', 'port' in cfg, false);
+	expect('kept: new field added',   cfg.port,          '443');
 }
 
 /* Dropped node is gone. */
