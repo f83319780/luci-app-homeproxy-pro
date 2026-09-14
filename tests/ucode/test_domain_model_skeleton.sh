@@ -47,7 +47,7 @@ cp "$ROOT/tests/ucode/test_domain_model_skeleton.uc" "$WORK/scripts/"
 # is only consumed by the domain-model test.
 cp "$ROOT/tests/fixtures/generators/domain.uci" "$WORK/scripts/config/homeproxy"
 
-if ( cd "$WORK/scripts" && ucode test_domain_model_skeleton.uc ); then
+if ( cd "$WORK/scripts" && ucode -L "$WORK/scripts" test_domain_model_skeleton.uc ); then
 	echo "PASS: domain model skeleton"
 else
 	echo "FAIL: domain model skeleton"

@@ -70,7 +70,7 @@ for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc "$ROOT"/root/usr/share/rpcd/
 		SKIPPED=$((SKIPPED + 1))
 		continue
 	fi
-	if ! ucode -c -o "/dev/null" "$file" 2> "/tmp/hp-ucode-syntax.err"; then
+	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -c -o "/dev/null" "$file" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: $file"
 		head -8 "/tmp/hp-ucode-syntax.err"
 		FAILED=1

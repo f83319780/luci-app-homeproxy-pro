@@ -78,7 +78,8 @@ function resolve(spec, node) {
 const COMMON_FIELDS = {
 	server: (node) => node.address,
 	server_port: (node) => strToInt(node.port),
-	routing_mark: null,           /* set by the runtime, not by the model */
+	// set by the runtime, not by the model
+	routing_mark: null,
 	proxy_protocol: (node) => strToInt(node.raw.proxy_protocol),
 	tcp_fast_open: (node) => strToBool(node.raw.tcp_fast_open),
 	tcp_multi_path: (node) => strToBool(node.raw.tcp_multi_path),
@@ -188,8 +189,11 @@ const OPTION_FIELDS = {
 			password: node.protocol_options.obfs_password
 		} : null
 	},
-	/* A4.9: hysteria2 - extends hysteria with hop_interval_max / hopping_port
-	 * / bbr_profile / disable_chrome_parrot. The obfs shape is the same. */
+	/* A4.9: hysteria2 - extends hysteria with hop_interval_max /
+	 * server_ports / bbr_profile / disable_chrome_parrot. The obfs
+	 * shape is the same. Note sing-box 1.14 uses `server_ports`
+	 * (port hopping list), not `hopping_port` - the latter is the
+	 * UCI option name, so the rename happens here. */
 	hysteria2: {
 		auth: (node) => (node.protocol_options.auth_type === 'base64') ? node.protocol_options.auth_payload : null,
 		auth_str: (node) => (node.protocol_options.auth_type === 'string') ? node.protocol_options.auth_payload : null,
@@ -197,7 +201,7 @@ const OPTION_FIELDS = {
 		down_mbps: (node) => strToInt(node.protocol_options.down_mbps),
 		hop_interval: (node) => strToTime(node.protocol_options.hop_interval),
 		hop_interval_max: (node) => strToTime(node.protocol_options.hop_interval_max),
-		hopping_port: (node) => node.protocol_options.hopping_port,
+		server_ports: (node) => node.protocol_options.hopping_port,
 		obfs: (node) => node.protocol_options.obfs_type ? {
 			type: node.protocol_options.obfs_type,
 			password: node.protocol_options.obfs_password
@@ -220,6 +224,16 @@ const OPTION_FIELDS = {
  * builders take sub-objects; keeping it here (and not in the model) is the
  * point - the model stays free of sing-box/legacy shapes. */
 function legacy_view(node) {
+	/* buildTransportObject() expects the flat UCI keys the pre-refactor
+	 * code used; in particular it reads `http_host` (or
+	 * `httpupgrade_host`) for `transport.host` and `ws_host` for
+	 * `transport.headers.Host`. Mapping every transport.host into all
+	 * three flat fields sends ws outbounds with a `transport.host`
+	 * value sing-box 1.14 rejects. The shim is type-aware so each
+	 * transport kind only emits the flat key the builder looks at. */
+	const t = node.transport.type;
+	const host = node.transport.host;
+	const headers_host = node.transport.headers && node.transport.headers.Host;
 	const view = {
 		tls: node.tls.enabled,
 		tls_sni: node.tls.server_name,
@@ -237,19 +251,19 @@ function legacy_view(node) {
 		tls_reality: node.tls.reality.enabled,
 		tls_reality_public_key: node.tls.reality.public_key,
 		tls_reality_short_id: node.tls.reality.short_id,
-		transport: node.transport.type,
-		http_host: node.transport.host,
-		httpupgrade_host: node.transport.host,
-		http_path: node.transport.path,
-		ws_path: node.transport.path,
-		ws_host: node.transport.headers ? node.transport.headers.Host : null,
-		http_method: node.transport.method,
-		websocket_early_data: node.transport.max_early_data,
-		websocket_early_data_header: node.transport.early_data_header_name,
-		grpc_servicename: node.transport.service_name,
-		http_idle_timeout: node.transport.idle_timeout,
-		http_ping_timeout: node.transport.ping_timeout,
-		grpc_permit_without_stream: node.transport.permit_without_stream
+		transport: t,
+		http_host:        (t === 'http')        ? host : null,
+		httpupgrade_host: (t === 'httpupgrade' || t === 'http2') ? host : null,
+		http_path: (t === 'http' || t === 'httpupgrade' || t === 'http2') ? node.transport.path : null,
+		ws_path:   (t === 'ws')  ? node.transport.path : null,
+		ws_host:   (t === 'ws')  ? headers_host : null,
+		http_method: (t === 'http' || t === 'httpupgrade' || t === 'http2') ? node.transport.method : null,
+		websocket_early_data: (t === 'ws') ? node.transport.max_early_data : null,
+		websocket_early_data_header: (t === 'ws') ? node.transport.early_data_header_name : null,
+		grpc_servicename: (t === 'grpc') ? node.transport.service_name : null,
+		http_idle_timeout: (t === 'http' || t === 'httpupgrade') ? node.transport.idle_timeout : null,
+		http_ping_timeout: (t === 'http' || t === 'httpupgrade') ? node.transport.ping_timeout : null,
+		grpc_permit_without_stream: (t === 'grpc') ? node.transport.permit_without_stream : null
 	};
 
 	return view;

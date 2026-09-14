@@ -72,7 +72,7 @@ run_case() {
 	sed -e "$sed_expr" \
 	    "$ROOT/root/etc/homeproxy/scripts/$generator" > "$dir/scripts/$generator"
 
-	if ! ( cd "$dir/scripts" && ucode "$generator" ); then
+	if ! ( cd "$dir/scripts" && ucode -L "$dir/scripts" "$generator" ); then
 		echo "FAIL: $name: $generator exited non-zero"
 		FAILED=1
 		return
@@ -151,7 +151,7 @@ dual_run() {
 		FAILED=1
 		return
 	fi
-	if ! ( cd "$on_dir/scripts" && ucode "$generator" ); then
+	if ! ( cd "$on_dir/scripts" && ucode -L "$on_dir/scripts" "$generator" ); then
 		echo "FAIL: $name dual-run: flag=1 generator exited non-zero"
 		FAILED=1
 		return

@@ -22,6 +22,8 @@
 
 'use strict';
 
+import { isEmpty } from 'homeproxy';
+
 /* Canonical credential multiplexing for a Node. The current generator picks
  * these apart with ternaries per field (`username` vs `user` vs `password` vs
  * `psk`, keyed on every protocol); expressing them as data is what makes a new
@@ -129,7 +131,143 @@ export const Node = {
 	},
 
 	/* sing-box tag convention lives here, not scattered through the generator */
-	tag: (node) => 'cfg-' + node.id + '-out'
+	tag: (node) => 'cfg-' + node.id + '-out',
+
+	/* Flat UCI section -> Node. The generator used to call generate_outbound()
+	 * with `uci.get_all()` (a flat dict prefixed by the protocol's own UCI
+	 * names); after A3, every call site hands a Node to OutboundFactory. To
+	 * keep the diff small in the meantime, this is the bridge: turn a flat
+	 * section into a Node shaped the way the Loader would have produced it.
+	 * The sub-objects are re-extracted here rather than going back through
+	 * cursor(), which keeps generate_outbound(cfg) callable from any code
+	 * path that still has only the flat dict. */
+	from_section: (cfg) => {
+		if (type(cfg) !== 'object' || isEmpty(cfg))
+			return null;
+
+		const get = (name) => cfg[name];
+
+		/* Sub-object extraction, deliberately duplicating the per-field
+		 * table the Loader uses (load_tls / load_transport / ...). Keeping
+		 * them in sync is the A1.1 contract; tests/ucode/test_domain_model_
+		 * skeleton.uc verifies the Loader side. */
+		const tls = {
+			enabled: get('tls'),
+			server_name: get('tls_sni'),
+			insecure: get('tls_insecure'),
+			alpn: get('tls_alpn'),
+			min_version: get('tls_min_version'),
+			max_version: get('tls_max_version'),
+			handshake_timeout: get('tls_handshake_timeout'),
+			cipher_suites: get('tls_cipher_suites'),
+			cert_path: get('tls_cert_path'),
+			utls: { fingerprint: get('tls_utls') },
+			ech: { enabled: get('tls_ech'), config: get('tls_ech_config'), config_path: get('tls_ech_config_path') },
+			reality: { enabled: get('tls_reality'), public_key: get('tls_reality_public_key'), short_id: get('tls_reality_short_id') }
+		};
+		const transport = {
+			type: get('transport'),
+			host: get('ws_host') || get('http_host') || get('httpupgrade_host'),
+			path: get('ws_path') || get('http_path'),
+			method: get('http_method'),
+			headers: get('ws_host') ? { Host: get('ws_host') } : (get('http_host') ? { Host: get('http_host') } : null),
+			max_early_data: get('websocket_early_data'),
+			early_data_header_name: get('websocket_early_data_header'),
+			service_name: get('grpc_servicename'),
+			idle_timeout: get('http_idle_timeout'),
+			ping_timeout: get('http_ping_timeout'),
+			permit_without_stream: get('grpc_permit_without_stream')
+		};
+		const multiplex = {
+			enabled: get('multiplex'),
+			protocol: get('multiplex_protocol'),
+			max_connections: get('multiplex_max_connections'),
+			min_streams: get('multiplex_min_streams'),
+			max_streams: get('multiplex_max_streams'),
+			padding: get('multiplex_padding'),
+			brutal: { enabled: get('multiplex_brutal'), up_mbps: get('multiplex_brutal_up'), down_mbps: get('multiplex_brutal_down') }
+		};
+
+		const credential_map = {
+			vless:   { uuid: 'uuid' },
+			vmess:   { uuid: 'uuid' },
+			trojan:  { password: 'password' },
+			hysteria2: { password: 'password' },
+			tuic:    { uuid: 'uuid', password: 'password' },
+			shadowsocks: { password: 'password', method: 'shadowsocks_encrypt_method' },
+			socks:   { username: 'username', password: 'password' },
+			http:    { username: 'username', password: 'password' },
+			snell:   { psk: 'password', userkey: 'snell_userkey' },
+			ssh:     { user: 'username', private_key: 'private_key' },
+			anytls:  { password: 'password' },
+			shadowtls: { password: 'password' },
+			direct:  {}
+		};
+		const cred = {};
+		const cmap = credential_map[get('type')] || {};
+		for (let canonical, uci_name in cmap)
+			cred[canonical] = get(uci_name);
+
+		/* protocol_options: pass every common suffix the Adapter may want.
+		 * Adapter's OPTION_FIELDS will pull out the canonical names; the rest
+		 * sits unused but is cheap. */
+		const protocol_options = {
+			flow: get('vless_flow'),
+			packet_encoding: get('packet_encoding'),
+			udp_over_tcp: get('udp_over_tcp'),
+			udp_over_tcp_version: get('udp_over_tcp_version'),
+			tcp_fast_open: get('tcp_fast_open'),
+			tcp_multi_path: get('tcp_multi_path'),
+			udp_fragment: get('udp_fragment'),
+			plugin: get('shadowsocks_plugin'),
+			plugin_opts: get('shadowsocks_plugin_opts'),
+			idle_session_check_interval: get('anytls_idle_session_check_interval'),
+			idle_session_timeout: get('anytls_idle_session_timeout'),
+			min_idle_session: get('anytls_min_idle_session'),
+			version: get('socks_version') || get('shadowtls_version') || get('snell_version'),
+			reuse: get('snell_reuse'),
+			obfs_mode: get('snell_obfs_mode'),
+			obfs_host: get('snell_obfs_host'),
+			mode: get('snell_mode'),
+			congestion_control: get('tuic_congestion_control'),
+			udp_relay_mode: get('tuic_udp_relay_mode'),
+			udp_over_stream: get('tuic_udp_over_stream'),
+			zero_rtt_handshake: get('tuic_enable_zero_rtt'),
+			heartbeat: get('tuic_heartbeat'),
+			auth_type: get('hysteria_auth_type'),
+			auth_payload: get('hysteria_auth_payload'),
+			up_mbps: get('hysteria_up_mbps'),
+			down_mbps: get('hysteria_down_mbps'),
+			obfs_type: get('hysteria_obfs_type'),
+			obfs_password: get('hysteria_obfs_password'),
+			hopping_port: get('hysteria_hopping_port'),
+			hop_interval: get('hysteria_hop_interval'),
+			hop_interval_max: get('hysteria_hop_interval_max'),
+			bbr_profile: get('hysteria_bbr_profile'),
+			disable_chrome_parrot: get('hysteria_disable_chrome_parrot'),
+			alter_id: get('vmess_alterid'),
+			security: get('vmess_encrypt'),
+			global_padding: get('vmess_global_padding')
+		};
+
+		return {
+			/* identity */
+			id: cfg['.name'],
+			name: get('label') || cfg['.name'],
+			type: get('type'),
+
+			/* endpoint */
+			address: get('address'),
+			port: get('port'),
+
+			credentials: cred,
+			tls,
+			transport,
+			multiplex,
+			protocol_options,
+			raw: cfg
+		};
+	}
 };
 
 /* --- Config helpers ----------------------------------------------------- */

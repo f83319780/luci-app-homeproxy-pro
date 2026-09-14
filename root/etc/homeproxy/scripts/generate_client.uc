@@ -19,7 +19,8 @@ import {
 } from 'homeproxy';
 
 import { Loader } from './config/loader.uc';
-import { ConfigQuery } from './config/model.uc';
+import { ConfigQuery, Node } from './config/model.uc';
+import { OutboundFactory } from './config/adapter.uc';
 
 const ubus = connect();
 
@@ -286,113 +287,29 @@ function generate_endpoint(node) {
 }
 
 function generate_outbound(node) {
+	/* Stage A3+A5: this used to be a 110-line ternary soup that built the
+	 * sing-box outbound by hand for every protocol. It now hands the flat
+	 * UCI section to Node.from_section() (which shapes it like the Loader
+	 * would have) and then to OutboundFactory.create() (the Adapter layer).
+	 *
+	 * The five call sites (main_node, main_udp_node, urltest loop, the
+	 * routing_node branch, the dedicated udp routing_node branch) all
+	 * still pass a flat dict, so the signature is unchanged.
+	 *
+	 * The direct-node override table is the one side effect that survives;
+	 * the Adapter layer has no place to record it, and the route builder
+	 * reads it later. We carry the section name through Node.id so the
+	 * key still matches what the routing code expects. */
 	if (type(node) !== 'object' || isEmpty(node))
 		return null;
 
-	const outbound = {
-		type: node.type,
-		tag: 'cfg-' + node['.name'] + '-out',
-		routing_mark: strToInt(self_mark),
-
-		server: node.address,
-		server_port: strToInt(node.port),
-		/* Hysteria(2) */
-		server_ports: node.hysteria_hopping_port,
-
-		username: (node.type !== 'ssh') ? node.username : null,
-		user: (node.type === 'ssh') ? node.username : null,
-		/* Snell authenticates with psk instead of password */
-		password: (node.type !== 'snell') ? node.password : null,
-		psk: (node.type === 'snell') ? node.password : null,
-		userkey: (node.type === 'snell') ? node.snell_userkey : null,
-		reuse: (node.type === 'snell') ? strToBool(node.snell_reuse) : null,
-		/* Snell v4: HTTP obfuscation; v6: traffic shaping mode */
-		obfs_mode: (node.type === 'snell') ? (node.snell_obfs_mode || null) : null,
-		obfs_host: (node.type === 'snell') ? (node.snell_obfs_host || null) : null,
-		mode: (node.type === 'snell') ? (node.snell_mode || null) : null,
-
-		/* Direct */
-		proxy_protocol: strToInt(node.proxy_protocol),
-		/* AnyTLS */
-		idle_session_check_interval: strToTime(node.anytls_idle_session_check_interval),
-		idle_session_timeout: strToTime(node.anytls_idle_session_timeout),
-		min_idle_session: strToInt(node.anytls_min_idle_session),
-		/* Hysteria (2) */
-		hop_interval: strToTime(node.hysteria_hop_interval),
-		hop_interval_max: strToTime(node.hysteria_hop_interval_max),
-		up_mbps: strToInt(node.hysteria_up_mbps),
-		down_mbps: strToInt(node.hysteria_down_mbps),
-		obfs: node.hysteria_obfs_type ? {
-			type: node.hysteria_obfs_type,
-			password: node.hysteria_obfs_password,
-			min_packet_size: strToInt(node.hysteria_obfs_min_packet_size),
-			max_packet_size: strToInt(node.hysteria_obfs_max_packet_size)
-		} : node.hysteria_obfs_password,
-		auth: (node.hysteria_auth_type === 'base64') ? node.hysteria_auth_payload : null,
-		auth_str: (node.hysteria_auth_type === 'string') ? node.hysteria_auth_payload : null,
-		/* sing-box 1.14: Hysteria2 QUIC params (Hysteria v1 recv-window tuning removed upstream) */
-		bbr_profile: (node.type === 'hysteria2') ? (node.hysteria_bbr_profile || null) : null,
-		disable_chrome_parrot: (node.type === 'hysteria2' && node.hysteria_disable_chrome_parrot === '1') ? true : null,
-		/* Shadowsocks */
-		method: node.shadowsocks_encrypt_method,
-		plugin: node.shadowsocks_plugin,
-		plugin_opts: node.shadowsocks_plugin_opts,
-		/* ShadowTLS / Socks / Snell */
-		version: (node.type === 'shadowtls') ? strToInt(node.shadowtls_version) : ((node.type === 'socks') ? node.socks_version : ((node.type === 'snell') ? (strToInt(node.snell_version) || 4) : null)),
-		/* SSH */
-		client_version: node.ssh_client_version,
-		host_key: node.ssh_host_key,
-		host_key_algorithms: node.ssh_host_key_algo,
-		private_key: node.ssh_priv_key,
-		private_key_passphrase: node.ssh_priv_key_pp,
-		/* Tuic */
-		uuid: node.uuid,
-		congestion_control: node.tuic_congestion_control,
-		udp_relay_mode: node.tuic_udp_relay_mode,
-		udp_over_stream: strToBool(node.tuic_udp_over_stream),
-		zero_rtt_handshake: strToBool(node.tuic_enable_zero_rtt),
-		heartbeat: strToTime(node.tuic_heartbeat),
-		/* VLESS / VMess */
-		flow: node.vless_flow,
-		alter_id: strToInt(node.vmess_alterid),
-		security: node.vmess_encrypt,
-		global_padding: strToBool(node.vmess_global_padding),
-		authenticated_length: strToBool(node.vmess_authenticated_length),
-		packet_encoding: node.packet_encoding,
-
-		multiplex: (node.multiplex === '1') ? {
-			enabled: true,
-			protocol: node.multiplex_protocol,
-			max_connections: strToInt(node.multiplex_max_connections),
-			min_streams: strToInt(node.multiplex_min_streams),
-			max_streams: strToInt(node.multiplex_max_streams),
-			padding: strToBool(node.multiplex_padding),
-			brutal: (node.multiplex_brutal === '1') ? {
-				enabled: true,
-				up_mbps: strToInt(node.multiplex_brutal_up),
-				down_mbps: strToInt(node.multiplex_brutal_down)
-			} : null
-		} : null,
-		tls: buildTLSObject(node, false),
-		transport: buildTransportObject(node, false),
-		udp_over_tcp: (node.udp_over_tcp === '1') ? {
-			enabled: true,
-			version: strToInt(node.udp_over_tcp_version)
-		} : null,
-		tcp_fast_open: strToBool(node.tcp_fast_open),
-		tcp_multi_path: strToBool(node.tcp_multi_path),
-		udp_fragment: strToBool(node.udp_fragment)
-	};
-
-	/* Direct-node destination override: sing-box removed these options from
-	   the direct outbound since 1.13; emit them via the route action instead */
 	if (node.type === 'direct' && (!isEmpty(node.override_address) || !isEmpty(node.override_port)))
 		direct_overrides[node['.name']] = {
 			override_address: node.override_address,
 			override_port: strToInt(node.override_port)
 		};
 
-	return outbound;
+	return OutboundFactory.create(Node.from_section(node), self_mark);
 }
 
 function get_outbound(cfg) {
