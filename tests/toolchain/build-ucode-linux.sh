@@ -25,6 +25,18 @@ BUILD="${2:-/tmp/ucode-build}"
 # feeds the generated configs to `sing-box check`, so the version has to match.
 SINGBOX_VERSION="1.14.0"
 
+# ucode is pinned to the revision ImmortalWrt/OpenWrt snapshots shipped as
+# package version 2026.01.16~85922056.  That ucode requires a terminating ';'
+# after `export function ... }` and rejects object destructuring; upstream
+# relaxed the trailing-';' rule afterwards (openwrt/openwrt@main and
+# immortalwrt/immortalwrt@master now pin b885dd0f, whose own test suite uses
+# the semicolon-free form).  Building ucode from the default branch therefore
+# lets target-incompatible modules pass CI, which is exactly how the A/B
+# refactor shipped five modules that no router could parse.
+# tests/ucode/test_ucode_grammar.sh fails loudly if this pin is ever moved to
+# a permissive revision, so the mismatch cannot come back unnoticed.
+UCODE_REV="${UCODE_REV:-85922056ef7abeace3cca3ab28bc1ac2d88e31b1}"
+
 # json-c (libubox) and libmd (digest module) come from apt. Their pkg-config
 # files live under /usr/lib/<arch>-linux-gnu/pkgconfig, which pkg-config
 # already searches; we just need to make sure the .pc files are installed.
@@ -52,13 +64,27 @@ CMAKE_COMMON="-DCMAKE_INSTALL_PREFIX=$PREFIX
 	-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON
 	-DCMAKE_PREFIX_PATH=$PREFIX"
 
+# Optional second argument pins the checkout to a revision (branch, tag or
+# full commit id).  Repositories without one keep tracking their default
+# branch; only ucode is pinned, because upstream relaxed grammar rules the
+# package still has to stay compatible with.
 clone() {
 	repo="$1"
+	rev="${2:-}"
 	dir="$BUILD/$(basename "$repo")"
 	if [ -d "$dir/.git" ]; then
 		git -C "$dir" fetch --depth 1 origin >/dev/null 2>&1 || true
 	else
 		git clone --depth 1 "https://github.com/$repo.git" "$dir"
+	fi
+	if [ -n "$rev" ]; then
+		if ! git -C "$dir" fetch --depth 1 origin "$rev" >/dev/null 2>&1; then
+			echo "ERROR: could not fetch $repo at $rev" >&2
+			exit 1
+		fi
+		git -C "$dir" checkout -q --detach FETCH_HEAD
+		# A build tree left over from another revision must not be reused.
+		rm -rf "$dir/build"
 	fi
 	echo "$dir"
 }
@@ -100,7 +126,7 @@ build "$(clone openwrt/ubus)" -DBUILD_LUA=OFF
 # ucode last, so its CMake detects all three libraries and enables the
 # uci/ubus/uloop plugins. ffi / nl80211 / rtnl are off: not needed by the
 # tests, and their headers are not in the OpenWrt tree on a default clone.
-build "$(clone jow-/ucode)" \
+build "$(clone jow-/ucode "$UCODE_REV")" \
 	-DUBUS_SUPPORT=ON -DUCI_SUPPORT=ON -DULOOP_SUPPORT=ON \
 	-DFFI_SUPPORT=OFF -DNL80211_SUPPORT=OFF -DRTNL_SUPPORT=OFF \
 	-DDEBUG_SUPPORT=ON -DZLIB_SUPPORT=ON
@@ -154,8 +180,30 @@ fi
 echo
 echo "==> verifying"
 "$PREFIX/bin/ucode" -e 'printf("ucode %s\n", ARGV[0] ?? "ok");'
+printf '  ucode rev  %s (pinned)\n' "$(git -C "$BUILD/ucode" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 printf '  sing-box   %s\n' "$("$PREFIX/bin/sing-box" version 2>/dev/null | head -1)"
 FAILED=0
+
+# utpl is what tests/ucode/test_firewall_template.sh renders firewall_post.ut
+# with.  ucode installs it as a symlink to itself, so a toolchain without it
+# would silently drop the firewall template check.
+if [ -x "$PREFIX/bin/utpl" ]; then
+	printf '  utpl       OK\n'
+else
+	printf '  utpl       MISSING\n'
+	FAILED=1
+fi
+
+# The pinned ucode must keep enforcing the strict grammar the package targets;
+# the canary turns a permissive upstream revision into a build failure instead
+# of a silently green test run.  Requires utpl/ucode on PATH.
+if PATH="$PREFIX/bin:$PATH" sh "$(dirname "$0")/../ucode/test_ucode_grammar.sh"; then
+	printf '  grammar    strict (matches ImmortalWrt ucode)\n'
+else
+	printf '  grammar    MISMATCH - do not ship this toolchain\n'
+	FAILED=1
+fi
+
 for mod in fs math uci ubus digest zlib struct resolv socket lucihttp luci.http luci.sys; do
 	if "$PREFIX/bin/ucode" -e "import * as m from '$mod';" 2>/dev/null; then
 		printf '  module %-10s OK\n' "$mod"
