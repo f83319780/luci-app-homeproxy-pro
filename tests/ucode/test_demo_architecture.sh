@@ -53,12 +53,13 @@ cp "$DEMO/fixture.uci" "$WORK/config/homeproxy"
 cat > "$WORK/hook.part" <<EOF
 /* Hook injected by tests/ucode/test_demo_architecture.sh - never shipped.
  *
- * 'Loader' is already imported at the top of generate_client.uc (Stage A1.1
- * added it as a dependency for the HomeProxyConfig read path), so we alias
- * the second copy here to avoid an "Import name already used" error. The
- * production generator never executes the hook. */
+ * 'Loader' and 'OutboundFactory' are already imported at the top of
+ * generate_client.uc (Stage A1.1 added Loader; Stage A3+A5 added
+ * OutboundFactory when the generator started using the Adapter), so
+ * both copies are aliased here to avoid "Import name already used"
+ * errors. The production generator never executes the hook. */
 import { Loader as DemoLoader } from '$ROOT/root/etc/homeproxy/scripts/config/loader.uc';
-import { OutboundFactory } from '$ROOT/root/etc/homeproxy/scripts/config/adapter.uc';
+import { OutboundFactory as DemoOutboundFactory } from '$ROOT/root/etc/homeproxy/scripts/config/adapter.uc';
 
 {
 	const demo = Loader.load('$WORK/config');
@@ -109,7 +110,7 @@ import { OutboundFactory } from '$ROOT/root/etc/homeproxy/scripts/config/adapter
 
 	for (let node in demo.nodes) {
 		const reference = removeBlankAttrs(generate_outbound(node.raw));
-		const candidate = OutboundFactory.create(node, mark);
+		const candidate = DemoOutboundFactory.create(node, mark);
 		const problems = [];
 
 		checks++;
