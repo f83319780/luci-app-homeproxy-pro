@@ -1,6 +1,6 @@
 <div align="center">
 
-# luci-app-homeproxy
+# luci-app-homeproxy-pro
 
 **The modern ImmortalWrt proxy platform for ARM64 / AMD64**
 
@@ -12,11 +12,8 @@
 
 ## 项目定位
 
-本项目是 [luci-app-homeproxy](https://github.com/szwjp/homeproxy) 的**分拆版本线**：以 sing-box **1.14** 内核为唯一目标，充分结合 1.14 引入的新特性进行升级，不再兼容 1.13 及更早内核。
+本项目是试验性产品，对homeproxy架构重构版：以 sing-box **1.14** 内核为唯一目标，充分结合 1.14 引入的新特性进行升级，不再兼容 1.13 及更早内核。
 
-| 版本线 | 内核要求 | 演进方式 |
-| --- | --- | --- |
-| **homeproxy1.14**（本项目） | sing-box ≥ 1.14 | 1.14 特性驱动，配置生成直接使用 1.14 新格式 |
 
 ## 运行要求
 
@@ -26,7 +23,7 @@
 
 
 
-
+---
 <div align="center">
 
 [![License](https://img.shields.io/badge/License-GPL--2.0--only-blue.svg)](LICENSE) 版权归 ImmortalWrt.org 与各贡献者
