@@ -75,7 +75,10 @@ const node_cache = {},
       node_result = [];
 
 const ubus = connect();
-const sing_features = ubus.call('luci.homeproxy', 'singbox_get_features', {}) || {};
+/* ubus is unreachable when no ubusd is running (dev host) and the feature
+   query is optional: fall back to the same empty feature set the code below
+   already handles. */
+const sing_features = (ubus?.call('luci.homeproxy', 'singbox_get_features', {})) || {};
 if (isEmpty(sing_features))
 	log('Warning: Failed to query sing-box features via ubus, assuming defaults.');
 /* Common var end */
