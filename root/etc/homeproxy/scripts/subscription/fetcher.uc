@@ -30,4 +30,4 @@ export function fetch(url, user_agent, log) {
 		return { content: null, error: result.error || 'empty response' };
 	}
 	return { content: result.content, error: null };
-}
+};
