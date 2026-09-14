@@ -10,6 +10,7 @@
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
 import { isBinary, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
+import { parse_uri } from '/etc/homeproxy/scripts/parse_uri.uc';
 
 /* Kanged from ucode/luci */
 function shellquote(s) {
@@ -22,6 +23,35 @@ function hasKernelModule(kmod) {
 
 const HP_DIR = '/etc/homeproxy';
 const RUN_DIR = '/var/run/homeproxy';
+
+/* Queried by singbox_get_features and by node_parse: the share-link parser
+ * skips QUIC protocols and uTLS fingerprints the running sing-box cannot
+ * serve, so it needs the same feature set the UI displays. */
+function collectFeatures() {
+	let features = {};
+
+	const fd = popen('/usr/bin/sing-box version');
+	if (fd) {
+		for (let line = fd.read('line'); length(line); line = fd.read('line')) {
+			if (match(trim(line), /^sing-box version (.*)/))
+				features.version = match(trim(line), /^sing-box version (.*)/)[1];
+
+			let tags = match(trim(line), /^Tags: (.*)/);
+			if (tags)
+				for (let i in split(tags[1], ','))
+					features[i] = true;
+		}
+
+		fd.close();
+	}
+
+	features.hp_has_ip_full = access('/usr/libexec/ip-full');
+	features.hp_has_tcp_brutal = hasKernelModule('brutal.ko');
+	features.hp_has_tproxy = hasKernelModule('nft_tproxy.ko') || access('/etc/modules.d/nft-tproxy');
+	features.hp_has_tun = hasKernelModule('tun.ko') || access('/etc/modules.d/30-tun');
+
+	return features;
+}
 
 const methods = {
 	acllist_read: {
@@ -204,29 +234,38 @@ const methods = {
 
 	singbox_get_features: {
 		call: function() {
-			let features = {};
+			return collectFeatures();
+		}
+	},
 
-			const fd = popen('/usr/bin/sing-box version');
-			if (fd) {
-				for (let line = fd.read('line'); length(line); line = fd.read('line')) {
-					if (match(trim(line), /^sing-box version (.*)/))
-						features.version = match(trim(line), /^sing-box version (.*)/)[1];
+	/* Parse one share link with the same parser the subscription pipeline
+	 * uses (parse_uri.uc).  This exists so the browser does not need a second
+	 * implementation: the LuCI form used to carry a 388-line JavaScript copy
+	 * of the parser that had already drifted from the backend (the vmess
+	 * branch lost vmess_global_padding, anytls defaulted a missing port to
+	 * 80) and that wrote nodes into UCI without the /sbin/validate_data
+	 * host/port checks parse_uri() applies. */
+	node_parse: {
+		args: { uri: 'string' },
+		call: function(req) {
+			const uri = req.args?.uri;
 
-					let tags = match(trim(line), /^Tags: (.*)/);
-					if (tags)
-						for (let i in split(tags[1], ','))
-							features[i] = true;
-				}
+			if (type(uri) !== 'string' || !length(uri) || length(uri) > 4096)
+				return { config: null, error: 'illegal share link' };
 
-				fd.close();
+			let config;
+			try {
+				/* parse_uri() reports skipped nodes through the logger;
+				 * the caller only needs the verdict. */
+				config = parse_uri(trim(uri), collectFeatures(), function() {});
+			} catch (e) {
+				return { config: null, error: 'parse failed: ' + e.message };
 			}
 
-			features.hp_has_ip_full = access('/usr/libexec/ip-full');
-			features.hp_has_tcp_brutal = hasKernelModule('brutal.ko');
-			features.hp_has_tproxy = hasKernelModule('nft_tproxy.ko') || access('/etc/modules.d/nft-tproxy');
-			features.hp_has_tun = hasKernelModule('tun.ko') || access('/etc/modules.d/30-tun');
+			if (!config)
+				return { config: null, error: 'unsupported or invalid share link' };
 
-			return features;
+			return { config: config };
 		}
 	},
 
