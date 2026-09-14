@@ -247,6 +247,22 @@ const PROTOCOL_OPTIONS = {
 		global_padding: 'vmess_global_padding',
 		auth_payload: 'vmess_auth_payload'
 	},
+	/* WireGuard is emitted as a sing-box *endpoint*, not an outbound, and
+	 * generate_endpoint() is its only consumer.  The keys still belong in
+	 * the Node: the A2/A3 stages converted every generator call site to
+	 * pass a Node, so the flat wireguard_* UCI options are no longer
+	 * reachable from the endpoint builder.  Without this row a WireGuard
+	 * main/UDP/urltest node silently emitted a null private key and a peer
+	 * without a public key, which sing-box check then rejected. */
+	wireguard: {
+		local_address: 'wireguard_local_address',
+		private_key: 'wireguard_private_key',
+		peer_public_key: 'wireguard_peer_public_key',
+		pre_shared_key: 'wireguard_pre_shared_key',
+		reserved: 'wireguard_reserved',
+		mtu: 'wireguard_mtu',
+		persistent_keepalive_interval: 'wireguard_persistent_keepalive_interval'
+	},
 	/* P3-E: direct nodes carry override_address/override_port, which the
 	 * Generator uses to populate the direct_overrides table for the
 	 * routing path. Reading them from node.protocol_options keeps the

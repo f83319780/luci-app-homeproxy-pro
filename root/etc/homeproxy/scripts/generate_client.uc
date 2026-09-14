@@ -245,12 +245,26 @@ function generate_endpoint(node) {
 	if (type(node) !== 'object' || isEmpty(node))
 		return null;
 
+	/* WireGuard goes through the same Node as every other protocol; the
+	 * fields come from node.protocol_options (Loader's wireguard row) and
+	 * the cross-protocol options from node.common.
+	 *
+	 * This used to read the flat UCI keys (node.wireguard_*, and
+	 * node.tcp_fast_open / node.tcp_multi_path / node.udp_fragment) off a
+	 * Node.  Those keys only existed on the flat section dict the
+	 * pre-refactor call sites passed; once A2/A3 made every call site pass
+	 * a Node they were simply null, so every WireGuard main / UDP /
+	 * urltest node emitted an endpoint with no private key and a peer with
+	 * no public key.  tests/fixtures/generators/wireguard.uci guards it. */
+	const opts = node.protocol_options || {};
+	const common = node.common || {};
+
 	const endpoint = {
 		type: node.type,
-		tag: 'cfg-' + node['.name'] + '-out',
-		address: node.wireguard_local_address,
-		mtu: strToInt(node.wireguard_mtu),
-		private_key: node.wireguard_private_key,
+		tag: 'cfg-' + node.id + '-out',
+		address: opts.local_address,
+		mtu: strToInt(opts.mtu),
+		private_key: opts.private_key,
 		peers: (node.type === 'wireguard') ? [
 			{
 				address: node.address,
@@ -259,16 +273,16 @@ function generate_endpoint(node) {
 					'0.0.0.0/0',
 					'::/0'
 				],
-				persistent_keepalive_interval: strToInt(node.wireguard_persistent_keepalive_interval),
-				public_key: node.wireguard_peer_public_key,
-				pre_shared_key: node.wireguard_pre_shared_key,
-				reserved: parse_port(node.wireguard_reserved),
+				persistent_keepalive_interval: strToInt(opts.persistent_keepalive_interval),
+				public_key: opts.peer_public_key,
+				pre_shared_key: opts.pre_shared_key,
+				reserved: parse_port(opts.reserved),
 			}
 		] : null,
 		system: (node.type === 'wireguard') ? false : null,
-		tcp_fast_open: strToBool(node.tcp_fast_open),
-		tcp_multi_path: strToBool(node.tcp_multi_path),
-		udp_fragment: strToBool(node.udp_fragment),
+		tcp_fast_open: strToBool(common.tcp_fast_open),
+		tcp_multi_path: strToBool(common.tcp_multi_path),
+		udp_fragment: strToBool(common.udp_fragment),
 		udp_mapping: !isEmpty(udp_mapping) ? udp_mapping : null,
 		udp_filtering: !isEmpty(udp_filtering) ? udp_filtering : null,
 		udp_nat_max: udp_nat_max
