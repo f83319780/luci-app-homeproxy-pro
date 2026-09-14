@@ -69,9 +69,13 @@ function node_opt(uci, section_id, name) {
 /* These three functions are the whole reason a Node is hierarchical: the
  * shared TLS/transport/multiplex builders (homeproxy.uc) take a flat,
  * prefixed dict today, so every caller has to hand them the right subset. A
- * sub-object makes the boundary explicit and testable. */
+ * sub-object makes the boundary explicit and testable.
+ *
+ * load_tls and load_transport are exported so the server generator can
+ * shape its UCI inbound sections the same way; only the multiplex shape is
+ * Loader-internal because no caller outside the client node path needs it. */
 
-function load_tls(get) {
+export function load_tls(get) {
 	return {
 		enabled: get('tls'),
 		server_name: get('tls_sni'),
@@ -106,7 +110,7 @@ function load_tls(get) {
 	};
 }
 
-function load_transport(get) {
+export function load_transport(get) {
 	const transport = get('transport');
 
 	if (transport == null || transport === '')

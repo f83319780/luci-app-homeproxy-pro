@@ -219,58 +219,8 @@ const OPTION_FIELDS = {
 
 /* --- shared builders ---------------------------------------------------- */
 
-/* The production builders still read flat, prefixed UCI keys, so the adapter
- * hands them a compatibility view of the Node. This shim disappears once the
- * builders take sub-objects; keeping it here (and not in the model) is the
- * point - the model stays free of sing-box/legacy shapes. */
-function legacy_view(node) {
-	/* buildTransportObject() expects the flat UCI keys the pre-refactor
-	 * code used; in particular it reads `http_host` (or
-	 * `httpupgrade_host`) for `transport.host` and `ws_host` for
-	 * `transport.headers.Host`. Mapping every transport.host into all
-	 * three flat fields sends ws outbounds with a `transport.host`
-	 * value sing-box 1.14 rejects. The shim is type-aware so each
-	 * transport kind only emits the flat key the builder looks at. */
-	const t = node.transport.type;
-	const host = node.transport.host;
-	const headers_host = node.transport.headers && node.transport.headers.Host;
-	const view = {
-		tls: node.tls.enabled,
-		tls_sni: node.tls.server_name,
-		tls_insecure: node.tls.insecure,
-		tls_alpn: node.tls.alpn,
-		tls_min_version: node.tls.min_version,
-		tls_max_version: node.tls.max_version,
-		tls_handshake_timeout: node.tls.handshake_timeout,
-		tls_cipher_suites: node.tls.cipher_suites,
-		tls_cert_path: node.tls.cert_path,
-		tls_ech: node.tls.ech.enabled,
-		tls_ech_config: node.tls.ech.config,
-		tls_ech_config_path: node.tls.ech.config_path,
-		tls_utls: node.tls.utls.fingerprint,
-		tls_reality: node.tls.reality.enabled,
-		tls_reality_public_key: node.tls.reality.public_key,
-		tls_reality_short_id: node.tls.reality.short_id,
-		transport: t,
-		http_host:        (t === 'http')        ? host : null,
-		httpupgrade_host: (t === 'httpupgrade' || t === 'http2') ? host : null,
-		http_path: (t === 'http' || t === 'httpupgrade' || t === 'http2') ? node.transport.path : null,
-		ws_path:   (t === 'ws')  ? node.transport.path : null,
-		ws_host:   (t === 'ws')  ? headers_host : null,
-		http_method: (t === 'http' || t === 'httpupgrade' || t === 'http2') ? node.transport.method : null,
-		websocket_early_data: (t === 'ws') ? node.transport.max_early_data : null,
-		websocket_early_data_header: (t === 'ws') ? node.transport.early_data_header_name : null,
-		grpc_servicename: (t === 'grpc') ? node.transport.service_name : null,
-		http_idle_timeout: (t === 'http' || t === 'httpupgrade') ? node.transport.idle_timeout : null,
-		http_ping_timeout: (t === 'http' || t === 'httpupgrade') ? node.transport.ping_timeout : null,
-		grpc_permit_without_stream: (t === 'grpc') ? node.transport.permit_without_stream : null
-	};
-
-	return view;
-}
-
 function build_multiplex(mux) {
-	if (mux.enabled !== '1')
+	if (!mux || mux.enabled !== '1')
 		return null;
 
 	return {
@@ -280,7 +230,7 @@ function build_multiplex(mux) {
 		min_streams: strToInt(mux.min_streams),
 		max_streams: strToInt(mux.max_streams),
 		padding: strToBool(mux.padding),
-		brutal: (mux.brutal.enabled === '1') ? {
+		brutal: (mux.brutal && mux.brutal.enabled === '1') ? {
 			enabled: true,
 			up_mbps: strToInt(mux.brutal.up_mbps),
 			down_mbps: strToInt(mux.brutal.down_mbps)
@@ -299,7 +249,6 @@ export const OutboundFactory = {
 		if (length(problems))
 			die(`node '${node.id}': ${join(', ', problems)}\n`);
 
-		const legacy = legacy_view(node);
 		const outbound = {
 			type: node.type,
 			tag: Node.tag(node),
@@ -318,8 +267,8 @@ export const OutboundFactory = {
 			outbound[field] = resolve(spec, node);
 
 		outbound.multiplex = build_multiplex(node.multiplex);
-		outbound.tls = buildTLSObject(legacy, false);
-		outbound.transport = buildTransportObject(legacy, false);
+		outbound.tls = buildTLSObject(node.tls, false);
+		outbound.transport = buildTransportObject(node.transport, false);
 
 		if (node.type === 'direct')
 			outbound.proxy_protocol = strToInt(node.raw.proxy_protocol);

@@ -14,7 +14,7 @@ import {
 	removeBlankAttrs, buildTLSObject, buildTransportObject, HP_DIR, RUN_DIR
 } from 'homeproxy';
 
-import { Loader } from './config/loader.uc';
+import { Loader, load_tls, load_transport } from './config/loader.uc';
 
 /* Configuration entry point
  *
@@ -151,9 +151,9 @@ iter_servers((cfg) => {
 			} : null
 		} : null,
 
-		tls: buildTLSObject(cfg, true),
+		tls: buildTLSObject(load_tls((k) => cfg[k]), true, cfg),
 
-		transport: buildTransportObject(cfg, true)
+		transport: buildTransportObject(load_transport((k) => cfg[k]), true)
 	});
 });
 

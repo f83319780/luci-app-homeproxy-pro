@@ -358,99 +358,115 @@ export function parseURL(url) {
  * order. Keep client-only fields (insecure/handshake_timeout/utls) and
  * server-only fields (key_path/certificate_provider) at their current
  * positions when editing.
+ *
+ * P1-B: the first arg is now a Node.tls-shape structured sub-object
+ * (the same shape the Loader produces) rather than a flat UCI section.
+ * The Adapter passes node.tls; the server generator builds a
+ * structured view of its UCI inbound before calling. Server-only
+ * fields (key material, ACME, server-side reality handshake) still
+ * live on the flat UCI section - they are not part of the Node model
+ * because no client outbound needs them - so the server passes them
+ * through `server_extras` instead of expecting the structured tls
+ * to carry them.
  */
-export function buildTLSObject(cfg, is_server) {
-	if (cfg.tls !== '1')
+export function buildTLSObject(tls, is_server, server_extras) {
+	if ((tls && tls.enabled) !== '1')
 		return null;
+
+	/* When is_server the caller hands a flat UCI section's server-only
+	 * tail. We accept either an object or null; null means "no server
+	 * extras" which only matters when the caller still wants a TLS
+	 * object built for an inbound that does not actually serve TLS
+	 * itself (the enabled check above returns null first in that case). */
+	const extras = is_server ? (server_extras || {}) : {};
 
 	return {
 		enabled: true,
-		server_name: cfg.tls_sni,
-		insecure: is_server ? null : strToBool(cfg.tls_insecure),
-		alpn: cfg.tls_alpn,
-		min_version: cfg.tls_min_version,
-		max_version: cfg.tls_max_version,
-		handshake_timeout: is_server ? null : strToTime(cfg.tls_handshake_timeout),
-		cipher_suites: cfg.tls_cipher_suites,
-		certificate_path: cfg.tls_cert_path,
-		key_path: is_server ? cfg.tls_key_path : null,
-		certificate_provider: (is_server && cfg.tls_acme === '1') ? {
+		server_name: tls.server_name,
+		insecure: is_server ? null : strToBool(tls.insecure),
+		alpn: tls.alpn,
+		min_version: tls.min_version,
+		max_version: tls.max_version,
+		handshake_timeout: is_server ? null : strToTime(tls.handshake_timeout),
+		cipher_suites: tls.cipher_suites,
+		certificate_path: tls.cert_path,
+		key_path: is_server ? extras.tls_key_path : null,
+		certificate_provider: (is_server && extras.tls_acme === '1') ? {
 			type: 'acme',
-			domain: (type(cfg.tls_acme_domain) === 'array') ? cfg.tls_acme_domain
-				: (isEmpty(cfg.tls_acme_domain) ? [] : [cfg.tls_acme_domain]),
+			domain: (type(extras.tls_acme_domain) === 'array') ? extras.tls_acme_domain
+				: (isEmpty(extras.tls_acme_domain) ? [] : [extras.tls_acme_domain]),
 			data_directory: HP_DIR + '/certs',
-			default_server_name: cfg.tls_acme_dsn,
-			email: cfg.tls_acme_email,
-			provider: cfg.tls_acme_provider,
-			account_key: cfg.tls_acme_account_key,
-			key_type: cfg.tls_acme_key_type,
-			profile: cfg.tls_acme_profile,
-			disable_http_challenge: strToBool(cfg.tls_acme_dhc),
-			disable_tls_alpn_challenge: strToBool(cfg.tls_acme_dtac),
-			alternative_http_port: strToInt(cfg.tls_acme_ahp),
-			alternative_tls_port: strToInt(cfg.tls_acme_atp),
-			external_account: (cfg.tls_acme_external_account === '1') ? {
-				key_id: cfg.tls_acme_ea_keyid,
-				mac_key: cfg.tls_acme_ea_mackey
+			default_server_name: extras.tls_acme_dsn,
+			email: extras.tls_acme_email,
+			provider: extras.tls_acme_provider,
+			account_key: extras.tls_acme_account_key,
+			key_type: extras.tls_acme_key_type,
+			profile: extras.tls_acme_profile,
+			disable_http_challenge: strToBool(extras.tls_acme_dhc),
+			disable_tls_alpn_challenge: strToBool(extras.tls_acme_dtac),
+			alternative_http_port: strToInt(extras.tls_acme_ahp),
+			alternative_tls_port: strToInt(extras.tls_acme_atp),
+			external_account: (extras.tls_acme_external_account === '1') ? {
+				key_id: extras.tls_acme_ea_keyid,
+				mac_key: extras.tls_acme_ea_mackey
 			} : null,
-			dns01_challenge: (cfg.tls_dns01_challenge === '1') ? {
-				provider: cfg.tls_dns01_provider,
-				access_key_id: cfg.tls_dns01_ali_akid,
-				access_key_secret: cfg.tls_dns01_ali_aksec,
-				region_id: cfg.tls_dns01_ali_rid,
-				api_token: cfg.tls_dns01_cf_api_token
+			dns01_challenge: (extras.tls_dns01_challenge === '1') ? {
+				provider: extras.tls_dns01_provider,
+				access_key_id: extras.tls_dns01_ali_akid,
+				access_key_secret: extras.tls_dns01_ali_aksec,
+				region_id: extras.tls_dns01_ali_rid,
+				api_token: extras.tls_dns01_cf_api_token
 			} : null
 		} : null,
-		ech: is_server ? (cfg.tls_ech_key ? {
+		ech: is_server ? (extras.tls_ech_key ? {
 			enabled: true,
-			key: split(cfg.tls_ech_key, '\n')
-			/* config: split(cfg.tls_ech_config, '\n') */
-		} : null) : ((cfg.tls_ech === '1') ? {
+			key: split(extras.tls_ech_key, '\n')
+			/* config: split(extras.tls_ech_config, '\n') */
+		} : null) : ((tls.ech && tls.ech.enabled === '1') ? {
 			enabled: true,
-			config: cfg.tls_ech_config,
-			config_path: cfg.tls_ech_config_path
+			config: tls.ech.config,
+			config_path: tls.ech.config_path
 		} : null),
-		utls: (is_server || isEmpty(cfg.tls_utls)) ? null : {
+		utls: (is_server || isEmpty(tls.utls && tls.utls.fingerprint)) ? null : {
 			enabled: true,
-			fingerprint: cfg.tls_utls
+			fingerprint: tls.utls.fingerprint
 		},
-		reality: (cfg.tls_reality !== '1') ? null : (is_server ? {
+		reality: ((tls.reality && tls.reality.enabled) !== '1') ? null : (is_server ? {
 			enabled: true,
-			private_key: cfg.tls_reality_private_key,
-			short_id: cfg.tls_reality_short_id,
-			max_time_difference: strToTime(cfg.tls_reality_max_time_difference),
+			private_key: extras.tls_reality_private_key,
+			short_id: tls.reality.short_id,
+			max_time_difference: strToTime(extras.tls_reality_max_time_difference),
 			handshake: {
-				server: cfg.tls_reality_server_addr,
-				server_port: strToInt(cfg.tls_reality_server_port)
+				server: extras.tls_reality_server_addr,
+				server_port: strToInt(extras.tls_reality_server_port)
 			}
 		} : {
 			enabled: true,
-			public_key: cfg.tls_reality_public_key,
-			short_id: cfg.tls_reality_short_id
+			public_key: tls.reality.public_key,
+			short_id: tls.reality.short_id
 		})
 	};
 };
 
 /* Shared sing-box transport object builder; the client transport additionally
-   supports the gRPC keepalive hint, the server one does not. */
-export function buildTransportObject(cfg, is_server) {
-	if (isEmpty(cfg.transport))
+   supports the gRPC keepalive hint, the server one does not.
+   P1-B: the first arg is now a Node.transport-shape structured sub-object. */
+export function buildTransportObject(transport, is_server) {
+	if (isEmpty(transport && transport.type))
 		return null;
 
 	return {
-		type: cfg.transport,
-		host: cfg.http_host || cfg.httpupgrade_host,
-		path: cfg.http_path || cfg.ws_path,
-		headers: cfg.ws_host ? {
-			Host: cfg.ws_host
-		} : null,
-		method: cfg.http_method,
-		max_early_data: strToInt(cfg.websocket_early_data),
-		early_data_header_name: cfg.websocket_early_data_header,
-		service_name: cfg.grpc_servicename,
-		idle_timeout: strToTime(cfg.http_idle_timeout),
-		ping_timeout: strToTime(cfg.http_ping_timeout),
-		permit_without_stream: is_server ? null : strToBool(cfg.grpc_permit_without_stream)
+		type: transport.type,
+		host: transport.host,
+		path: transport.path,
+		headers: transport.headers,
+		method: transport.method,
+		max_early_data: strToInt(transport.max_early_data),
+		early_data_header_name: transport.early_data_header_name,
+		service_name: transport.service_name,
+		idle_timeout: strToTime(transport.idle_timeout),
+		ping_timeout: strToTime(transport.ping_timeout),
+		permit_without_stream: is_server ? null : strToBool(transport.permit_without_stream)
 	};
 };
 /* Config generator helper end */
