@@ -40,6 +40,18 @@ done
 
 echo "== ucode tests =="
 if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
+	# The generator cases feed the emitted config to `sing-box check` and the
+	# package targets sing-box >= 1.14; an older binary rejects 1.14-only
+	# fields. Fail loudly here instead of letting each fixture look like a
+	# generator regression.
+	SB_VER="$(sing-box version 2>/dev/null | sed -n 's/^sing-box version \([0-9][0-9.]*\).*/\1/p' | head -1)"
+	case "$SB_VER" in
+	1.1[4-9]*|1.[2-9][0-9]*|[2-9].*) ;;
+	*)	echo "FAIL: sing-box >= 1.14 required, found '${SB_VER:-unknown}' ($(command -v sing-box))"
+		echo "      tests/toolchain/build-ucode-macos.sh installs a matching one"
+		FAILED=1
+		;;
+	esac
 	sh "$ROOT/tests/ucode/run.sh" "$ROOT" || FAILED=1
 else
 	echo "(no local ucode/sing-box, executing on $HOST)"
