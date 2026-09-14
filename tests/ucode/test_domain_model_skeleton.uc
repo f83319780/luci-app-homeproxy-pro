@@ -2,10 +2,23 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage A1.1 skeleton test: assert that Loader.load(fixture) produces a
- * HomeProxyConfig that mirrors the UCI fixture's general / infra / nodes
- * sections. The other five sub-objects (dns, routing, endpoints,
- * access_control, server) are intentionally empty `{}` until A1.2 lands.
+ * Stage A1.2 domain-model test: assert that Loader.load(fixture) populates
+ * every HomeProxyConfig sub-object from the corresponding UCI section(s).
+ *
+ *   general            <- config (single)
+ *   infra              <- infra (single)
+ *   nodes              <- node (list)
+ *   dns                <- dns (single) + dns_server (list) + dns_rule (list)
+ *   routing            <- routing (single) + routing_node / routing_rule /
+ *                        ruleset (lists)
+ *   access_control     <- control (single) + subscription (single)
+ *   server             <- server (single) + server (list)
+ *   endpoints          <- DERIVED (stays {}; A3 / A4 fill it)
+ *
+ * The fixture (tests/fixtures/generators/domain.uci) carries at least one
+ * row per section so the assertions exercise both single-section reads
+ * and list reads, plus list-valued options (`wan_proxy_ipv4_ips`,
+ * `filter_keywords`, `subscription_url`).
  *
  * Run from tests/ucode/run.sh, which stages this file next to a scratch
  * homeproxy.uc and config/loader.uc + config/model.uc.
@@ -35,102 +48,111 @@ function expect_null(name, value) {
 	}
 }
 
+function by_id(items, id) {
+	for (let it in items)
+		if (it.id === id)
+			return it;
+	return null;
+}
+
 const config = Loader.load('./config');
 
 /* --- general --------------------------------------------------------- */
 expect('general.routing_mode', config.general.routing_mode, 'bypass_mainland_china');
-expect('general.proxy_mode', config.general.proxy_mode, 'tun');
+expect('general.proxy_mode', config.general.proxy_mode, 'redirect_tproxy');
 expect('general.main_node', config.general.main_node, 'urltest');
 expect('general.main_udp_node', config.general.main_udp_node, 'nil');
+expect('general.ipv6_support', config.general.ipv6_support, '0');
 
 /* --- infra ----------------------------------------------------------- */
 expect('infra.dns_port', config.infra.dns_port, '5333');
 expect('infra.mixed_port', config.infra.mixed_port, '5330');
 expect('infra.self_mark', config.infra.self_mark, '100');
 expect('infra.tun_name', config.infra.tun_name, 'singtun0');
+expect('infra.tproxy_mark', config.infra.tproxy_mark, '101');
+expect('infra.tun_addr4', config.infra.tun_addr4, '172.19.0.1/30');
+expect('infra.ntp_server', config.infra.ntp_server, 'time.apple.com');
+expect('infra.common_port', config.infra.common_port, '22,53,80,443');
 
-/* --- nodes count + identity ----------------------------------------- */
-expect('nodes.length', length(config.nodes), 10);
+/* --- nodes ----------------------------------------------------------- */
+expect('nodes.length', length(config.nodes), 2);
 
-/* uci.foreach order is implementation-defined; index by id instead */
-function by_id(id) {
-	for (let n in config.nodes)
-		if (n.id === id)
-			return n;
-	return null;
-}
+const n_anytls = by_id(config.nodes, 'n_anytls');
+const n_snell  = by_id(config.nodes, 'n_snell');
 
-const vless = by_id('n_vless_reality_ws');
-const snell = by_id('n_snell');
-const ss = by_id('n_ss');
+expect('n_anytls.type', n_anytls?.type, 'anytls');
+expect('n_anytls.credentials.password', n_anytls?.credentials?.password, 'secret');
+expect('n_snell.credentials.psk', n_snell?.credentials?.psk, 'psk123456789012');
+expect('n_snell.credentials.userkey', n_snell?.credentials?.userkey, 'ukey');
 
-if (!vless || !snell || !ss) {
-	printf('FAIL: missing expected node id (vless=%J, snell=%J, ss=%J)\n',
-		vless, snell, ss);
+/* --- dns ------------------------------------------------------------- */
+expect('dns.settings.default_strategy', config.dns?.settings?.default_strategy, 'prefer_ipv4');
+expect('dns.settings.default_server', config.dns?.settings?.default_server, 'default-dns');
+expect('dns.settings.optimistic_cache', config.dns?.settings?.optimistic_cache, '0');
+expect('dns.settings.dns_timeout', config.dns?.settings?.dns_timeout, '5s');
+expect('dns.servers.length', length(config.dns?.servers), 1);
+expect('dns.servers[0].type', config.dns?.servers?.[0]?.type, 'udp');
+expect('dns.servers[0].server', config.dns?.servers?.[0]?.server, '8.8.8.8');
+expect('dns.rules.length', length(config.dns?.rules), 1);
+expect('dns.rules[0].action', config.dns?.rules?.[0]?.action, 'hijack-dns');
+
+/* absent options must NOT appear in settings */
+if ('client_subnet' in (config.dns?.settings || {})) {
+	printf('FAIL dns.settings.client_subnet: should be omitted, got %J\n', config.dns.settings.client_subnet);
 	failures++;
 }
+checks++;
 
-/* --- vless_reality_ws: typed view + sub-objects --------------------- */
-expect('vless.type', vless?.type, 'vless');
-expect('vless.address', vless?.address, 'b.example.com');
-expect('vless.port', vless?.port, '443');
-expect('vless.credentials.uuid', vless?.credentials?.uuid,
-	'3af88561-9c69-4b19-8f7e-f08d580bc339');
-expect('vless.tls.server_name', vless?.tls?.server_name, 'b.example.com');
-expect('vless.tls.reality.public_key', vless?.tls?.reality?.public_key,
-	'4UAg690QziXeelpUJoAmXiim0gfQESSiJkNfvF-o8Uw');
-expect('vless.transport.type', vless?.transport?.type, 'ws');
-expect('vless.transport.path', vless?.transport?.path, '/ws?ed=2048');
+/* --- routing --------------------------------------------------------- */
+expect('routing.settings.default_outbound', config.routing?.settings?.default_outbound, 'direct-out');
+expect('routing.settings.default_outbound_dns', config.routing?.settings?.default_outbound_dns, 'default-dns');
+expect('routing.settings.find_neighbor', config.routing?.settings?.find_neighbor, '0');
+expect('routing.settings.udp_timeout', config.routing?.settings?.udp_timeout, '5m');
+expect('routing.settings.tcpip_stack', config.routing?.settings?.tcpip_stack, 'system');
 
-/* --- snell: renamed credential fields (password->psk, username->userkey) */
-expect('snell.credentials.psk', snell?.credentials?.psk, 'psk123456789012');
-expect('snell.credentials.userkey', snell?.credentials?.userkey, 'ukey');
-expect_null('snell.credentials.username', snell?.credentials?.username);
-expect_null('snell.credentials.password', snell?.credentials?.password);
+expect('routing.nodes.length', length(config.routing?.nodes), 1);
+expect('routing.nodes[0].label', config.routing?.nodes?.[0]?.label, 'main');
+expect('routing.nodes[0].node', config.routing?.nodes?.[0]?.node, 'urltest');
 
-/* --- shadowsocks: empty sub-objects are OK, raw still carries the rest */
-expect('ss.type', ss?.type, 'shadowsocks');
-expect('ss.credentials.method', ss?.credentials?.method, 'aes-256-gcm');
-expect('ss.multiplex.enabled', ss?.multiplex?.enabled, '1');
-expect('ss.protocol_options.packet_encoding', ss?.protocol_options?.packet_encoding, null);
+expect('routing.rules.length', length(config.routing?.rules), 1);
+expect('routing.rules[0].action', config.routing?.rules?.[0]?.action, 'route');
 
-/* --- raw keeps the unmodelled tail ---------------------------------- */
-if (type(vless?.raw) !== 'object' || length(vless.raw) < 10) {
-	printf('FAIL vless.raw: expected a substantial UCI dict, got %J\n', vless?.raw);
-	failures++;
-	checks++;
-}
+expect('routing.rulesets.length', length(config.routing?.rulesets), 1);
+expect('routing.rulesets[0].type', config.routing?.rulesets?.[0]?.type, 'remote');
+expect('routing.rulesets[0].url', config.routing?.rulesets?.[0]?.url, 'https://example.com/cn.list');
+expect('routing.rulesets[0].download_detour', config.routing?.rulesets?.[0]?.download_detour, 'main-out');
 
-/* --- validate --------------------------------------------------------- */
-const vless_problems = Node.validate(vless);
-expect('validate(vless) problems', vless_problems, []);
+/* --- access_control -------------------------------------------------- */
+expect('access_control.control.lan_proxy_mode', config.access_control?.control?.lan_proxy_mode, 'disabled');
+expect_null('access_control.control.bind_interface', config.access_control?.control?.bind_interface);
 
-const bad = Node.create({
-	id: 'bad', type: 'vless', address: null, port: '0',
-	credentials: {}, tls: {}, transport: {}, multiplex: {},
-	protocol_options: {}, raw: {}
-});
-const bad_problems = Node.validate(bad);
-if (length(bad_problems) === 0) {
-	printf('FAIL validate(bad): expected at least one problem, got none\n');
-	failures++;
-	checks++;
-} else {
-	checks++;
-}
+expect('access_control.wan_proxy_ipv4_ips', config.access_control?.wan_proxy_ipv4_ips, ['91.108.4.0/22']);
+expect('access_control.wan_proxy_ipv6_ips', config.access_control?.wan_proxy_ipv6_ips, ['2001:67c:4e8::/48']);
 
-/* --- tag helper ------------------------------------------------------- */
-expect('tag(vless)', Node.tag(vless), 'cfg-n_vless_reality_ws-out');
+expect('access_control.subscription.auto_update', config.access_control?.subscription?.auto_update, '0');
+expect('access_control.subscription.packet_encoding', config.access_control?.subscription?.packet_encoding, 'xudp');
+expect('access_control.subscription.filter_nodes', config.access_control?.subscription?.filter_nodes, 'blacklist');
+expect('access_control.subscription_urls', config.access_control?.subscription_urls, ['https://example.com/sub']);
+expect('access_control.filter_keywords', config.access_control?.filter_keywords,
+	['重置|到期', 'Expiration']);
+
+/* --- server ---------------------------------------------------------- */
+expect('server.settings.enabled', config.server?.settings?.enabled, '1');
+expect('server.settings.log_level', config.server?.settings?.log_level, 'warn');
+expect('server.inbounds.length', length(config.server?.inbounds), 1);
+expect('server.inbounds[0].type', config.server?.inbounds?.[0]?.type, 'vless');
+expect('server.inbounds[0].port', config.server?.inbounds?.[0]?.port, '443');
+
+/* --- endpoints remains a derived placeholder ------------------------- */
+expect('endpoints', config.endpoints, {});
+expect('ConfigQuery.endpoints()', ConfigQuery.endpoints(config), []);
+
+/* --- node-derived queries still work --------------------------------- */
 expect('main_node_id', ConfigQuery.main_node_id(config), 'urltest');
-
-/* --- the five unwired sub-objects are present and empty -------------- */
-for (let name in ['dns', 'routing', 'endpoints', 'access_control', 'server']) {
-	if (!(name in config) || type(config[name]) !== 'object') {
-		printf('FAIL %s: expected an empty object placeholder, got %J\n', name, config[name]);
-		failures++;
-	}
-	checks++;
-}
+expect('main_udp_node_id', ConfigQuery.main_udp_node_id(config), 'nil');
+expect('node_by_id(n_anytls).type', ConfigQuery.node_by_id(config, 'n_anytls')?.type, 'anytls');
+expect('node_by_id(missing)', ConfigQuery.node_by_id(config, 'missing'), null);
+expect('node_ids.length', length(ConfigQuery.node_ids(config)), 2);
 
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures === 0 ? 0 : 1);
