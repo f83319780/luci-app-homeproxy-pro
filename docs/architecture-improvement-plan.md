@@ -22,8 +22,8 @@
 | 5 | Subscription Pipeline | 🟡 ~70% | fetcher/decoder/filter/repository 已拆；缺 normalizer/validator；orchestrator 仍直接写 UCI |
 | 6 | Candidate Config | ❌ ~0% | 无 candidate、无 rollback；reload 仍是 `stop; start` |
 | 7 | Runtime | ❌ ~0% | `init.d/homeproxy` 仍是 417 行，`runtime/` 不存在 |
-| 8 | LuCI | 🟡 ~30% | TLS/Transport 已抽到 `homeproxy.js`；协议表前后端 6 份不同步；`parseShareLink` 是第二个后端 |
-| 9 | Test / CI | 🟡 ~50% | 分层基本成型；但存在 vacuous 断言、无协议覆盖不变量、无 target-only 断言 |
+| 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除（§1.3 改为后端 RPC）；协议表前后端仍 6 份不同步 |
+| 9 | Test / CI | 🟡 ~65% | 分层基本成型；已 pin ucode + 语法金丝雀 + 取消 SKIP + wireguard fixture；仍缺协议覆盖不变量、golden 快照、demo 自比较 |
 
 **关键判断**：已经完成的是"结构好看"的那一半；**风险最高的那一半（PHASE 4/6/7）几乎为零**。而文档的"最终成功标准"恰恰是
 
@@ -37,9 +37,13 @@ Subscription Failure → Candidate Rejected → Old Config Preserved → Old Run
 
 1. ~~**P0-1 目标设备 ucode 无法解析重构模块 ⇒ 生成器 / 订阅更新无法编译 ⇒ 服务无法启动**~~
    **已修复**（§1.1 `export function` 缺 `;`、§1.1b 对象解构），目标设备全套 ucode 测试已 **PASS**（见附录）。
-   但 §1.1 的**防回归措施（pin ucode + import-check `config/*.uc` + 不把 SKIP 当 PASS）尚未落地**。
-2. **P0-2 WireGuard 节点在 `Node` 化之后必然生成非法配置**（见 §1.2）。
-3. **P0-3 前端 `parseShareLink` 与后端 `parse_uri` 双实现且已经漂移，导入链路完全绕过后端校验**（见 §1.3）。
+   防回归也已落地：`build-ucode-*.sh` **pin 到目标快照所用的 ucode revision**，
+   `tests/ucode/run.sh` 把 `config/*.uc` 纳入 import 检查、**取消全部 target-only SKIP**、
+   并新增 `test_ucode_grammar.sh` 语法金丝雀（见 §2.9）。
+2. ~~**P0-2 WireGuard 节点在 `Node` 化之后必然生成非法配置**~~ **已修复**（§1.2）+ 新 fixture 守护。
+3. ~~**P0-3 前端 `parseShareLink` 与后端 `parse_uri` 双实现且已经漂移**~~ **已修复**（§1.3，改为后端 RPC）。
+4. **P0-4 订阅更新时新增字段写不进已有节点** **已修复**（§1.4）。
+5. **P0-5 单个非法节点 `die()` 掉整份配置**（§1.5）**仍未修** —— 这是剩下唯一的 P0。
 
 ---
 
@@ -112,7 +116,7 @@ Fetcher + Repository）引入了它。这是全仓唯一一处解构（`grep -rn
 **修复**：改成按名取值。与 §1.1 一起构成
 `fix(ucode): make the refactored modules parse on the target ucode`。
 
-### 1.2 WireGuard 节点在 Node 化之后必然失败
+### 1.2 WireGuard 节点在 Node 化之后必然失败 ✅ 已修复
 
 **证据**：`generate_endpoint(node)` 读的是扁平 UCI 键：
 
@@ -146,38 +150,50 @@ peers:[{public_key:null}]` 的 endpoint，`removeBlankAttrs()` 把 null 去掉�
 （peer 缺 `public_key`）⇒ `generate_client.uc` 退出 1 ⇒ 服务起不来。而 `node.js:462-463` 是**可以选
 WireGuard** 的，所以这是用户可达路径。
 
-**修复**（两条路，建议第 1 条）：
-1. 在 `model.uc` 增加 `endpoint` 子对象 + `loader.uc` 增加对应读取，把 WireGuard 也纳入 Adapter
-   （新增 `generate_endpoint` 的 Adapter 化，例如 `EndpointFactory.create(node)`），彻底符合 PHASE 3。
-2. 过渡方案：`generate_endpoint` 改读 `node.raw.wireguard_*`，并把"wireguard 尚未建模"写进 TODO。
-   注意 `Node.raw` 目前是死字段（全仓无人读），正好可以先用起来。
+**修复**（原计划两条路，实际采用第 2 条的数据化变体，不引入新工厂）：
+1. ~~在 `model.uc` 增加 `endpoint` 子对象 + `loader.uc` 增加对应读取，把 WireGuard 也纳入 Adapter
+   （新增 `generate_endpoint` 的 Adapter 化，例如 `EndpointFactory.create(node)`），彻底符合 PHASE 3。~~
+2. 已实施：`loader.uc` 的 `PROTOCOL_OPTIONS` 增加 `wireguard` 行（`local_address` / `private_key` /
+   `peer_public_key` / `pre_shared_key` / `reserved` / `mtu` / `persistent_keepalive_interval`），
+   `generate_endpoint()` 改读 `node.protocol_options` 与 `node.common`
+   （顺带修掉同样读错的 `tcp_fast_open` / `tcp_multi_path` / `udp_fragment`——它们也在
+   `node.common` 而不是 Node 顶层），tag 从 `node['.name']` 改为 `node.id`。
+   仍保留独立的 `generate_endpoint()`；等 PHASE 3 收尾时再抽 `EndpointFactory`。
 
-**防回归**：`tests/fixtures/generators/*.uci` **一个 WireGuard 节点都没有**，所以现有测试永远发现不了。
-加一个 wireguard fixture + `sing-box check` 用例。
+**防回归（已落地）**：新增 `tests/fixtures/generators/wireguard.uci`（单 WireGuard 主节点），
+`test_generators.sh` 增加 `run_case wireguard`，并**额外断言**生成的配置里确实带着
+fixture 的 private key、peer public key 和 local address list——只靠 `sing-box check` 不够，
+一个完全没有 server 的配置也可能"合法"。已做反证：把 `generate_endpoint` 改回读空表后该用例 FAIL。
 
-### 1.3 前端 `parseShareLink` 是第二个 backend，且已经漂移
+### 1.3 前端 `parseShareLink` 是第二个 backend，且已经漂移 ✅ 已修复
 
 **证据**：
 - `node.js:22-409`（约 388 行）逐协议重写了 `parse_uri.uc:434-499`（约 500 行）的全部 12 个 scheme。
-- 已实际漂移：
-  - `node.js:41` `port: url.port || '80'` vs `parse_uri.uc:48` `port: url.port`（anytls 默认端口不一致）。
-  - 前端 vmess 分支（`node.js` vmess block）**没有** `vmess_global_padding`，后端 `parse_uri.uc:397` 有 `'1'`。
+- 已实际漂移（**修正**：初版报告里"anytls 默认端口不一致"是错的——后端 `parseURL()` 对 `http://`
+  也会补 80，两端其实一致；真正漂移的是 vmess）：
+  - 前端 vmess 分支**没有** `vmess_global_padding`，后端 `parse_uri.uc:397` 有 `'1'`。
+    已在目标设备实测确认：后端 `parse_uri()` 返回 `vmess_global_padding="1"`。
 - 校验强度不一致：后端 `parse_uri.uc:487-497` 用 `/sbin/validate_data` 校验 host/port；
-  前端 `node.js:399-406` 只做 truthiness。
+  前端只做 truthiness。
 - 导入路径 `node.js:1152-1163` 直接 `uci.add/uci.set` + `uci.save()`，**后端 parser 从不参与**。
 
 **影响**：同一份 URI，走订阅和走"导入分享链接"得到的节点不同；前端写进 UCI 的东西没有后端校验，
 一个坏节点会触发 §1.5 的 `die()`。这正违反文档"前端 validation 不能取代后端 validation"和
 "Frontend 不是第二个 Backend"。
 
-**修复**：
-1. 在 `luci.homeproxy` 暴露 `parse_uri`（入参 URI，出参归一化后的 node 对象，复用
-   `singbox_generator` 已有的类型白名单风格）。
-2. `node.js` 的 `parseShareLink` 改为调用该 RPC；删除 388 行 JS 副本。
-3. 短期折中：保留前端副本，但加一个"协议 schema 一致性"测试，固化两边对同一 URI 的输出必须相同。
-   （不建议——两个 parser 同步成本只会越来越高。）
+**已实施的修复**：
+1. `luci.homeproxy` 新增 RPC `node_parse`（`args: { uri }`），内部 `import { parse_uri } from
+   '/etc/homeproxy/scripts/parse_uri.uc'`，URI 长度上限 4096，异常与不支持的类型都返回
+   `{ config: null, error }`。同时把 `singbox_get_features` 的探测逻辑抽成 `collectFeatures()`，
+   由 RPC 服务端自己取特性，**不接受客户端传入的 features**（否则 QUIC 协议会被错误拒绝）。
+   —— 已在设备上验证该 import 形式可用（`parse_uri` 里的裸 `homeproxy` import 会按被导入模块的
+   目录解析），并验证了 `vmess`/`anytls`/`hy2`/垃圾输入 四类结果。
+2. `homeproxy.js` 新增 `parseShareLink(uri)`（`rpc.declare` → `node_parse`），`node.js` 删除
+   388 行 JS 副本（1363 → 974 行），导入处理器改为 `Promise.all(links.map(hp.parseShareLink))`
+   后再写 UCI。表单快照（node/server）保持 PASS，证明渲染未变。
+3. 不再需要"前端副本 + 一致性测试"的折中方案。
 
-### 1.4 订阅更新时"新增字段"永远写不进已有节点
+### 1.4 订阅更新时"新增字段"永远写不进已有节点 ✅ 已修复
 
 **证据**：`subscription/repository.uc:66-74` 只遍历**旧 section 的 key**：
 
@@ -200,9 +216,10 @@ expect('kept: port not added (quirk)', 'port' in cfg, false);
 **影响**：机场新增 `plugin` / `tls_sni` / `packet_encoding` 等字段时，老节点永远拿不到新值；
 用户只能删掉整个订阅重新导入。而且这个 quirk 被测试固化了，将来修正会"测试失败"。
 
-**修复**：更新时取 `keys(cfg) ∪ keys(new)`；并且**顺便过滤 `.name/.type/.index/.anonymous` 伪键**
-（当前代码会对 `.name` 调 `uci.delete`，虽然实测无害，但语义上是错的）。
-然后把测试改成断言正确行为（`port` 应被写入）。
+**已实施的修复**：更新分支改为先写入新配置的**全部**字段（含旧 section 没有的），
+再删除新配置不再携带的字段，并跳过 `.` 开头的 section 伪键（旧的 `.name` 删除调用语义上是错的）。
+测试从 `expect('kept: port not added (quirk)', ... false)` 改为
+`expect('kept: new field added', cfg.port, '443')`——目标设备 14 checks / 0 failures。
 
 ### 1.5 单个非法节点 `die()` 掉整份配置
 
@@ -398,7 +415,8 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
 - `ssh` 在 `node.js:456` 可选，但 `loader.uc` / `adapter.uc` 的表里**没有 `ssh` 行**；
 - `model.uc:54` 把 ssh 私钥映射到 `private_key`，而表单写的是 `ssh_priv_key`（`node.js:717`）
   ⇒ 后端永远读不到用户填的私钥；
-- `wireguard` 在 `node.js:462-463` 可选，但没有任何 loader/adapter 行（见 §1.2）；
+- `wireguard` 在 `node.js:462-463` 可选，`loader.uc` 现在有 `wireguard` 行（本轮 §1.2 修复），
+  但仍没有走进 `adapter.uc`——`generate_endpoint()` 是它的专用构建器；
 - hysteria2 的 `auth_payload` 在 `loader.uc:239` 有，UI 没有对应字段。
 
 建议：先做**一份权威协议表**（JS 侧导出给 LuCI，ucode 侧由同一份数据生成或由一致性测试守护），
@@ -409,25 +427,44 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
 现状分层（实测）：
 - `python3 tests/i18n-coverage.py --warn-below 100` → **PASS**（724/724）
 - `node tests/luci-form-snapshot.js` node/server → **PASS**（与 `tests/snapshots/*.json` 一致）
-- `sh tests/ucode/run.sh` → 本机 **NOT RUN**（无 ucode；脚本没有 `command -v ucode` 守卫，
-  会把每个用例打印成 "ucode: command not found" 的 FAIL，而不是 NOT RUN）
-- 目标设备上 → **FAIL**（§1.1 的模块解析错误导致 generator / domain-model / subscription 全线失败）
+- `sh tests/ucode/run.sh` → 本机 **NOT RUN**（无 ucode；已加 `command -v ucode` 守卫，
+  现在明确打印 NOT RUN 并以退出码 2 结束，而不是把每个用例误报成 FAIL）
+- 目标设备上 → **PASS**（`SUITE_RC=0`，`^FAIL` 计数 0）
 
-必须补的：
-1. **修掉 vacuous 断言**（§3.1）。
-2. **协议覆盖不变量测试**：目前 `grep PROTOCOL_OPTIONS|OPTION_FIELDS` 在 `tests/` 下**零命中**。
-   新增 `tests/ucode/test_protocol_inventory.uc`，断言
-   `keys(loader.PROTOCOL_OPTIONS) == keys(adapter.OPTION_FIELDS) ∪ {direct, ...}`，
-   且每个协议在 fixture 里都有节点。这条能一次性覆盖 ssh/wireguard/hysteria 的缺口。
-3. **golden JSON 快照**：`tests/snapshots/generator/.gitkeep` 还是空的。
-   每个协议一份 outbound 黄金 JSON，比现在的"自己跟自己比"（§3.1）有价值得多。
-4. `client.json` 表单快照：`luci-form-snapshot.js:13,196-202` 只接受 `node|server`，
-   而 `client.js`（1755 行，最大的表单）没有任何快照。
-5. TLS/Transport 单测：目前没有测试直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject`，
-   只被 fixture 间接覆盖。
-6. `tests/ucode/run.sh` 加 `command -v ucode` 守卫，缺工具时明确 NOT RUN + 独立退出码。
-7. 把 `run.sh:71-75,107-113` 里 SKIP 的 target-only 用例（firewall_pre、firewall template、
-   `luci.homeproxy` RPC、`update_subscriptions`）纳入一个 on-target CI job；否则 CI 全绿但从未检查它们。
+已落地的（本轮）：
+1. **取消 target-only SKIP**。原来有 4 项在开发机上以 `SKIP` 跳过，其中 `update_subscriptions.uc`
+   和 `luci.homeproxy` 正是漏掉语法错误的地方。现在：`update_subscriptions.uc` / `firewall_pre.uc`
+   正常编译（`luci.sys` 来自工具链，`homeproxy` 由 `-L` 解析）；
+   `luci.homeproxy` 用 sed 把绝对 `/etc/homeproxy/...` import 改写到 checkout 后编译；
+   `firewall_post.ut` 渲染也能跑（`utpl` 是 `ucode` 的符号链接，工具链会装）。
+   工具链缺 `utpl` 之类的缺口现在直接 **FAIL**，不再静默降级。
+2. **语法金丝雀**：新增 `tests/ucode/test_ucode_grammar.sh`，断言工具链 ucode **拒绝**
+   `export function ... }`（缺 `;`）与对象/数组解构，**接受**仓库实际用到的
+   `?.`/`??`/对象展开/计算键/模板字符串。它既在 `build-ucode-*.sh` 的 verify 阶段运行，
+   也是 `tests/ucode/run.sh` 的第一步。可用 `HP_ALLOW_PERMISSIVE_UCODE=1` 降级为警告。
+3. **ucode 版本 pin**：`build-ucode-linux.sh` / `-macos.sh` 的 `UCODE_REV` 固定为
+   `85922056ef7abeace3cca3ab28bc1ac2d88e31b1`，即设备上 `ucode-2026.01.16~85922056` 对应的 revision。
+   原因：上游在 85922056 之后**放宽**了 `export function` 的分号要求
+   （对比两版上游自带测试 `tests/custom/04_modules/02_export_function_declaration`：
+   `85922056` 用 `};`，当前 main pin 的 `b885dd0f` 用 `}`），
+   而 `openwrt/openwrt@main`、`immortalwrt/immortalwrt@master` 现在都 pin `b885dd0f`。
+   所以"从 master 构建"必然无法复现目标语法——这正是 CI 全绿而设备全红的原因。
+   pin + 金丝雀两者一起，既复现目标，又能在有人改 pin 时立刻报警。
+4. `config/*.uc` 已加入 run.sh 的 import 检查（之前只在 generator 测试里被间接覆盖）。
+
+仍未做的：
+5. **修掉 vacuous 断言**（§3.1）：`test_demo_architecture.sh` 仍是自己比自己。
+6. **协议覆盖不变量测试**：`grep PROTOCOL_OPTIONS|OPTION_FIELDS` 在 `tests/` 下仍是零命中。
+   新增 `tests/ucode/test_protocol_inventory.uc`，断言各协议表与 fixture 覆盖一致
+   （这条本可以发现 §1.2 的 wireguard 缺口）。
+7. **golden JSON 快照**：`tests/snapshots/generator/.gitkeep` 仍为空。每个协议一份 outbound
+   黄金 JSON，替换 §3.1 的自比较。
+8. `client.json` 表单快照：`luci-form-snapshot.js:13,196-202` 仍只接受 `node|server`，
+   `client.js`（1755 行）无快照。
+9. TLS/Transport 单测：仍没有直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject` 的测试。
+10. `tests/ucode/test_demo_architecture.sh:158-159` 的两条 sed 仍是空操作（见 §3.1）。
+11. `tests/README.md` 已同步更新（pin/金丝雀/无 SKIP/demo 自比较），但 `demo/architecture/`
+    相关的历史描述只做了标注，未彻底清除。
 
 完全无测试的文件：`client.js`、`status.js`、`migrate_config.uc`、`update_resources.sh`、
 `update_crond.sh`、`clean_log.sh`、`init.d/homeproxy`、`firewall_pre.uc`、`luci.homeproxy`、
@@ -468,8 +505,9 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 
 ### 3.2 其它"把 bug 锁成契约"的断言
 
-- `test_subscription_repository.uc:138-144` 断言"新增字段不写入"（见 §1.4）。
-- `test_subscription_decoder.uc:44-53` 断言 `{servers:[...]}` / URI-array JSON 解码为 0 节点（"quirk"）。
+- ~~`test_subscription_repository.uc:138-144` 断言"新增字段不写入"（见 §1.4）。~~
+  **已改**：现在断言 `cfg.port == '443'`，与 §1.4 的修复同一个 commit。
+- `test_subscription_decoder.uc:44-53` 断言 `{servers:[...]}` / URI-array JSON 解码为 0 节点（"quirk"）——**仍未处理**。
 
 修 bug 时这些测试会红——请在同一 commit 里改成断言正确行为，而不是保留 quirk。
 
@@ -504,28 +542,31 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 ```
 P0（本周）
 1. ✅ fix(ucode): make the refactored modules parse on the target ucode   # §1.1 + §1.1b  6 文件
-2. test(toolchain): pin ucode + import-check config/*.uc                  # §1.1   ← 尚未落地
-3. fix(generator): model WireGuard endpoint fields on Node                # §1.2
-4. test(arch): protocol inventory invariant + wireguard fixture           # §2.9 / §1.2
-5. fix(sub): update newly-added fields on existing subscription nodes      # §1.4
-6. fix(generator): skip invalid candidate nodes instead of die()          # §1.5
+2. ✅ test(toolchain): pin ucode, drop target-only SKIPs, add grammar canary,
+      import-check config/*.uc                                            # §2.9
+3. ✅ fix(generator): model WireGuard endpoint fields on Node + fixture    # §1.2
+4. ✅ fix(sub): update newly-added fields on existing subscription nodes    # §1.4
+5. ✅ refactor(luci): parse share links through the backend (drop the JS copy)# §1.3
+6. ⬜ test(arch): protocol inventory invariant                            # §2.9
+7. ⬜ fix(generator): skip invalid candidate nodes instead of die()        # §1.5
 
 P1（可靠性 — 文档 PHASE 6/7 的核心目标）
-7. reliability: generate to candidate, keep rollback copy, health-check    # §2.6
-8. reliability: back up + restore /etc/config/homeproxy on failed commit   # §2.6
-9. refactor(sub): stop-before-fetch -> fetch-then-reload                   # §2.5
-10. reliability: single sing-box check per generation                     # §2.4
+8. reliability: generate to candidate, keep rollback copy, health-check     # §2.6
+9. reliability: back up + restore /etc/config/homeproxy on failed commit    # §2.6
+10. refactor(sub): stop-before-fetch -> fetch-then-reload                   # §2.5
+11. reliability: single sing-box check per generation                       # §2.4
 
 P2（结构）
-11. refactor(gen): split generate_client.uc into generator/*.uc            # §2.4
-12. refactor(gen): generator becomes an importable library (drop sed hooks)# §2.4
-13. refactor(parser): parser/ dir + single canonical field mapping         # §2.2
-14. refactor(gen): server inbound through domain model + InboundFactory    # §2.3
-15. refactor(runtime): extract runtime/*.uc, thin init.d                   # §2.7
-16. refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.8
-17. security: split ACL wildcard; backend path allowlist                   # §4
-18. test: golden protocol snapshots; client.json snapshot; de-quirk asserts# §2.9
-19. docs: drop demo/ references; refresh architecture-review claims        # §3.1
+12. refactor(gen): split generate_client.uc into generator/*.uc             # §2.4
+13. refactor(gen): generator becomes an importable library (drop sed hooks) # §2.4
+14. refactor(parser): parser/ dir + single canonical field mapping          # §2.2
+15. refactor(gen): server inbound through domain model + InboundFactory     # §2.3
+16. refactor(runtime): extract runtime/*.uc, thin init.d                    # §2.7
+17. refactor(luci): shared/rpc.js + components/ + protocol registry         # §2.8
+18. security: split ACL wildcard; backend path allowlist                    # §4
+19. test: golden protocol snapshots; client.json snapshot                   # §2.9
+20. test: delete or repair test_demo_architecture.sh                        # §3.1
+21. docs: drop remaining demo/ references; refresh architecture-review claims # §3.1
 ```
 
 ---
@@ -537,9 +578,9 @@ P2（结构）
    而 `adapter.uc` 的数据表设计比"11 个 Adapter 类"更好，不要退回去。
 2. **不要在 candidate/rollback 落地前继续做 generator 拆分**。先让失败路径安全，再动结构，
    否则每次拆分都在"服务可能起不来"的前提下做。
-3. **不要保留两份 parser**（§1.3）。前端副本每加一个协议就多一份同步成本，而且已经漂移了。
+3. **不要保留两份 parser**（§1.3 已消除）。前端副本每加一个协议就多一份同步成本，而且已经漂移了。
 4. **不要用"改 expected output"来让 §3.2 的 quirk 测试通过**——那是文档 ABSOLUTE RULES 第 10 条。
-5. **不要在 CI 里把 SKIP 当成 PASS**（§2.9 第 7 条）。
+5. **不要在 CI 里把 SKIP 当成 PASS**（§2.9 已取消全部 target-only SKIP）。
 
 ---
 
@@ -548,8 +589,8 @@ P2（结构）
 | 检查 | 结果 |
 |---|---|
 | `python3 tests/i18n-coverage.py --warn-below 100` | **PASS** 724/724，10 条 ignore |
-| `node tests/luci-form-snapshot.js . node` / `server` | **PASS**（与 `tests/snapshots/*.json` 一致） |
-| `sh tests/ucode/run.sh`（本机） | **NOT RUN** — 无 ucode，脚本未守卫，误报 FAIL |
+| `node tests/luci-form-snapshot.js . node` / `server` | **PASS**（与 `tests/snapshots/*.json` 一致；删除 388 行前端 parser 后仍一致） |
+| `sh tests/ucode/run.sh`（本机） | **NOT RUN** — 无 ucode；已加守卫，现在明确输出 NOT RUN 并以退出码 2 结束 |
 
 **修复前**（HEAD `599a10b`）：
 
@@ -558,20 +599,24 @@ P2（结构）
 | 目标设备 ucode module import：`config/loader.uc`、`subscription/{filter,decoder,fetcher,repository}.uc` | **FAIL** — `Expecting ';'` |
 | 目标设备 ucode module import：`config/model.uc`、`config/adapter.uc`、`homeproxy.uc`、`parse_uri.uc` | **PASS** |
 | 目标设备：`generate_client.uc` / `generate_server.uc` / `update_subscriptions.uc` 能否运行 | **FAIL**（loader.uc 无法编译 / 解构语法） |
-| WireGuard 生成路径 | 静态确定的缺陷，**建议按 §1.2 加 fixture 后复测** |
+| WireGuard 生成路径 | 静态确定的缺陷（`generate_endpoint` 读不到字段） |
 
-**修复 §1.1 + §1.1b 后**（目标设备实跑 `sh tests/ucode/run.sh`）：
+**本轮全部修复后**（目标设备实跑 `sh tests/ucode/run.sh`，`SUITE_RC=0`，`grep -c '^FAIL'` = 0）：
 
 | 检查 | 结果 |
 |---|---|
-| `== ucode syntax check ==`（全部 4 个 .uc 目录，ON_TARGET=1 不 SKIP） | **PASS** — all ucode sources compile |
-| fw4 chain/set inventory + firewall_post.ut 渲染 | **PASS** |
+| `== ucode grammar canary ==` | **PASS** — 7 个 accept + 3 个 reject 全部符合目标方言 |
+| `== ucode syntax check ==`（含 `luci.homeproxy` 的绝对 import 改写；无 SKIP） | **PASS** — all ucode sources compile |
+| fw4 chain/set inventory + firewall_post.ut 渲染（off-target 也可跑） | **PASS** |
 | parse_uri unit / subscription filter / decoder / repository | **PASS** — 153 / 18 / 12 / 14 checks, 0 failures |
 | homeproxy helper + executeCommand 失败路径 | **PASS** — 18 checks, 0 failures |
-| generator regression（client / custom / server） | **PASS** — 6791 / 1916 / 3888 bytes + `sing-box check` |
-| architecture demo equivalence | **PASS** — 11/11 nodes（注：该断言恒真，见 §3.1） |
+| generator regression（client / custom / server / **wireguard**） | **PASS** — 6776 / 1886 / 3798 / 3773 bytes + `sing-box check` |
+| WireGuard 反证（把 `generate_endpoint` 改回读空表） | **FAIL**（符合预期：fixture 守护有效） |
+| architecture demo equivalence | **PASS** — 11/11 nodes（注：该断言恒真，见 §3.1，不计入有效覆盖） |
 | domain model skeleton | **PASS** — 63 checks, 0 failures |
-| `tests/ucode/run.sh` 退出码 | **0**，`grep -c '^FAIL'` = 0 |
+| 后端 `parse_uri` 供前端调用（`node_parse` 的实际路径） | **PASS** — vmess `global_padding="1"`、anytls 默认 `port="80"`、无 `with_quic` 时 hy2 → `null`、垃圾输入 → `null` |
+| 浏览器端"导入分享链接"交互 | **NOT RUN** — 无浏览器/LuCI 环境；仅做了 RPC 后端行为验证 + 表单快照 |
 
 目标设备环境：ImmortalWrt x86_64，`ucode-2026.01.16~85922056-r1`，
-`libucode20230711-2026.01.16~85922056-r1`，`ucode-mod-uci/-fs/-ubus/-uloop/-digest` 同版本。
+`libucode20230711-2026.01.16~85922056-r1`，`ucode-mod-uci/-fs/-ubus/-uloop/-digest` 同版本，
+`sing-box 1.14.0`。
