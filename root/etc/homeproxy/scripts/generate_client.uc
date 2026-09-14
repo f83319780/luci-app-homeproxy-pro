@@ -18,11 +18,29 @@ import {
 	HP_DIR, RUN_DIR
 } from 'homeproxy';
 
+import { Loader } from './config/loader.uc';
+import { ConfigQuery } from './config/model.uc';
+
 const ubus = connect();
 
 /* const features = ubus.call('luci.homeproxy', 'singbox_get_features') || {}; */
 
-/* UCI config start */
+/* UCI config start
+ *
+ * `HP_TEST_DOMAIN_MODEL=1` selects the new HomeProxyConfig-backed read path
+ * (Loader.load()). Default is the legacy uci.cursor() path. Both must
+ * produce byte-identical sing-box-c.json; tests/ucode/test_generator_
+ * domain_model.sh runs both and diffs the result.
+ *
+ * On the production target, this flag is set by ucode's -D switch and the
+ * tests stage a flipped copy of generate_client.uc with the value
+ * substituted by sed, so the runtime environment does not need a `os`
+ * module that is not always available on the testbed.
+ */
+/* __HP_TEST_DOMAIN_MODEL__ */
+const USE_DOMAIN_MODEL = (__HP_TEST_DOMAIN_MODEL__ === 1);
+const dm = USE_DOMAIN_MODEL ? Loader.load() : null;
+
 const uci = cursor();
 
 const uciconfig = 'homeproxy';
@@ -43,17 +61,52 @@ const uciroutingsetting = 'routing',
 const ucinode = 'node';
 const uciruleset = 'ruleset';
 
-const routing_mode = uci.get(uciconfig, ucimain, 'routing_mode') || 'bypass_mainland_china';
+/* Domain-model accessors. Each falls back to the legacy uci.get() when
+ * HP_TEST_DOMAIN_MODEL is off. The settings sub-objects (dns / routing /
+ * access_control) and general / infra are read through these so the two
+ * paths can be diffed end to end. */
+function g(key) { return USE_DOMAIN_MODEL ? (dm.general && key in dm.general ? dm.general[key] : null) : uci.get(uciconfig, ucimain, key); }
+function i(key) { return USE_DOMAIN_MODEL ? (dm.infra   && key in dm.infra   ? dm.infra[key]   : null) : uci.get(uciconfig, uciinfra, key); }
+function d(key) { return USE_DOMAIN_MODEL ? ((dm.dns||{}).settings && key in dm.dns.settings ? dm.dns.settings[key] : null) : uci.get(uciconfig, ucidnssetting, key); }
+function r(key) { return USE_DOMAIN_MODEL ? ((dm.routing||{}).settings && key in dm.routing.settings ? dm.routing.settings[key] : null) : uci.get(uciconfig, uciroutingsetting, key); }
+function c(key) { return USE_DOMAIN_MODEL ? ((dm.access_control||{}).control && key in dm.access_control.control ? dm.access_control.control[key] : null) : uci.get(uciconfig, ucicontrol, key); }
+function s(key) { return USE_DOMAIN_MODEL ? ((dm.access_control||{}).subscription && key in dm.access_control.subscription ? dm.access_control.subscription[key] : null) : uci.get(uciconfig, 'subscription', key); }
 
-let wan_dns = ubus.call('network.interface', 'status', {'interface': 'wan'})?.['dns-server']?.[0];
+/* List-iteration helper. With HP_TEST_DOMAIN_MODEL=1 the source is the
+ * HomeProxyConfig-loaded list; with 0 the source is the legacy uci.foreach
+ * over the equivalent UCI section. Both produce the same callback per
+ * section dict, so the rest of the generator does not have to care. */
+function iter_sections(section_name, cb) {
+	if (USE_DOMAIN_MODEL) {
+		const map = {
+			dns_server:   () => dm.dns.servers,
+			dns_rule:     () => dm.dns.rules,
+			routing_node: () => dm.routing.nodes,
+			routing_rule: () => dm.routing.rules,
+			ruleset:      () => dm.routing.rulesets,
+			server:       () => dm.server.inbounds
+		};
+		const list = map[section_name] ? map[section_name]() : [];
+		for (let i = 0; i < length(list); i++) cb(list[i]);
+	} else {
+		uci.foreach(uciconfig, section_name, cb);
+	}
+}
+
+const routing_mode = g('routing_mode') || 'bypass_mainland_china';
+
+/* ubus may be unreachable (no ubusd, or a dev host); the caller falls back to
+   a public resolver below, which is also what a router without a WAN lease
+   uses. The extra parentheses keep the ?. chain guarded when ubus is null. */
+let wan_dns = (ubus?.call('network.interface', 'status', {'interface': 'wan'}))?.['dns-server']?.[0];
 if (!wan_dns)
 	wan_dns = (routing_mode in ['proxy_mainland_china', 'global']) ? '8.8.8.8' : '223.5.5.5';
 
-const dns_port = uci.get(uciconfig, uciinfra, 'dns_port') || '5333';
+const dns_port = i('dns_port') || '5333';
 
-const ntp_server = uci.get(uciconfig, uciinfra, 'ntp_server') || 'time.apple.com';
+const ntp_server = i('ntp_server') || 'time.apple.com';
 
-const ipv6_support = uci.get(uciconfig, ucimain, 'ipv6_support') || '0';
+const ipv6_support = g('ipv6_support') || '0';
 
 let main_node, main_udp_node, dedicated_udp_node, default_outbound, default_outbound_dns,
     domain_strategy, dns_server, china_dns_server, dns_default_strategy,
@@ -61,16 +114,16 @@ let main_node, main_udp_node, dedicated_udp_node, default_outbound, default_outb
     dns_client_subnet, direct_domain_list, proxy_domain_list;
 
 if (routing_mode !== 'custom') {
-	main_node = uci.get(uciconfig, ucimain, 'main_node') || 'nil';
-	main_udp_node = uci.get(uciconfig, ucimain, 'main_udp_node') || 'nil';
+	main_node = g('main_node') || 'nil';
+	main_udp_node = g('main_udp_node') || 'nil';
 	dedicated_udp_node = !isEmpty(main_udp_node) && !(main_udp_node in ['same', main_node]);
 
-	dns_server = uci.get(uciconfig, ucimain, 'dns_server');
+	dns_server = g('dns_server');
 	if (isEmpty(dns_server) || dns_server === 'wan')
 		dns_server = wan_dns;
 
 	if (routing_mode === 'bypass_mainland_china') {
-		china_dns_server = uci.get(uciconfig, ucimain, 'china_dns_server');
+		china_dns_server = g('china_dns_server');
 		if (isEmpty(china_dns_server) || type(china_dns_server) !== 'string' || china_dns_server === 'wan')
 			china_dns_server = '223.5.5.5';
 	}
@@ -84,64 +137,64 @@ if (routing_mode !== 'custom') {
 
 } else {
 	/* DNS settings */
-	dns_default_strategy = uci.get(uciconfig, ucidnssetting, 'default_strategy');
-	dns_default_server = uci.get(uciconfig, ucidnssetting, 'default_server');
-	dns_disable_cache = uci.get(uciconfig, ucidnssetting, 'disable_cache');
-	dns_disable_cache_expire = uci.get(uciconfig, ucidnssetting, 'disable_cache_expire');
-	dns_client_subnet = uci.get(uciconfig, ucidnssetting, 'client_subnet');
+	dns_default_strategy = d('default_strategy');
+	dns_default_server = d('default_server');
+	dns_disable_cache = d('disable_cache');
+	dns_disable_cache_expire = d('disable_cache_expire');
+	dns_client_subnet = d('client_subnet');
 
 	/* Routing settings */
-	default_outbound = uci.get(uciconfig, uciroutingsetting, 'default_outbound') || 'nil';
-	default_outbound_dns = uci.get(uciconfig, uciroutingsetting, 'default_outbound_dns') || 'default-dns';
-	domain_strategy = uci.get(uciconfig, uciroutingsetting, 'domain_strategy');
+	default_outbound = r('default_outbound') || 'nil';
+	default_outbound_dns = r('default_outbound_dns') || 'default-dns';
+	domain_strategy = r('domain_strategy');
 }
 
-const dns_optimistic_cache = uci.get(uciconfig, ucidnssetting, 'optimistic_cache') || '0',
-      dns_optimistic_timeout = uci.get(uciconfig, ucidnssetting, 'optimistic_timeout'),
-      dns_query_timeout = uci.get(uciconfig, ucidnssetting, 'dns_timeout'),
-      dns_store_dns = uci.get(uciconfig, ucidnssetting, 'cache_file_store_dns') || '0';
+const dns_optimistic_cache = d('optimistic_cache') || '0',
+      dns_optimistic_timeout = d('optimistic_timeout'),
+      dns_query_timeout = d('dns_timeout'),
+      dns_store_dns = d('cache_file_store_dns') || '0';
 
-const proxy_mode = uci.get(uciconfig, ucimain, 'proxy_mode') || 'redirect_tproxy',
-      default_interface = uci.get(uciconfig, ucicontrol, 'bind_interface');
+const proxy_mode = g('proxy_mode') || 'redirect_tproxy',
+      default_interface = c('bind_interface');
 
-const mixed_port = uci.get(uciconfig, uciinfra, 'mixed_port') || '5330';
+const mixed_port = i('mixed_port') || '5330';
 
 let self_mark, redirect_port, tproxy_port, tun_name,
     tun_addr4, tun_addr6, tun_mtu, tcpip_stack,
     endpoint_independent_nat, udp_timeout;
 
 if (routing_mode === 'custom')
-	udp_timeout = uci.get(uciconfig, uciroutingsetting, 'udp_timeout');
+	udp_timeout = r('udp_timeout');
 else
-	udp_timeout = uci.get(uciconfig, 'infra', 'udp_timeout');
+	udp_timeout = i('udp_timeout');
 
 if (match(proxy_mode, /redirect/)) {
-	self_mark = uci.get(uciconfig, 'infra', 'self_mark') || '100';
-	redirect_port = uci.get(uciconfig, 'infra', 'redirect_port') || '5331';
+	self_mark = i('self_mark') || '100';
+	redirect_port = i('redirect_port') || '5331';
 }
 if (match(proxy_mode, /tproxy/))
 	if (main_udp_node !== 'nil' || routing_mode === 'custom')
-		tproxy_port = uci.get(uciconfig, 'infra', 'tproxy_port') || '5332';
+		tproxy_port = i('tproxy_port') || '5332';
 if (match(proxy_mode, /tun/)) {
-	tun_name = uci.get(uciconfig, uciinfra, 'tun_name') || 'singtun0';
-	tun_addr4 = uci.get(uciconfig, uciinfra, 'tun_addr4') || '172.19.0.1/30';
-	tun_addr6 = uci.get(uciconfig, uciinfra, 'tun_addr6') || 'fdfe:dcba:9876::1/126';
-	tun_mtu = uci.get(uciconfig, uciinfra, 'tun_mtu') || '9000';
+	tun_name = i('tun_name') || 'singtun0';
+	tun_addr4 = i('tun_addr4') || '172.19.0.1/30';
+	tun_addr6 = i('tun_addr6') || 'fdfe:dcba:9876::1/126';
+	tun_mtu = i('tun_mtu') || '9000';
 	tcpip_stack = 'system';
 	if (routing_mode === 'custom') {
-		tcpip_stack = uci.get(uciconfig, uciroutingsetting, 'tcpip_stack') || 'system';
-		endpoint_independent_nat = uci.get(uciconfig, uciroutingsetting, 'endpoint_independent_nat');
+		tcpip_stack = r('tcpip_stack') || 'system';
+		endpoint_independent_nat = r('endpoint_independent_nat');
 	}
 }
 
-const log_level = uci.get(uciconfig, ucimain, 'log_level') || 'warn';
+const log_level = g('log_level') || 'warn';
 /* UCI config end */
 
-const tun_dns_mode_raw = uci.get(uciconfig, ucimain, 'tun_dns_mode'),
-      tun_dns_address = uci.get(uciconfig, ucimain, 'tun_dns_address'),
-      udp_mapping_raw = uci.get(uciconfig, ucimain, 'udp_mapping'),
-      udp_filtering_raw = uci.get(uciconfig, ucimain, 'udp_filtering'),
-      udp_nat_max = strToInt(uci.get(uciconfig, ucimain, 'udp_nat_max'));
+const tun_dns_mode_raw = g('tun_dns_mode'),
+      tun_dns_address = g('tun_dns_address'),
+      udp_mapping_raw = g('udp_mapping'),
+      udp_filtering_raw = g('udp_filtering'),
+      udp_nat_max = strToInt(g('udp_nat_max'));
 
 const tun_dns_mode = (tun_dns_mode_raw === 'default') ? '' : tun_dns_mode_raw,
       udp_mapping = (udp_mapping_raw === 'default') ? '' : udp_mapping_raw,
@@ -420,6 +473,13 @@ function isDirectOutboundTag(tag) {
 }
 /* Config helper end */
 
+/* Injection point for architecture regression tests: at this line every
+   module-level option has been read and every builder is defined, but no
+   outbound has been emitted yet. A test may insert a hook here to compare the
+   builders above against another implementation, then exit. Keep this marker
+   when refactoring. */
+/* HP_TEST_HOOK */
+
 const config = {};
 
 /* Log */
@@ -529,7 +589,7 @@ if (!isEmpty(main_node)) {
 		});
 
 		/* sing-box 1.14: restore CN-IP fallback via evaluate/match_response (opt-in) */
-		if (uci.get(uciconfig, ucimain, 'cn_ip_fallback') === '1') {
+		if (g('cn_ip_fallback') === '1') {
 			push(config.dns.rules, {
 				action: 'evaluate',
 				server: 'main-dns',
@@ -545,7 +605,7 @@ if (!isEmpty(main_node)) {
 	}
 } else if (!isEmpty(default_outbound)) {
 	/* DNS servers */
-	uci.foreach(uciconfig, ucidnsserver, (cfg) => {
+	iter_sections(ucidnsserver, (cfg) => {
 		if (cfg.enabled !== '1')
 			return;
 
@@ -576,7 +636,7 @@ if (!isEmpty(main_node)) {
 	/* sing-box >= 1.14: legacy address-filter rules are auto-wrapped with an
 	   evaluate action; deprecated strategy/accept_empty fields are dropped. */
 	const builtin_dns_rules = [];
-	uci.foreach(uciconfig, ucidnsrule, (cfg) => {
+	iter_sections(ucidnsrule, (cfg) => {
 		if (cfg.enabled !== '1')
 			return;
 
@@ -758,8 +818,8 @@ if (!isEmpty(main_node)) {
 
 	if (main_node === 'urltest') {
 		const main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
-		const main_urltest_interval = uci.get(uciconfig, ucimain, 'main_urltest_interval');
-		const main_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_urltest_tolerance');
+		const main_urltest_interval = g('main_urltest_interval');
+		const main_urltest_tolerance = g('main_urltest_tolerance');
 
 		push(config.outbounds, {
 			type: 'urltest',
@@ -783,8 +843,8 @@ if (!isEmpty(main_node)) {
 
 	if (main_udp_node === 'urltest') {
 		const main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
-		const main_udp_urltest_interval = uci.get(uciconfig, ucimain, 'main_udp_urltest_interval');
-		const main_udp_urltest_tolerance = uci.get(uciconfig, ucimain, 'main_udp_urltest_tolerance');
+		const main_udp_urltest_interval = g('main_udp_urltest_interval');
+		const main_udp_urltest_tolerance = g('main_udp_urltest_tolerance');
 
 		push(config.outbounds, {
 			type: 'urltest',
@@ -822,7 +882,7 @@ if (!isEmpty(main_node)) {
 	let urltest_nodes = [],
 	    routing_nodes = [];
 
-	uci.foreach(uciconfig, uciroutingnode, (cfg) => {
+	iter_sections(uciroutingnode, (cfg) => {
 		if (cfg.enabled !== '1')
 			return;
 
@@ -1025,7 +1085,7 @@ if (!isEmpty(main_node)) {
 		server: get_resolver(default_outbound_dns)
 	};
 
-	if (uci.get(uciconfig, uciroutingsetting, 'find_neighbor') === '1')
+	if (r('find_neighbor') === '1')
 		config.route.find_neighbor = true;
 
 	if (domain_strategy)
@@ -1034,7 +1094,7 @@ if (!isEmpty(main_node)) {
 			strategy: domain_strategy
 		});
 
-	uci.foreach(uciconfig, uciroutingrule, (cfg) => {
+	iter_sections(uciroutingrule, (cfg) => {
 		if (cfg.enabled !== '1')
 			return null;
 
@@ -1120,7 +1180,7 @@ if (!isEmpty(main_node)) {
 	config.route.final = get_outbound(default_outbound);
 
 	/* Rule set */
-	uci.foreach(uciconfig, uciruleset, (cfg) => {
+	iter_sections(uciruleset, (cfg) => {
 		if (cfg.enabled !== '1')
 			return null;
 
@@ -1210,7 +1270,9 @@ config['$schema'] = 'https://sing-box.sagernet.org/schema.json';
 system('mkdir -p ' + RUN_DIR);
 const client_tmp = RUN_DIR + '/sing-box-c.json.tmp';
 writefile(client_tmp, sprintf('%.J\n', removeBlankAttrs(config)));
-if (system('/usr/bin/sing-box check --config ' + client_tmp) !== 0) {
+/* Resolve sing-box through PATH: it is /usr/bin/sing-box on OpenWrt but also
+   has to be found on a development host running the test suite. */
+if (system('sing-box check --config ' + client_tmp) !== 0) {
 	system('rm -f ' + client_tmp);
 	exit(1);
 }
