@@ -281,6 +281,30 @@ export const ConfigQuery = {
 		return null;
 	},
 
+	/* The flat UCI section is preserved verbatim in node.raw, so callers
+	 * that still want the legacy shape (Node.from_section() in
+	 * generate_outbound, the wireguard branch's generate_endpoint) can
+	 * pass it through directly. The Node object returned by node_by_id
+	 * has the canonical shape (sub-objects); this returns the raw form
+	 * for code that has not migrated to it yet. */
+	node_raw_by_id: (config, id) => {
+		for (let node in config.nodes)
+			if (node.id === id)
+				return node.raw;
+		return null;
+	},
+
+	/* Linear search by UCI section name (which is what the router still
+	 * uses in routing_node / dns_server / etc. references). Returns the
+	 * flat section dict so the existing uci.foreach-style consumers do
+	 * not have to change. */
+	find_by_name: (items, name) => {
+		for (let it in items)
+			if (it['.name'] === name)
+				return it;
+		return null;
+	},
+
 	node_ids: (config) => map(config.nodes, (node) => node.id),
 
 	/* Which node the routing modes route through. The default (`nil`) means
