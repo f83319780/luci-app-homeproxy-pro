@@ -10,7 +10,6 @@
 import { readfile, writefile } from 'fs';
 import { isnan } from 'math';
 import { connect } from 'ubus';
-import { cursor } from 'uci';
 
 import {
 	isEmpty, parseURL, strToBool, strToInt, strToTime,
@@ -26,72 +25,64 @@ const ubus = connect();
 
 /* const features = ubus.call('luci.homeproxy', 'singbox_get_features') || {}; */
 
-/* UCI config start
+/* Configuration entry point
  *
- * `HP_TEST_DOMAIN_MODEL=1` selects the new HomeProxyConfig-backed read path
- * (Loader.load()). Default is the legacy uci.cursor() path. Both must
- * produce byte-identical sing-box-c.json; tests/ucode/test_generator_
- * domain_model.sh runs both and diffs the result.
+ * The generator does not know UCI exists. Its only configuration source
+ * is the HomeProxyConfig returned by Loader.load(); every read goes
+ * through the dm.* shape and every section lookup goes through
+ * ConfigQuery. The Loader owns the only uci.cursor() in the package
+ * (see root/etc/homeproxy/scripts/config/loader.uc).
  *
- * On the production target, this flag is set by ucode's -D switch and the
- * tests stage a flipped copy of generate_client.uc with the value
- * substituted by sed, so the runtime environment does not need a `os`
- * module that is not always available on the testbed.
+ * `__LOADER_DIR__` is a testbed placeholder substituted by sed in
+ * tests/ucode/test_generators.sh to point at the staging dir. On a
+ * production target it stays as the string `'__LOADER_DIR__'`, which
+ * Loader.load() interprets as the relative /etc/config path.
  */
-/* __HP_TEST_DOMAIN_MODEL__ */
-const USE_DOMAIN_MODEL = (__HP_TEST_DOMAIN_MODEL__ === 1);
-const dm = USE_DOMAIN_MODEL ? Loader.load() : null;
+/* __LOADER_DIR__ */
+const dm = Loader.load('__LOADER_DIR__');
 
-const uci = cursor();
-
+/* Section-type constants. These are *type* names from the UCI schema,
+ * not cursor instances - the generator has no cursor. The Loader has
+ * already materialised everything by section type into the
+ * HomeProxyConfig; downstream code only needs the type names to
+ * address the right sub-object (e.g. iter_sections('dns_server', cb)
+ * walks dm.dns.servers). */
 const uciconfig = 'homeproxy';
-uci.load(uciconfig);
-
-const uciinfra = 'infra',
-      ucimain = 'config',
-      ucicontrol = 'control';
-
-const ucidnssetting = 'dns',
-      ucidnsserver = 'dns_server',
-      ucidnsrule = 'dns_rule';
-
-const uciroutingsetting = 'routing',
-      uciroutingnode = 'routing_node',
-      uciroutingrule = 'routing_rule';
-
+const uciinfra = 'infra';
+const ucimain = 'config';
+const ucicontrol = 'control';
+const ucidnssetting = 'dns';
+const ucidnsserver = 'dns_server';
+const ucidnsrule = 'dns_rule';
+const uciroutingsetting = 'routing';
+const uciroutingnode = 'routing_node';
+const uciroutingrule = 'routing_rule';
 const ucinode = 'node';
 const uciruleset = 'ruleset';
 
-/* Domain-model accessors. Each falls back to the legacy uci.get() when
- * HP_TEST_DOMAIN_MODEL is off. The settings sub-objects (dns / routing /
- * access_control) and general / infra are read through these so the two
- * paths can be diffed end to end. */
-function g(key) { return USE_DOMAIN_MODEL ? (dm.general && key in dm.general ? dm.general[key] : null) : uci.get(uciconfig, ucimain, key); }
-function i(key) { return USE_DOMAIN_MODEL ? (dm.infra   && key in dm.infra   ? dm.infra[key]   : null) : uci.get(uciconfig, uciinfra, key); }
-function d(key) { return USE_DOMAIN_MODEL ? ((dm.dns||{}).settings && key in dm.dns.settings ? dm.dns.settings[key] : null) : uci.get(uciconfig, ucidnssetting, key); }
-function r(key) { return USE_DOMAIN_MODEL ? ((dm.routing||{}).settings && key in dm.routing.settings ? dm.routing.settings[key] : null) : uci.get(uciconfig, uciroutingsetting, key); }
-function c(key) { return USE_DOMAIN_MODEL ? ((dm.access_control||{}).control && key in dm.access_control.control ? dm.access_control.control[key] : null) : uci.get(uciconfig, ucicontrol, key); }
-function s(key) { return USE_DOMAIN_MODEL ? ((dm.access_control||{}).subscription && key in dm.access_control.subscription ? dm.access_control.subscription[key] : null) : uci.get(uciconfig, 'subscription', key); }
+/* Domain-model accessors. Every read goes through the HomeProxyConfig
+ * shape; missing fields stay null and downstream code deals with that
+ * (removeBlankAttrs() drops nulls on the way out). */
+function g(key) { return (dm.general && key in dm.general) ? dm.general[key] : null; }
+function i(key) { return (dm.infra   && key in dm.infra)   ? dm.infra[key]   : null; }
+function d(key) { return ((dm.dns||{}).settings && key in dm.dns.settings) ? dm.dns.settings[key] : null; }
+function r(key) { return ((dm.routing||{}).settings && key in dm.routing.settings) ? dm.routing.settings[key] : null; }
+function c(key) { return ((dm.access_control||{}).control && key in dm.access_control.control) ? dm.access_control.control[key] : null; }
+function s(key) { return ((dm.access_control||{}).subscription && key in dm.access_control.subscription) ? dm.access_control.subscription[key] : null; }
 
-/* List-iteration helper. With HP_TEST_DOMAIN_MODEL=1 the source is the
- * HomeProxyConfig-loaded list; with 0 the source is the legacy uci.foreach
- * over the equivalent UCI section. Both produce the same callback per
- * section dict, so the rest of the generator does not have to care. */
+/* List-iteration helper. Reads the list the Loader already materialised;
+ * the source UCI section is no longer reachable here. */
 function iter_sections(section_name, cb) {
-	if (USE_DOMAIN_MODEL) {
-		const map = {
-			dns_server:   () => dm.dns.servers,
-			dns_rule:     () => dm.dns.rules,
-			routing_node: () => dm.routing.nodes,
-			routing_rule: () => dm.routing.rules,
-			ruleset:      () => dm.routing.rulesets,
-			server:       () => dm.server.inbounds
-		};
-		const list = map[section_name] ? map[section_name]() : [];
-		for (let i = 0; i < length(list); i++) cb(list[i]);
-	} else {
-		uci.foreach(uciconfig, section_name, cb);
-	}
+	const map = {
+		dns_server:   () => dm.dns.servers,
+		dns_rule:     () => dm.dns.rules,
+		routing_node: () => dm.routing.nodes,
+		routing_rule: () => dm.routing.rules,
+		ruleset:      () => dm.routing.rulesets,
+		server:       () => dm.server.inbounds
+	};
+	const list = map[section_name] ? map[section_name]() : [];
+	for (let i = 0; i < length(list); i++) cb(list[i]);
 }
 
 const routing_mode = g('routing_mode') || 'bypass_mainland_china';
@@ -330,13 +321,16 @@ function get_outbound(cfg) {
 		case 'direct-out':
 			return cfg;
 		default:
-			const node = uci.get(uciconfig, cfg, 'node');
-			if (isEmpty(node))
+			/* Resolve routing_node by section name. The HomeProxyConfig
+			 * Loader has already materialised dm.routing.nodes; each
+			 * entry is the UCI section dict with .name preserved. */
+			const rn = ConfigQuery.find_by_name(dm.routing.nodes, cfg);
+			if (!rn || isEmpty(rn.node))
 				die(sprintf("%s's node is missing, please check your configuration.", cfg));
-			else if (node === 'urltest')
+			else if (rn.node === 'urltest')
 				return 'cfg-' + cfg + '-out';
 			else
-				return 'cfg-' + node + '-out';
+				return 'cfg-' + rn.node + '-out';
 		}
 	}
 }
@@ -350,7 +344,8 @@ function get_direct_override(outbound_selector) {
 	case 'block-out':
 		return null;
 	default:
-		const node = uci.get(uciconfig, outbound_selector, 'node');
+		const rn = ConfigQuery.find_by_name(dm.routing.nodes, outbound_selector);
+		const node = rn && rn.node;
 		return (!isEmpty(node) && node !== 'urltest') ? (direct_overrides[node] || null) : null;
 	}
 }
@@ -384,8 +379,12 @@ function isDirectOutboundTag(tag) {
 	if (tag === 'direct-out')
 		return true;
 
-	const node_name = uci.get(uciconfig, tag, 'node') || tag;
-	const node = uci.get_all(uciconfig, node_name);
+	/* routing_node section by name -> its .node reference -> the underlying
+	 * node section. All three lookups go through ConfigQuery; the
+	 * generator never touches a cursor. */
+	const rn = ConfigQuery.find_by_name(dm.routing.nodes, tag);
+	const node_name = (rn && rn.node) || tag;
+	const node = ConfigQuery.node_raw_by_id(dm, node_name);
 	return !isEmpty(node) && node.type === 'direct';
 }
 /* Config helper end */
@@ -734,7 +733,7 @@ if (!isEmpty(main_node)) {
 	let urltest_nodes = [];
 
 	if (main_node === 'urltest') {
-		const main_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
+		const main_urltest_nodes = g('main_urltest_nodes') || [];
 		const main_urltest_interval = g('main_urltest_interval');
 		const main_urltest_tolerance = g('main_urltest_tolerance');
 
@@ -748,7 +747,7 @@ if (!isEmpty(main_node)) {
 		});
 		urltest_nodes = main_urltest_nodes;
 	} else {
-		const main_node_cfg = uci.get_all(uciconfig, main_node) || {};
+		const main_node_cfg = ConfigQuery.node_raw_by_id(dm, main_node) || {};
 		if (main_node_cfg.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(main_node_cfg));
 			config.endpoints[length(config.endpoints)-1].tag = 'main-out';
@@ -759,7 +758,7 @@ if (!isEmpty(main_node)) {
 	}
 
 	if (main_udp_node === 'urltest') {
-		const main_udp_urltest_nodes = filter(uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [], (k) => uci.get(uciconfig, k));
+		const main_udp_urltest_nodes = g('main_udp_urltest_nodes') || [];
 		const main_udp_urltest_interval = g('main_udp_urltest_interval');
 		const main_udp_urltest_tolerance = g('main_udp_urltest_tolerance');
 
@@ -773,7 +772,7 @@ if (!isEmpty(main_node)) {
 		});
 		urltest_nodes = [...urltest_nodes, ...filter(main_udp_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 	} else if (dedicated_udp_node) {
-		const main_udp_node_cfg = uci.get_all(uciconfig, main_udp_node) || {};
+		const main_udp_node_cfg = ConfigQuery.node_raw_by_id(dm, main_udp_node) || {};
 		if (main_udp_node_cfg.type === 'wireguard') {
 			push(config.endpoints, generate_endpoint(main_udp_node_cfg));
 			config.endpoints[length(config.endpoints)-1].tag = 'main-udp-out';
@@ -784,7 +783,7 @@ if (!isEmpty(main_node)) {
 	}
 
 	for (let i in urltest_nodes) {
-		const urltest_node = uci.get_all(uciconfig, i) || {};
+		const urltest_node = ConfigQuery.node_raw_by_id(dm, i) || {};
 		if (isEmpty(urltest_node))
 			continue;
 		if (urltest_node.type === 'wireguard') {
@@ -804,7 +803,8 @@ if (!isEmpty(main_node)) {
 			return;
 
 		if (cfg.node === 'urltest') {
-			const cfg_urltest_nodes = filter(cfg.urltest_nodes || [], (k) => uci.get(uciconfig, k));
+			const cfg_urltest_nodes = (cfg.urltest_nodes || [])
+				.filter((k) => ConfigQuery.node_by_id(dm, k));
 			push(config.outbounds, {
 				type: 'urltest',
 				tag: 'cfg-' + cfg['.name'] + '-out',
@@ -817,7 +817,7 @@ if (!isEmpty(main_node)) {
 			});
 			urltest_nodes = [...urltest_nodes, ...filter(cfg_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 		} else {
-			const outbound = uci.get_all(uciconfig, cfg.node) || {};
+			const outbound = ConfigQuery.node_raw_by_id(dm, cfg.node) || {};
 			if (outbound.type === 'wireguard') {
 				push(config.endpoints, generate_endpoint(outbound));
 				config.endpoints[length(config.endpoints)-1].bind_interface = cfg.bind_interface;
@@ -842,7 +842,7 @@ if (!isEmpty(main_node)) {
 	});
 
 	for (let i in filter(urltest_nodes, (l) => !~index(routing_nodes, l))) {
-		const urltest_node = uci.get_all(uciconfig, i) || {};
+		const urltest_node = ConfigQuery.node_raw_by_id(dm, i) || {};
 		if (urltest_node.type === 'wireguard')
 			push(config.endpoints, generate_endpoint(urltest_node));
 		else

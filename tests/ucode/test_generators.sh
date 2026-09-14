@@ -48,23 +48,19 @@ run_case() {
 	    -e "s#/sbin/validate_data#${VALIDATE_DATA}#" \
 	    "$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$dir/scripts/homeproxy.uc"
 
-	# Stage A1.1: generate_client.uc imports ./config/loader.uc + ./config/model.uc
-	# when HP_TEST_DOMAIN_MODEL=1. Mirror that layout in the staging dir.
+	# Stage the config/ subtree (Loader / Model / Adapter, imported via
+	# the relative path "./config/*.uc" in generate_client.uc).
 	mkdir -p "$dir/scripts/config"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$dir/scripts/config/"
 
-	# routing_mark is a Linux-only SO_MARK socket option in sing-box, so the
-	# redirect/tproxy modes cannot pass `sing-box check` on a development host
-	# (there is no portable equivalent: sing-box 1.14 has no set_mark route
-	# option). Neutralise the two emission sites in the *staged copy* only:
-	# null fields are dropped by removeBlankAttrs, so the generated JSON is the
-	# same on every platform. The production generator is not modified, and the
-	# custom-routing assertions do not depend on the mark.
-	sed_expr="s#const uci = cursor();#const uci = cursor('$dir/config');#"
-	sed_expr="$sed_expr;s#Loader.load()#Loader.load('$dir/config')#g"
-	sed_expr="$sed_expr;s#__HP_TEST_DOMAIN_MODEL__#${HP_TEST_DOMAIN_MODEL:-0}#"
+	# Substitute the testbed placeholder. The production generator has
+	# `Loader.load('__LOADER_DIR__')` - on a real device the string
+	# stays as `'__LOADER_DIR__'`, which Loader.load() interprets as
+	# the relative /etc/config path - but we want it to point at the
+	# staging dir on the dev host. The substitution is a normal sed.
+	sed_expr="s#'__LOADER_DIR__'#'$dir/config'#g"
 	if [ "$(uname -s)" = "Darwin" ]; then
 		sed_expr="$sed_expr;s#routing_mark: strToInt(self_mark)#routing_mark: null#"
 	fi
@@ -110,92 +106,5 @@ fi
 
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
-
-# Stage A2 dual-run equivalence check: the same fixture must produce
-# byte-identical sing-box-c.json regardless of the HP_TEST_DOMAIN_MODEL
-# flag. The flag flips generate_client.uc's UCI read path between
-# uci.get() (off, the production behaviour) and Loader.load() (on, the
-# HomeProxyConfig-backed path). Once every UCI read is behind a
-# dm_get() helper and the uci.get() fallback is removed, this block
-# becomes a no-op (set HP_SKIP_DUAL_RUN=1 to silence it locally).
-if [ "${HP_SKIP_DUAL_RUN:-0}" = "1" ]; then
-	exit $FAILED
-fi
-
-dual_run() {
-	# $1 = name, $2 = fixture, $3 = outfile, $4 = generator basename
-	local name="$1" fixture="$2" outfile="$3" generator="${4:-generate_client.uc}"
-	local base_dir="$WORK/$name"
-	local on_dir="$base_dir-on"
-
-	# Reuse the staging run_case() already built: that is the flag=0
-	# reference. Copy it aside, then flip the staged generator's
-	# __HP_TEST_DOMAIN_MODEL__ (or whatever it was substituted to by
-	# staging) to 1 and rerun.
-	#
-	# The base homeproxy.uc has HP_DIR/RUN_DIR rewritten to $base_dir,
-	# so the on_dir copy needs the same rewrite done again (to $on_dir)
-	# - otherwise the generator writes to $base_dir/run and the diff
-	# collapses to nothing.
-	rm -rf "$on_dir"
-	cp -R "$base_dir" "$on_dir"
-	sed -i.bak -e "s#^export const HP_DIR = '.*';#export const HP_DIR = '$on_dir';#" \
-	          -e "s#^export const RUN_DIR = '.*';#export const RUN_DIR = '$on_dir/run';#" \
-	          "$on_dir/scripts/homeproxy.uc"
-	rm -f "$on_dir/scripts/homeproxy.uc.bak"
-
-	if sed -i.bak 's#__HP_TEST_DOMAIN_MODEL__#1#;s#const USE_DOMAIN_MODEL = (0 === 1);#const USE_DOMAIN_MODEL = (1 === 1);#' "$on_dir/scripts/$generator"; then
-		rm -f "$on_dir/scripts/$generator.bak"
-	else
-		echo "FAIL: $name dual-run: sed could not flip the flag"
-		FAILED=1
-		return
-	fi
-	if ! ( cd "$on_dir/scripts" && ucode -L "$on_dir/scripts" "$generator" ); then
-		echo "FAIL: $name dual-run: flag=1 generator exited non-zero"
-		FAILED=1
-		return
-	fi
-
-	if cmp -s "$base_dir/run/$outfile" "$on_dir/run/$outfile"; then
-		echo "PASS: $name dual-run byte-identical ($(wc -c < "$base_dir/run/$outfile") bytes)"
-	else
-		# Some generator-emitted paths are built from HP_DIR / RUN_DIR
-		# which the dual-run sed already rewrote to $on_dir; map those
-		# back to $base_dir so we compare semantics, not testbench paths.
-		# Everything else must still be byte-identical.
-		if sed -i.bak -e "s#\"output\": \"$on_dir/run#\"output\": \"$base_dir/run#" \
-		            -e "s#\"data_directory\": \"$on_dir#\"data_directory\": \"$base_dir#" \
-		            -e "s#\"path\": \"$on_dir/resources/#\"path\": \"$base_dir/resources/#" \
-		            -e "s#\"path\": \"$on_dir/cache.db#\"path\": \"$base_dir/cache.db#" \
-		            "$on_dir/run/$outfile"; then
-			rm -f "$on_dir/run/$outfile.bak"
-		fi
-		if cmp -s "$base_dir/run/$outfile" "$on_dir/run/$outfile"; then
-			echo "PASS: $name dual-run byte-identical ($(wc -c < "$base_dir/run/$outfile") bytes) (HP_DIR / RUN_DIR paths normalised)"
-		else
-			echo "FAIL: $name dual-run diverges"
-			diff -u "$base_dir/run/$outfile" "$on_dir/run/$outfile" | head -40
-			FAILED=1
-		fi
-	fi
-}
-
-# The flag=0 path is exactly the run_case() output already on disk; that
-# is the reference. The flag=1 path is staged by dual_run(). Pin flag=0
-# explicitly so the comparison is well-defined (sed in macOS BSD sed
-# tolerates a non-empty extension; -i.bak works for both BSD and GNU).
-if sed -i.bak 's#__HP_TEST_DOMAIN_MODEL__#0#' "$WORK/client/scripts/generate_client.uc"; then
-	rm -f "$WORK/client/scripts/generate_client.uc.bak"
-fi
-if sed -i.bak 's#__HP_TEST_DOMAIN_MODEL__#0#' "$WORK/custom/scripts/generate_client.uc"; then
-	rm -f "$WORK/custom/scripts/generate_client.uc.bak"
-fi
-if sed -i.bak 's#__HP_TEST_DOMAIN_MODEL__#0#' "$WORK/server/scripts/generate_server.uc"; then
-	rm -f "$WORK/server/scripts/generate_server.uc.bak"
-fi
-dual_run client "$ROOT/tests/fixtures/generators/client.uci" sing-box-c.json generate_client.uc
-dual_run custom "$ROOT/tests/fixtures/generators/custom.uci" sing-box-c.json generate_client.uc
-dual_run server "$ROOT/tests/fixtures/generators/server.uci" sing-box-s.json generate_server.uc
 
 exit $FAILED

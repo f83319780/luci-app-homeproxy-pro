@@ -8,7 +8,6 @@
 'use strict';
 
 import { writefile } from 'fs';
-import { cursor } from 'uci';
 
 import {
 	strToBool, strToInt, strToTime,
@@ -17,45 +16,35 @@ import {
 
 import { Loader } from './config/loader.uc';
 
-/* UCI config start
+/* Configuration entry point
  *
- * `HP_TEST_DOMAIN_MODEL=1` selects the new HomeProxyConfig-backed read
- * path. Default is the legacy uci.cursor() path. Both must produce
- * byte-identical sing-box-s.json; tests/ucode/test_generators.sh's
- * dual-run block diffs the result for client+custom (server inherits
- * the same flag staging).
+ * The generator does not know UCI exists. Its only configuration source
+ * is the HomeProxyConfig returned by Loader.load(); every read goes
+ * through the dm.* shape. The Loader owns the only uci.cursor() in
+ * the package (see root/etc/homeproxy/scripts/config/loader.uc).
  *
- * `__HP_TEST_DOMAIN_MODEL__` is the testbed-injected flag, substituted
- * by sed at staging time. Production targets do not use this flag.
+ * `__LOADER_DIR__` is a testbed placeholder substituted by sed in
+ * tests/ucode/test_generators.sh to point at the staging dir. On a
+ * production target it stays as the string `'__LOADER_DIR__'`, which
+ * Loader.load() interprets as the relative /etc/config path.
  */
-/* __HP_TEST_DOMAIN_MODEL__ */
-const USE_DOMAIN_MODEL = (__HP_TEST_DOMAIN_MODEL__ === 1);
-const dm = USE_DOMAIN_MODEL ? Loader.load() : null;
-
-const uci = cursor();
-
-const uciconfig = 'homeproxy';
-uci.load(uciconfig);
+/* __LOADER_DIR__ */
+const dm = Loader.load('__LOADER_DIR__');
 
 const uciserver = 'server';
 
-/* Domain-model accessors (A2.6) */
+/* Domain-model accessors */
 function srv_settings(key) {
-	return USE_DOMAIN_MODEL && (dm.server || {}).settings && key in dm.server.settings
+	return (dm.server || {}).settings && key in dm.server.settings
 		? dm.server.settings[key]
-		: uci.get(uciconfig, uciserver, key);
+		: null;
 }
 function iter_servers(cb) {
-	if (USE_DOMAIN_MODEL) {
-		for (let i = 0; i < length((dm.server || {}).inbounds || []); i++)
-			cb((dm.server.inbounds || [])[i]);
-	} else {
-		uci.foreach(uciconfig, uciserver, cb);
-	}
+	for (let i = 0; i < length((dm.server || {}).inbounds || []); i++)
+		cb(dm.server.inbounds[i]);
 }
 
 const log_level = srv_settings('log_level') || 'warn';
-/* UCI config end */
 
 const config = {};
 
