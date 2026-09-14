@@ -30,6 +30,17 @@ VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
 sed -e "s#/sbin/validate_data#${VALIDATE_DATA}#" \
 	"$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/homeproxy.uc"
 
+# Stage A1.1: generate_client.uc's hook now imports Loader/OutboundFactory
+# from ./config/*.uc. Mirror that layout next to the staged generator so
+# the relative import resolves.
+mkdir -p "$WORK/config_module"
+cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$WORK/config_module/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$WORK/config_module/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$WORK/config_module/"
+ln -sfn "$WORK/config_module/loader.uc"  "$WORK/config/loader.uc"
+ln -sfn "$WORK/config_module/model.uc"   "$WORK/config/model.uc"
+ln -sfn "$WORK/config_module/adapter.uc" "$WORK/config/adapter.uc"
+
 cp "$DEMO/fixture.uci" "$WORK/config/homeproxy"
 
 # Hook: load the new architecture, diff it against the production builder
@@ -40,8 +51,13 @@ cp "$DEMO/fixture.uci" "$WORK/config/homeproxy"
 # Loader / Adapter are read from the production tree (Stage A1.1); demo/
 # keeps a verbatim reference copy under demo/architecture/ for reading.
 cat > "$WORK/hook.part" <<EOF
-/* Hook injected by tests/ucode/test_demo_architecture.sh - never shipped. */
-import { Loader } from '$ROOT/root/etc/homeproxy/scripts/config/loader.uc';
+/* Hook injected by tests/ucode/test_demo_architecture.sh - never shipped.
+ *
+ * 'Loader' is already imported at the top of generate_client.uc (Stage A1.1
+ * added it as a dependency for the HomeProxyConfig read path), so we alias
+ * the second copy here to avoid an "Import name already used" error. The
+ * production generator never executes the hook. */
+import { Loader as DemoLoader } from '$ROOT/root/etc/homeproxy/scripts/config/loader.uc';
 import { OutboundFactory } from '$ROOT/root/etc/homeproxy/scripts/config/adapter.uc';
 
 {
@@ -121,13 +137,19 @@ import { OutboundFactory } from '$ROOT/root/etc/homeproxy/scripts/config/adapter
 EOF
 
 # Copy of the generator with the fixture cursor redirected, and an explicit
-# hook command comment replaced by the comparison block. `/* HP_TEST_HOOK */`
-# is a documented injection point that sits after every module-level option has
+# hook command comment replaced by the comparison block. 'HP_TEST_HOOK' is
+# a documented injection point that sits after every module-level option has
 # been read and before any outbound is emitted, so the hook can call the real
 # builders and exit. The cursor rewrite anchor is the same one
 # tests/ucode/test_generators.sh depends on; that fragility is itself part of
 # the argument for the loader layer (see demo/architecture/README.md).
+#
+# Stage A1.1 sed: __HP_TEST_DOMAIN_MODEL__ is the testbed-injected flag
+# that controls whether the generator reads UCI directly (off) or via
+# Loader.load() (on). The hook is verified with both off, since
+# OutboundFactory is what we are testing here, not the Loader path.
 sed -e "s#const uci = cursor();#const uci = cursor('$WORK/config');#" \
+    -e "s#__HP_TEST_DOMAIN_MODEL__#0#g" \
     -e "/\\/\\* HP_TEST_HOOK \\*\\//r $WORK/hook.part" \
     -e "/\\/\\* HP_TEST_HOOK \\*\\//d" \
 	"$ROOT/root/etc/homeproxy/scripts/generate_client.uc" > "$WORK/generate_client.uc"

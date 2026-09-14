@@ -15,7 +15,23 @@ import {
 	removeBlankAttrs, buildTLSObject, buildTransportObject, HP_DIR, RUN_DIR
 } from 'homeproxy';
 
-/* UCI config start */
+import { Loader } from './config/loader.uc';
+
+/* UCI config start
+ *
+ * `HP_TEST_DOMAIN_MODEL=1` selects the new HomeProxyConfig-backed read
+ * path. Default is the legacy uci.cursor() path. Both must produce
+ * byte-identical sing-box-s.json; tests/ucode/test_generators.sh's
+ * dual-run block diffs the result for client+custom (server inherits
+ * the same flag staging).
+ *
+ * `__HP_TEST_DOMAIN_MODEL__` is the testbed-injected flag, substituted
+ * by sed at staging time. Production targets do not use this flag.
+ */
+/* __HP_TEST_DOMAIN_MODEL__ */
+const USE_DOMAIN_MODEL = (__HP_TEST_DOMAIN_MODEL__ === 1);
+const dm = USE_DOMAIN_MODEL ? Loader.load() : null;
+
 const uci = cursor();
 
 const uciconfig = 'homeproxy';
@@ -23,7 +39,22 @@ uci.load(uciconfig);
 
 const uciserver = 'server';
 
-const log_level = uci.get(uciconfig, uciserver, 'log_level') || 'warn';
+/* Domain-model accessors (A2.6) */
+function srv_settings(key) {
+	return USE_DOMAIN_MODEL && (dm.server || {}).settings && key in dm.server.settings
+		? dm.server.settings[key]
+		: uci.get(uciconfig, uciserver, key);
+}
+function iter_servers(cb) {
+	if (USE_DOMAIN_MODEL) {
+		for (let i = 0; i < length((dm.server || {}).inbounds || []); i++)
+			cb((dm.server.inbounds || [])[i]);
+	} else {
+		uci.foreach(uciconfig, uciserver, cb);
+	}
+}
+
+const log_level = srv_settings('log_level') || 'warn';
 /* UCI config end */
 
 const config = {};
@@ -38,7 +69,7 @@ config.log = {
 
 config.inbounds = [];
 
-uci.foreach(uciconfig, uciserver, (cfg) => {
+iter_servers((cfg) => {
 	if (cfg.enabled !== '1')
 		return;
 
@@ -145,7 +176,9 @@ config['$schema'] = 'https://sing-box.sagernet.org/schema.json';
 system('mkdir -p ' + RUN_DIR);
 const server_tmp = RUN_DIR + '/sing-box-s.json.tmp';
 writefile(server_tmp, sprintf('%.J\n', removeBlankAttrs(config)));
-if (system('/usr/bin/sing-box check --config ' + server_tmp) !== 0) {
+/* Resolve sing-box through PATH: it is /usr/bin/sing-box on OpenWrt but also
+   has to be found on a development host running the test suite. */
+if (system('sing-box check --config ' + server_tmp) !== 0) {
 	system('rm -f ' + server_tmp);
 	exit(1);
 }

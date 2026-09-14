@@ -305,9 +305,29 @@ export const Loader = {
 			   the Loader and again in the Adapter produced two different
 			   defaults for absent / garbage values during A1.1. */
 			ipv6_support: opt(uci, 'main', 'ipv6_support'),
-			udp_timeout: opt(uci, 'main', 'udp_timeout') || opt(uci, 'infra', 'udp_timeout')
+
+			/* A2.1: scalar + list fields on the `config` section. */
+			dns_server: opt(uci, 'main', 'dns_server'),
+			china_dns_server: opt(uci, 'main', 'china_dns_server'),
+			log_level: opt(uci, 'main', 'log_level') || 'warn',
+			tun_dns_mode: opt(uci, 'main', 'tun_dns_mode'),
+			tun_dns_address: opt(uci, 'main', 'tun_dns_address'),
+			udp_mapping: opt(uci, 'main', 'udp_mapping'),
+			udp_filtering: opt(uci, 'main', 'udp_filtering'),
+			udp_nat_max: opt(uci, 'main', 'udp_nat_max'),
+			cn_ip_fallback: opt(uci, 'main', 'cn_ip_fallback'),
+			main_urltest_nodes: opt(uci, 'main', 'main_urltest_nodes') || [],
+			main_urltest_interval: opt(uci, 'main', 'main_urltest_interval'),
+			main_urltest_tolerance: opt(uci, 'main', 'main_urltest_tolerance'),
+			main_udp_urltest_nodes: opt(uci, 'main', 'main_udp_urltest_nodes') || [],
+			main_udp_urltest_interval: opt(uci, 'main', 'main_udp_urltest_interval'),
+			main_udp_urltest_tolerance: opt(uci, 'main', 'main_udp_urltest_tolerance')
 		};
 
+		/* udp_timeout lives on two UCI sections: routing.udp_timeout
+		 * (custom mode) and infra.udp_timeout (everything else). Mirror
+		 * that split here so A2 can read either path without falling back
+		 * to uci.get(). */
 		config.infra = load_settings(uci, SECTION.infra, [
 			'common_port', 'mixed_port', 'redirect_port', 'tproxy_port',
 			'dns_port', 'dns_redirect',
