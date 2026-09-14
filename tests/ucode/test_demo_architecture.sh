@@ -18,7 +18,7 @@ ROOT="${1:-.}"
 WORK="${2:-/tmp/hp-demo-test}"
 
 ROOT="$(cd "$ROOT" && pwd)"
-DEMO="$ROOT/demo/architecture"
+DEMO="$ROOT/tests/fixtures/architecture"
 FAILED=0
 
 rm -rf "$WORK"
