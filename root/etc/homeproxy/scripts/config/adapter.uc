@@ -132,6 +132,84 @@ const OPTION_FIELDS = {
 		obfs_mode: (node) => node.protocol_options.obfs_mode || null,
 		obfs_host: (node) => node.protocol_options.obfs_host || null,
 		mode: (node) => node.protocol_options.mode || null
+	},
+	/* A4.1: shadowsocks. SIP002 plugin support is emitted only when both
+	 * plugin and plugin_opts are present, matching the generator's ternary
+	 * that emits `plugin: ...` unconditionally and lets removeBlankAttrs
+	 * drop empties. `udp_over_tcp` mirrors the vless shape. */
+	shadowsocks: {
+		plugin: (node) => node.protocol_options.plugin || null,
+		plugin_opts: (node) => node.protocol_options.plugin_opts || null,
+		udp_over_tcp: (node) => (node.protocol_options.udp_over_tcp === '1') ? {
+			enabled: true,
+			version: strToInt(node.protocol_options.udp_over_tcp_version)
+		} : null
+	},
+	/* A4.2: anytls idle session tuning (sing-box 1.14 lets the client probe
+	 * upstream sessions and proactively close stuck ones). */
+	anytls: {
+		idle_session_check_interval: (node) => strToTime(node.protocol_options.idle_session_check_interval),
+		idle_session_timeout: (node) => strToTime(node.protocol_options.idle_session_timeout),
+		min_idle_session: (node) => strToInt(node.protocol_options.min_idle_session)
+	},
+	/* A4.3: http - no protocol-specific options; transport / tls / multiplex
+	 * are shared. */
+	http: {},
+	/* A4.4: socks */
+	socks: {
+		version: (node) => node.protocol_options.version
+	},
+	/* A4.5: tuic */
+	tuic: {
+		congestion_control: (node) => node.protocol_options.congestion_control,
+		udp_relay_mode: (node) => node.protocol_options.udp_relay_mode,
+		udp_over_stream: (node) => strToBool(node.protocol_options.udp_over_stream),
+		zero_rtt_handshake: (node) => strToBool(node.protocol_options.zero_rtt_handshake),
+		heartbeat: (node) => strToTime(node.protocol_options.heartbeat)
+	},
+	/* A4.6: trojan - no protocol-specific options. */
+	trojan: {},
+	/* A4.7: shadowtls */
+	shadowtls: {
+		version: (node) => strToInt(node.protocol_options.version)
+	},
+	/* A4.8: hysteria (v1). The generator emits two fields: `auth` when the
+	 * payload is base64, `auth_str` when it is a string. Node.validate()
+	 * only catches the obvious case; the conditional keeps the table-driven
+	 * shape. */
+	hysteria: {
+		auth: (node) => (node.protocol_options.auth_type === 'base64') ? node.protocol_options.auth_payload : null,
+		auth_str: (node) => (node.protocol_options.auth_type === 'string') ? node.protocol_options.auth_payload : null,
+		up_mbps: (node) => strToInt(node.protocol_options.up_mbps),
+		down_mbps: (node) => strToInt(node.protocol_options.down_mbps),
+		hop_interval: (node) => strToTime(node.protocol_options.hop_interval),
+		obfs: (node) => node.protocol_options.obfs_type ? {
+			type: node.protocol_options.obfs_type,
+			password: node.protocol_options.obfs_password
+		} : null
+	},
+	/* A4.9: hysteria2 - extends hysteria with hop_interval_max / hopping_port
+	 * / bbr_profile / disable_chrome_parrot. The obfs shape is the same. */
+	hysteria2: {
+		auth: (node) => (node.protocol_options.auth_type === 'base64') ? node.protocol_options.auth_payload : null,
+		auth_str: (node) => (node.protocol_options.auth_type === 'string') ? node.protocol_options.auth_payload : null,
+		up_mbps: (node) => strToInt(node.protocol_options.up_mbps),
+		down_mbps: (node) => strToInt(node.protocol_options.down_mbps),
+		hop_interval: (node) => strToTime(node.protocol_options.hop_interval),
+		hop_interval_max: (node) => strToTime(node.protocol_options.hop_interval_max),
+		hopping_port: (node) => node.protocol_options.hopping_port,
+		obfs: (node) => node.protocol_options.obfs_type ? {
+			type: node.protocol_options.obfs_type,
+			password: node.protocol_options.obfs_password
+		} : null,
+		bbr_profile: (node) => node.protocol_options.bbr_profile || null,
+		disable_chrome_parrot: (node) => (node.protocol_options.disable_chrome_parrot === '1') ? true : null
+	},
+	/* A4.10: vmess */
+	vmess: {
+		alter_id: (node) => strToInt(node.protocol_options.alter_id),
+		security: (node) => node.protocol_options.security,
+		global_padding: (node) => strToBool(node.protocol_options.global_padding)
 	}
 };
 

@@ -164,6 +164,71 @@ const PROTOCOL_OPTIONS = {
 		obfs_mode: 'snell_obfs_mode',
 		obfs_host: 'snell_obfs_host',
 		mode: 'snell_mode'
+	},
+	/* A4.1: shadowsocks uses shadowsocks_* UCI option names (matching the
+	 * generator's pre-refactor reads). */
+	shadowsocks: {
+		plugin: 'shadowsocks_plugin',
+		plugin_opts: 'shadowsocks_plugin_opts',
+		udp_over_tcp: 'udp_over_tcp',
+		udp_over_tcp_version: 'udp_over_tcp_version'
+	},
+	/* A4.2: anytls idle session tuning. */
+	anytls: {
+		idle_session_check_interval: 'anytls_idle_session_check_interval',
+		idle_session_timeout: 'anytls_idle_session_timeout',
+		min_idle_session: 'anytls_min_idle_session'
+	},
+	/* A4.3: http */
+	http: {},
+	/* A4.4: socks */
+	socks: {
+		version: 'socks_version'
+	},
+	/* A4.5: tuic */
+	tuic: {
+		congestion_control: 'tuic_congestion_control',
+		udp_relay_mode: 'tuic_udp_relay_mode',
+		udp_over_stream: 'tuic_udp_over_stream',
+		zero_rtt_handshake: 'tuic_enable_zero_rtt',
+		heartbeat: 'tuic_heartbeat'
+	},
+	/* A4.6: trojan / vmess share no protocol-specific UCI keys beyond
+	 * what the shared TLS/transport/multiplex builders already read. */
+	trojan: {},
+	/* A4.7: shadowtls */
+	shadowtls: {
+		version: 'shadowtls_version'
+	},
+	/* A4.8 / A4.9: hysteria + hysteria2 */
+	hysteria: {
+		auth_type: 'hysteria_auth_type',
+		auth_payload: 'hysteria_auth_payload',
+		up_mbps: 'hysteria_up_mbps',
+		down_mbps: 'hysteria_down_mbps',
+		obfs_type: 'hysteria_obfs_type',
+		obfs_password: 'hysteria_obfs_password',
+		hopping_port: 'hysteria_hopping_port',
+		hop_interval: 'hysteria_hop_interval'
+	},
+	hysteria2: {
+		obfs_type: 'hysteria_obfs_type',
+		obfs_password: 'hysteria_obfs_password',
+		up_mbps: 'hysteria_up_mbps',
+		down_mbps: 'hysteria_down_mbps',
+		hop_interval: 'hysteria_hop_interval',
+		hop_interval_max: 'hysteria_hop_interval_max',
+		hopping_port: 'hysteria_hopping_port',
+		auth_payload: 'hysteria_auth_payload',
+		bbr_profile: 'hysteria_bbr_profile',
+		disable_chrome_parrot: 'hysteria_disable_chrome_parrot'
+	},
+	/* A4.10: vmess */
+	vmess: {
+		alter_id: 'vmess_alterid',
+		security: 'vmess_encrypt',
+		global_padding: 'vmess_global_padding',
+		auth_payload: 'vmess_auth_payload'
 	}
 };
 
