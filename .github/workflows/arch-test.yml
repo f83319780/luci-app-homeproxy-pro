@@ -80,12 +80,11 @@ jobs:
       - name: Run ucode test suite
         env:
           # PATH must put the toolchain bin first so the matching sing-box
-          # wins over any /usr/local/bin stray. HP_VALIDATE_DATA points at
-          # tests/toolchain/validate-data.sh, the off-target shim for
-          # /sbin/validate_data (only present on OpenWrt). UCODE_MODULES_DIR
-          # makes 'import * as m from "uci"' / "ubus" / "digest" / "lucihttp"
-          # resolve against the toolchain prefix.
-          PATH: ${{ env.HOME }}/.local/ucode-testbed/bin:$PATH
+          # wins over any /usr/local/bin stray. $HOME is a shell variable
+          # here, not the env context - env.HOME is empty in GitHub Actions
+          # because HOME is not part of the runner's declared env, so the
+          # PATH has to be assembled in the shell where $HOME expands.
           HP_VALIDATE_DATA: ${{ github.workspace }}/tests/toolchain/validate-data.sh
         run: |
+          export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
           sh tests/ucode/run.sh .
