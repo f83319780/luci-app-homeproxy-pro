@@ -58,12 +58,15 @@ skip_reason() {
 }
 
 echo "== ucode syntax check =="
-for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc "$ROOT"/root/usr/share/rpcd/ucode/*; do
+for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc \
+           "$ROOT"/root/etc/homeproxy/scripts/subscription/*.uc \
+           "$ROOT"/root/etc/homeproxy/scripts/config/*.uc \
+           "$ROOT"/root/usr/share/rpcd/ucode/*; do
 	[ -f "$file" ] || continue
 	# Modules (with export statements) cannot be compiled as a program; they
 	# are loaded through `import` below instead.
 	case "$file" in
-	*homeproxy.uc|*parse_uri.uc) continue ;;
+	*homeproxy.uc|*parse_uri.uc|*/subscription/*.uc|*/config/*.uc) continue ;;
 	esac
 	if is_target_only "$file" && [ "$ON_TARGET" -eq 0 ]; then
 		echo "SKIP: ${file#"$ROOT"/} ($(skip_reason "$file"), needs a target)"
@@ -76,8 +79,21 @@ for file in "$ROOT"/root/etc/homeproxy/scripts/*.uc "$ROOT"/root/usr/share/rpcd/
 		FAILED=1
 	fi
 done
+# Modules are syntax-checked by loading them through `import`. The
+# -e expression is a no-op program; the import itself is what we
+# want to validate. Subscriptions and config modules live in
+# subdirectories, so they need an explicit `.uc` path that ucode's
+# resolver can follow (bare `subscription/filter` is not searched
+# in the -L tree, only top-level module names are).
 for module in homeproxy parse_uri; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "/tmp/hp-ucode-syntax.err"; then
+		echo "FAIL: module $module"
+		head -8 "/tmp/hp-ucode-syntax.err"
+		FAILED=1
+	fi
+done
+for module in subscription/filter subscription/decoder; do
+	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$ROOT/root/etc/homeproxy/scripts/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
 		FAILED=1
@@ -107,6 +123,35 @@ if ( cd "$WORK/parse_uri" && ucode test_parse_uri.uc ); then
 	echo "PASS: parse_uri unit tests"
 else
 	echo "FAIL: parse_uri unit tests"
+	FAILED=1
+fi
+
+echo "== subscription filter unit tests =="
+# The production modules live at root/etc/homeproxy/scripts/subscription/
+# *.uc and are imported by update_subscriptions.uc with a relative path.
+# For the unit tests we want the modules on a flat search path so their
+# `from 'homeproxy'` import resolves to the mock, so we stage them at
+# the work dir top level (drop the subscription/ prefix) and let the
+# test files import them as bare names.
+rm -rf "$WORK/subscription"
+mkdir -p "$WORK/subscription"
+cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/subscription/"
+cp "$ROOT/root/etc/homeproxy/scripts/subscription/filter.uc" "$WORK/subscription/filter.uc"
+cp "$ROOT/root/etc/homeproxy/scripts/subscription/decoder.uc" "$WORK/subscription/decoder.uc"
+cp "$ROOT/tests/ucode/test_subscription_filter.uc" "$WORK/subscription/"
+cp "$ROOT/tests/ucode/test_subscription_decoder.uc" "$WORK/subscription/"
+
+if ( cd "$WORK/subscription" && ucode -L "$WORK/subscription" test_subscription_filter.uc ); then
+	echo "PASS: subscription filter unit tests"
+else
+	echo "FAIL: subscription filter unit tests"
+	FAILED=1
+fi
+
+if ( cd "$WORK/subscription" && ucode -L "$WORK/subscription" test_subscription_decoder.uc ); then
+	echo "PASS: subscription decoder unit tests"
+else
+	echo "FAIL: subscription decoder unit tests"
 	FAILED=1
 fi
 

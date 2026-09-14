@@ -15,10 +15,13 @@ import { cursor } from 'uci';
 import { init_action } from 'luci.sys';
 
 import {
-	wGETVerbose, decodeBase64Str, getTime, isEmpty, HP_DIR, RUN_DIR
+	wGETVerbose, getTime, isEmpty, HP_DIR, RUN_DIR
 } from 'homeproxy';
 
 import { parse_uri } from 'parse_uri';
+
+import { check as filter_check, apply_policy } from './subscription/filter.uc';
+import { decode as decode_subscription } from './subscription/decoder.uc';
 
 /* UCI config start */
 const uci = cursor();
@@ -47,27 +50,10 @@ if (routing_mode !== 'custom') {
 /* UCI config end */
 
 /* String helper start */
-function filter_check(name) {
-	if (isEmpty(name) || filter_mode === 'disabled' || isEmpty(filter_keywords))
-		return false;
-
-	let ret = false;
-	for (let i in filter_keywords) {
-		let patten;
-		try {
-			patten = regexp(i);
-		} catch(e) {
-			log(sprintf('Skipping invalid filter keyword regex: %s.', i));
-			continue;
-		}
-		if (patten && match(name, patten))
-			ret = true;
-	}
-	if (filter_mode === 'whitelist')
-		ret = !ret;
-
-	return ret;
-}
+/* B1.1: filter_check() moved to subscription/filter.uc; the
+ * pure logic now takes mode + keywords + log as arguments so the
+ * filter is testable without UCI access. The orchestrator keeps
+ * the same call site shape - just adds the explicit args. */
 /* String helper end */
 
 /* Common var start */
@@ -107,20 +93,11 @@ function main() {
 			log(sprintf('Failed to fetch resources from %s: %s', url, fetched.error || 'empty response'));
 			continue;
 		}
-		const res = fetched.content;
 
-		let nodes;
-		try {
-			nodes = json(res).servers || json(res);
-
-			/* Shadowsocks SIP008 format */
-			if (nodes[0].server && nodes[0].method)
-				map(nodes, (_, i) => nodes[i].nodetype = 'sip008');
-		} catch(e) {
-			log(sprintf('JSON parse failed for %s, trying base64: %s', url, e.message));
-			nodes = decodeBase64Str(res);
-			nodes = nodes ? split(trim(nodes), '\n') : [];
-		}
+		/* B1.1: JSON / SIP008 / base64 handling lives in
+		 * subscription/decoder.uc. Same three shapes, same fallback
+		 * order, same log message on the JSON-failure branch. */
+		const nodes = decode_subscription(fetched.content, log, url);
 
 		let count = 0;
 		for (let node in nodes) {
@@ -136,15 +113,15 @@ function main() {
 			      nameHash = md5(groupHash + label);
 			config.label = label;
 
-			if (filter_check(config.label))
+			if (filter_check(config.label, filter_mode, filter_keywords, log))
 				log(sprintf('Skipping blacklist node: %s.', config.label));
 			else if (node_cache[groupHash][confHash] || node_cache[groupHash][nameHash])
 				log(sprintf('Skipping duplicate node: %s.', config.label));
 			else {
-				if (config.tls === '1' && allow_insecure === '1')
-					config.tls_insecure = '1';
-				if (config.type in ['vless', 'vmess'])
-					config.packet_encoding = packet_encoding;
+				/* B1.1: tls_insecure override and vless/vmess
+				 * packet_encoding injection moved to
+				 * subscription/filter.uc. */
+				apply_policy(config, { allow_insecure, packet_encoding });
 
 				config.grouphash = groupHash;
 				push(node_result, []);
