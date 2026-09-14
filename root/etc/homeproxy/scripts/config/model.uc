@@ -6,10 +6,6 @@
  *
  *     UCI -> Config Loader -> HomeProxyConfig / Node -> Adapter -> sing-box
  *
- * Promoted from demo/architecture/model.uc. The copy in demo/architecture/
- * is the runnable reference. The two copies must stay in lockstep - changes
- * here need the same change in demo/architecture/model.uc, and vice versa.
- *
  * The point of this layer is that nothing below it may touch UCI, and nothing
  * in it may know about sing-box JSON. A Node therefore describes *what the
  * user configured*, not what sing-box wants: no `outbound`, no `type` field
@@ -51,7 +47,12 @@ export const CREDENTIALS = {
 	socks:   { username: 'username', password: 'password' },
 	http:    { username: 'username', password: 'password' },
 	snell:   { psk: 'password', userkey: 'snell_userkey' },
-	ssh:     { user: 'username', private_key: 'private_key' },
+	/* The node form writes ssh_priv_key / ssh_priv_key_pp, not the bare
+	 * private_key this table used to claim, so the key the user pasted was
+	 * never read.  (There was also no PROTOCOL_OPTIONS row for ssh, so the
+	 * rest of the SSH options were dropped as well.) */
+	ssh:     { user: 'username', password: 'password',
+	           private_key: 'ssh_priv_key', private_key_passphrase: 'ssh_priv_key_pp' },
 	anytls:  { password: 'password' },
 	shadowtls: { password: 'password' },
 	direct:  {}

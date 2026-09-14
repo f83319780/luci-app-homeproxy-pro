@@ -340,14 +340,6 @@ return view.extend({
 		o.value('http', _('http'));
 		o.depends({'type': 'snell', 'snell_version': '5'});
 		o.modalonly = true;
-
-		o = s.option(form.ListValue, 'snell_mode', _('Traffic shaping mode'),
-			_('v6 only.'));
-		o.value('', _('default'));
-		o.value('unshaped', _('unshaped'));
-		o.value('unsafe-raw', _('unsafe-raw'));
-		o.depends({'type': 'snell', 'snell_version': '6'});
-		o.modalonly = true;
 		/* Snell config end */
 
 		/* Shadowsocks config */

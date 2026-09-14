@@ -6,22 +6,14 @@
  *
  *     UCI -> Config Loader -> HomeProxyConfig
  *
- * This file originated as demo/architecture/loader.uc and was promoted into
- * the production tree. The copy in demo/architecture/ is kept as a runnable
- * reference (it powers demo/architecture/demo.uc and is exercised by
- * tests/ucode/test_demo_architecture.sh); both copies import the model from
- * a sibling file, so changing model.uc here changes it for the demo too.
+ * This file originated as the demo loader and was promoted into the
+ * production tree; the demo copy is gone, so this is the only one.
  *
- * What is wired in as of this commit:
+ * What this layer does:
  *   - owns the only `uci.cursor()` in the client configuration path
  *   - reads general + infra + nodes + dns + routing + access_control + server
  *   - never emits sing-box JSON
  *   - never mutates/commits UCI
- *
- * What is NOT yet wired in:
- *   - endpoints: derived at the application/service layer (it is what
- *     `main_node` / `routing.default_outbound` resolve to, not a UCI
- *     section). Stays an empty `{}` placeholder until A3.
  */
 
 'use strict';
@@ -165,22 +157,26 @@ function load_common(get) {
 /* Maps canonical option name -> UCI option name. Anything not listed is not
  * part of the domain contract for that protocol. `raw` still carries the
  * unlisted tail, so the migration can stay incremental without losing data. */
-const PROTOCOL_OPTIONS = {
+export const PROTOCOL_OPTIONS = {
 	vless: {
 		flow: 'vless_flow',
-		packet_encoding: 'packet_encoding',
-		udp_over_tcp_version: 'udp_over_tcp_version',
-		udp_over_tcp: 'udp_over_tcp'
+		packet_encoding: 'packet_encoding'
 		/* tcp_fast_open / tcp_multi_path / udp_fragment used to live here
 		 * but they are common to every protocol, not vless-specific; they
-		 * are now in node.common via load_common() above. */
+		 * are now in node.common via load_common() above.
+		 *
+		 * udp_over_tcp used to be here too.  It is a shadowsocks/socks
+		 * option: sing-box 1.14 rejects it on a vless outbound, so mapping
+		 * it here turned a stale UCI option into an unusable config. */
 	},
 	snell: {
 		version: 'snell_version',
 		reuse: 'snell_reuse',
 		obfs_mode: 'snell_obfs_mode',
-		obfs_host: 'snell_obfs_host',
-		mode: 'snell_mode'
+		obfs_host: 'snell_obfs_host'
+		/* snell_mode is not mapped: sing-box 1.14 has no `mode` field on a
+		 * snell outbound (or inbound).  It was v6-only in the form, and v6
+		 * is not supported by the target sing-box. */
 	},
 	/* A4.1: shadowsocks uses shadowsocks_* UCI option names (matching the
 	 * generator's pre-refactor reads). */
@@ -200,7 +196,9 @@ const PROTOCOL_OPTIONS = {
 	http: {},
 	/* A4.4: socks */
 	socks: {
-		version: 'socks_version'
+		version: 'socks_version',
+		udp_over_tcp: 'udp_over_tcp',
+		udp_over_tcp_version: 'udp_over_tcp_version'
 	},
 	/* A4.5: tuic */
 	tuic: {
@@ -217,13 +215,18 @@ const PROTOCOL_OPTIONS = {
 	shadowtls: {
 		version: 'shadowtls_version'
 	},
-	/* A4.8 / A4.9: hysteria + hysteria2 */
+	/* A4.8 / A4.9: hysteria + hysteria2.
+	 *
+	 * hysteria (v1) has no obfs *type*: its obfs is the plain password
+	 * string, and the node form only offers hysteria_obfs_type for
+	 * hysteria2.  Mapping the type here turned a stale option (left behind
+	 * by switching a node from hysteria2 to hysteria) into an
+	 * `obfs: {type, password}` object that sing-box rejects. */
 	hysteria: {
 		auth_type: 'hysteria_auth_type',
 		auth_payload: 'hysteria_auth_payload',
 		up_mbps: 'hysteria_up_mbps',
 		down_mbps: 'hysteria_down_mbps',
-		obfs_type: 'hysteria_obfs_type',
 		obfs_password: 'hysteria_obfs_password',
 		hopping_port: 'hysteria_hopping_port',
 		hop_interval: 'hysteria_hop_interval'
@@ -246,6 +249,15 @@ const PROTOCOL_OPTIONS = {
 		security: 'vmess_encrypt',
 		global_padding: 'vmess_global_padding',
 		auth_payload: 'vmess_auth_payload'
+	},
+	/* SSH: selectable in the node form since the beginning (and accepted by
+	 * sing-box), but there was no row here, so every ssh_* option the form
+	 * writes was invisible to the model.  The key material itself comes
+	 * from CREDENTIALS.ssh. */
+	ssh: {
+		client_version: 'ssh_client_version',
+		host_key: 'ssh_host_key',
+		host_key_algorithms: 'ssh_host_key_algo'
 	},
 	/* WireGuard is emitted as a sing-box *endpoint*, not an outbound, and
 	 * generate_endpoint() is its only consumer.  The keys still belong in

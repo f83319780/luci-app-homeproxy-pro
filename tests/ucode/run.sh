@@ -104,6 +104,24 @@ done
 echo "== fw4 chain/set inventory =="
 sh "$ROOT/tests/ucode/test_fw4_names.sh" "$ROOT" || FAILED=1
 
+echo "== shell syntax check =="
+# init.d/homeproxy and the runtime helpers are shell, so no ucode check covers
+# them.  They decide whether a bad configuration can leave the router without
+# a service, so a syntax error there is as bad as one in the generators.
+for file in "$ROOT"/root/etc/init.d/* \
+            "$ROOT"/root/etc/homeproxy/scripts/*.sh \
+            "$ROOT"/root/etc/homeproxy/scripts/runtime/*.sh; do
+	[ -f "$file" ] || continue
+	if ! sh -n "$file" 2> "/tmp/hp-shell-syntax.err"; then
+		echo "FAIL: ${file#"$ROOT"/}"
+		head -5 "/tmp/hp-shell-syntax.err"
+		FAILED=1
+	fi
+done
+
+echo "== runtime configuration transaction =="
+sh "$ROOT/tests/runtime/test_config_transaction.sh" "$ROOT" || FAILED=1
+
 echo "== firewall template rendering =="
 # utpl ships with ucode (it is a symlink to the same binary), so this check
 # runs off-target too.  A toolchain without it is incomplete, not a reason to
@@ -193,8 +211,11 @@ fi
 echo "== generator regression tests =="
 sh "$ROOT/tests/ucode/test_generators.sh" "$ROOT" "$WORK/generators" || FAILED=1
 
-echo "== architecture demo equivalence =="
-sh "$ROOT/tests/ucode/test_demo_architecture.sh" "$ROOT" "$WORK/demo" || FAILED=1
+echo "== golden protocol snapshot =="
+sh "$ROOT/tests/ucode/test_golden_outbounds.sh" "$ROOT" "$WORK/golden" || FAILED=1
+
+echo "== protocol inventory =="
+sh "$ROOT/tests/ucode/test_protocol_inventory.sh" "$ROOT" "$WORK/inventory" || FAILED=1
 
 echo "== domain model skeleton =="
 sh "$ROOT/tests/ucode/test_domain_model_skeleton.sh" "$ROOT" "$WORK/domain_model" || FAILED=1

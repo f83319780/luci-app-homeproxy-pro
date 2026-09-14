@@ -525,35 +525,6 @@
 				},
 				{
 					"kind": "ListValue",
-					"name": "snell_mode",
-					"title": "Traffic shaping mode",
-					"description": "v6 only.",
-					"depends": [
-						{
-							"type": "snell",
-							"snell_version": "6"
-						}
-					],
-					"values": [
-						[
-							"",
-							"default"
-						],
-						[
-							"unshaped",
-							"unshaped"
-						],
-						[
-							"unsafe-raw",
-							"unsafe-raw"
-						]
-					],
-					"props": {
-						"modalonly": true
-					}
-				},
-				{
-					"kind": "ListValue",
 					"name": "shadowsocks_encrypt_method",
 					"title": "Encrypt method",
 					"description": null,
