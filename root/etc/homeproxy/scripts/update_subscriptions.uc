@@ -156,9 +156,15 @@ function main() {
 	 * just hands it the cache + result built during the fetch
 	 * phase and uses the { added, removed } counts for the
 	 * end-of-run log. */
-	const { added, removed } = repository_apply(
+	/* Object destructuring is not part of the dialect the ucode on the
+	 * target accepts (ImmortalWrt ucode 2026.01.16 rejects
+	 * `const { a, b } = ...` with "Expecting variable name"), so pull
+	 * the two counts out by name instead. */
+	const repository_result = repository_apply(
 		uci, uciconfig, ucinode, node_cache, node_result, log
 	);
+	const added = repository_result.added,
+	      removed = repository_result.removed;
 
 	let need_restart = (via_proxy !== '1');
 	if (!isEmpty(main_node)) {

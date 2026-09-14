@@ -55,4 +55,4 @@ export function decode(content, log, url) {
 	}
 
 	return nodes;
-}
+};

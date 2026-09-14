@@ -90,4 +90,4 @@ export function apply(uci, uciconfig, ucinode, node_cache, node_result, log) {
 	uci.commit(uciconfig);
 
 	return { added, removed };
-}
+};

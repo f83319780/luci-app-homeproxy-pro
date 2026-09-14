@@ -108,7 +108,7 @@ export function load_tls(get) {
 			tls_insecure: get('tls_insecure')
 		}
 	};
-}
+};
 
 export function load_transport(get) {
 	const transport = get('transport');
@@ -129,7 +129,7 @@ export function load_transport(get) {
 		ping_timeout: get('http_ping_timeout'),
 		permit_without_stream: get('grpc_permit_without_stream')
 	};
-}
+};
 
 function load_multiplex(get) {
 	return {

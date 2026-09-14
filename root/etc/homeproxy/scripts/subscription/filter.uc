@@ -52,7 +52,7 @@ export function check(name, mode, keywords, log) {
 		matched = !matched;
 
 	return matched;
-}
+};
 
 /* Apply the two policy tweaks the orchestrator used to do inline:
  *   - tls_insecure is set on a config that has tls='1' when the
@@ -73,4 +73,4 @@ export function apply_policy(config, opts) {
 		config.packet_encoding = opts.packet_encoding;
 
 	return config;
-}
+};
