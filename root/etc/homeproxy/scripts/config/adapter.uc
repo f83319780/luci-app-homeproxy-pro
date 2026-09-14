@@ -40,6 +40,55 @@ import {
 
 import { Node } from './model.uc';
 
+/* Per-protocol required credential fields. Node.validate() covers the
+ * cross-protocol rules (type/address/port/TLS); this table is the
+ * per-protocol half - "vless needs uuid, vmess needs uuid, trojan needs
+ * password, snell needs psk, ..." - and it is the Adapter's job because
+ * the requirement is shaped by what the sing-box outbound for each
+ * protocol will actually accept, not by anything the model knows about
+ * UCI. The keys are the canonical credential names the Loader uses
+ * (see CREDENTIALS in model.uc), so the check is data-driven and adding
+ * a protocol is a one-line change. */
+const REQUIRED_CREDENTIALS = {
+	vless:     ['uuid'],
+	vmess:     ['uuid'],
+	trojan:    ['password'],
+	hysteria2: ['password'],
+	tuic:      ['uuid', 'password'],
+	shadowsocks: ['password'],
+	snell:     ['psk'],
+	anytls:    ['password'],
+	shadowtls: ['password'],
+	ssh:       ['user'],
+	/* These three have no hard required credential - the protocol can
+	 * run anonymously (http / socks) or the auth is delivered out of
+	 * band (hysteria, direct). Node.validate()'s address/port check
+	 * is enough. */
+	hysteria:  [],
+	http:      [],
+	socks:     [],
+	direct:    []
+};
+
+/* Run a Node through the per-protocol required-field check. Returns
+ * the (possibly empty) list of human-readable problems.
+ *
+ * The same ucode quirk that bit Node.validate() bites here too: push()
+ * returns the value pushed, not the new array, so we build the result
+ * via spread instead of the obvious `problems = push(problems, X)`. */
+function protocol_problems(node) {
+	const required = REQUIRED_CREDENTIALS[node.type] || [];
+	const creds = node.credentials || {};
+	let problems = [];
+
+	for (let field in required) {
+		if (!creds[field])
+			problems = [...problems, `${node.type} requires ${field}`];
+	}
+
+	return problems;
+}
+
 /* --- field transforms --------------------------------------------------- */
 
 /* A table value is either a transform name, a literal, a function of the
@@ -242,9 +291,21 @@ function build_multiplex(mux) {
 
 export const OutboundFactory = {
 	/* Node -> sing-box outbound object. Pure: no UCI, no module state, no file
-	 * access. `mark` is passed in instead of being read from a global. */
+	 * access. `mark` is passed in instead of being read from a global.
+	 *
+	 * Two-layer validation: the Node model's Node.validate() catches
+	 * cross-protocol rules (type/address/port/TLS); the Adapter's
+	 * protocol_problems() catches per-protocol required-field rules
+	 * (vless needs uuid, snell needs psk, ...). The two layers are
+	 * kept separate so the model stays free of protocol names and
+	 * sing-box-outbound field names. Both layers' complaints are
+	 * reported in one die() so a misconfigured node produces one
+	 * useful message instead of fixing-one-at-a-time. */
 	create: (node, mark) => {
-		const problems = Node.validate(node);
+		const problems = [
+			...Node.validate(node),
+			...protocol_problems(node)
+		];
 
 		if (length(problems))
 			die(`node '${node.id}': ${join(', ', problems)}\n`);

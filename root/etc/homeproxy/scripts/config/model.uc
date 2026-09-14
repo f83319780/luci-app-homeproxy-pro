@@ -111,21 +111,44 @@ export const Node = {
 
 	/* A node is usable only if the adapter can build a valid outbound from it.
 	 * The old code discovers this by crashing inside the JSON builder.
-	 * Note that booleans are still raw UCI strings at this layer. */
+	 *
+	 * Scope: generic, cross-protocol sanity only. The Adapter layer owns
+	 * per-protocol required-field rules (a vless needs uuid, vmess needs
+	 * both uuid and a security cipher, snell needs a psk, ...) because
+	 * those rules are sing-box-outbound-shaped. Anything the model can
+	 * express without naming a protocol or a JSON field goes here.
+	 *
+	 * Booleans are still raw UCI strings at this layer; this validator
+	 * compares against the literal '1' the way UCI emits them.
+	 *
+	 * Implementation note: ucode's push() returns the value pushed, not
+	 * the new array, so the natural-looking `problems = push(problems, X)`
+	 * pattern reassigns problems to a string and silently corrupts the
+	 * accumulator. Build the array via spread instead - cheap because the
+	 * validator is at most four checks. */
 	validate: (node) => {
 		let problems = [];
 
 		if (!node.type)
-			problems = push(problems, 'missing type');
-		if (!node.address)
-			problems = push(problems, 'missing address');
+			problems = [...problems, 'missing type'];
 
-		if (node.port == null || int(node.port) < 1 || int(node.port) > 65535)
-			problems = push(problems, `invalid port '${node.port}'`);
+		/* A direct outbound can run without a server/server_port - sing-box
+		 * uses the inbound's destination as the upstream, which is the
+		 * transparent-proxy case. For every other protocol the server
+		 * and port are mandatory. */
+		if (node.type !== 'direct') {
+			if (!node.address)
+				problems = [...problems, 'missing address'];
 
-		/* booleans are still raw UCI strings at this layer */
+			if (node.port == null || int(node.port) < 1 || int(node.port) > 65535)
+				problems = [...problems, `invalid port '${node.port}'`];
+		}
+
+		/* TLS without server_name is a sing-box-side rejection, but the
+		 * rule itself is protocol-agnostic - the reality branch covers the
+		 * only legitimate escape - so it stays here. */
 		if (node.tls.enabled === '1' && !node.tls.server_name && node.tls.reality.enabled !== '1')
-			problems = push(problems, 'TLS enabled without server_name');
+			problems = [...problems, 'TLS enabled without server_name'];
 
 		return problems;
 	},
