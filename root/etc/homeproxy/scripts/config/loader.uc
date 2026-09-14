@@ -147,6 +147,19 @@ function load_multiplex(get) {
 	};
 }
 
+/* Cross-protocol common fields (every outbound protocol carries them, not
+ * just one). Lives as its own sub-object instead of being repeated in
+ * every PROTOCOL_OPTIONS row, and the Adapter reads from `node.common` so
+ * the Adapter never has to reach back to `node.raw` for these. */
+function load_common(get) {
+	return {
+		proxy_protocol: get('proxy_protocol'),
+		tcp_fast_open: get('tcp_fast_open'),
+		tcp_multi_path: get('tcp_multi_path'),
+		udp_fragment: get('udp_fragment')
+	};
+}
+
 /* --- protocol options --------------------------------------------------- */
 
 /* Maps canonical option name -> UCI option name. Anything not listed is not
@@ -157,10 +170,10 @@ const PROTOCOL_OPTIONS = {
 		flow: 'vless_flow',
 		packet_encoding: 'packet_encoding',
 		udp_over_tcp_version: 'udp_over_tcp_version',
-		udp_over_tcp: 'udp_over_tcp',
-		tcp_fast_open: 'tcp_fast_open',
-		tcp_multi_path: 'tcp_multi_path',
-		udp_fragment: 'udp_fragment'
+		udp_over_tcp: 'udp_over_tcp'
+		/* tcp_fast_open / tcp_multi_path / udp_fragment used to live here
+		 * but they are common to every protocol, not vless-specific; they
+		 * are now in node.common via load_common() above. */
 	},
 	snell: {
 		version: 'snell_version',
@@ -233,6 +246,14 @@ const PROTOCOL_OPTIONS = {
 		security: 'vmess_encrypt',
 		global_padding: 'vmess_global_padding',
 		auth_payload: 'vmess_auth_payload'
+	},
+	/* P3-E: direct nodes carry override_address/override_port, which the
+	 * Generator uses to populate the direct_overrides table for the
+	 * routing path. Reading them from node.protocol_options keeps the
+	 * Adapter (and the Generator) off node.raw. */
+	direct: {
+		override_address: 'override_address',
+		override_port: 'override_port'
 	}
 };
 
@@ -414,6 +435,7 @@ export const Loader = {
 				type: get('type'),
 				address: get('address'),
 				port: get('port'),
+				common: load_common(get),
 				credentials: load_credentials(get, get('type')),
 				tls: load_tls(get),
 				transport: load_transport(get),

@@ -91,8 +91,10 @@ function protocol_problems(node) {
 
 /* --- field transforms --------------------------------------------------- */
 
-/* A table value is either a transform name, a literal, a function of the
- * Node, or a descriptor { from, when } selecting an option conditionally. */
+/* A table value is either a function of the Node, a literal, or a string
+ * naming a transform (in which case the value is null - the spec is
+ * present so the key still gets emitted, but the value will be stripped
+ * by removeBlankAttrs()). */
 const TRANSFORMS = {
 	raw: (value) => value,
 	bool: (value) => strToBool(value),
@@ -104,16 +106,6 @@ function resolve(spec, node) {
 	if (type(spec) === 'function')
 		return spec(node);
 
-	if (type(spec) === 'object' && spec !== null && 'from' in spec) {
-		/* `when` is the protocol the option belongs to; anything else yields
-		 * null so removeBlankAttrs() drops the field, exactly like the old
-		 * ternaries did. */
-		if (spec.when !== node.type)
-			return null;
-
-		return TRANSFORMS[spec.transform || 'raw'](node.raw[spec.from]);
-	}
-
 	if (type(spec) === 'string' && spec in TRANSFORMS)
 		return null;
 
@@ -123,16 +115,20 @@ function resolve(spec, node) {
 /* --- field tables ------------------------------------------------------- */
 
 /* Fields every protocol emits. Each is null when absent, and nulls are
- * stripped once, at the end, by removeBlankAttrs(). */
+ * stripped once, at the end, by removeBlankAttrs(). Cross-protocol common
+ * fields live in node.common (Loader's load_common); protocol-specific
+ * canonical names live in node.protocol_options. The Adapter never reads
+ * from node.raw - that bag is kept only for the Loader's not-yet-modelled
+ * tail and is opaque to this layer. */
 const COMMON_FIELDS = {
 	server: (node) => node.address,
 	server_port: (node) => strToInt(node.port),
 	// set by the runtime, not by the model
 	routing_mark: null,
-	proxy_protocol: (node) => strToInt(node.raw.proxy_protocol),
-	tcp_fast_open: (node) => strToBool(node.raw.tcp_fast_open),
-	tcp_multi_path: (node) => strToBool(node.raw.tcp_multi_path),
-	udp_fragment: (node) => strToBool(node.raw.udp_fragment),
+	proxy_protocol: (node) => strToInt(node.common.proxy_protocol),
+	tcp_fast_open: (node) => strToBool(node.common.tcp_fast_open),
+	tcp_multi_path: (node) => strToBool(node.common.tcp_multi_path),
+	udp_fragment: (node) => strToBool(node.common.udp_fragment),
 	packet_encoding: (node) => node.protocol_options.packet_encoding || null
 };
 
@@ -144,7 +140,7 @@ function CLAIM_FIELDS(node) {
 		return {
 			psk: node.credentials.psk,
 			userkey: node.credentials.userkey,
-			reuse: strToBool(node.raw.snell_reuse)
+			reuse: strToBool(node.protocol_options.reuse)
 		};
 	case 'ssh':
 		return {
@@ -153,8 +149,8 @@ function CLAIM_FIELDS(node) {
 		};
 	case 'hysteria':
 		return {
-			auth: (node.raw.hysteria_auth_type === 'base64') ? node.raw.hysteria_auth_payload : null,
-			auth_str: (node.raw.hysteria_auth_type === 'string') ? node.raw.hysteria_auth_payload : null
+			auth: (node.protocol_options.auth_type === 'base64') ? node.protocol_options.auth_payload : null,
+			auth_str: (node.protocol_options.auth_type === 'string') ? node.protocol_options.auth_payload : null
 		};
 	default:
 		return {
@@ -167,8 +163,9 @@ function CLAIM_FIELDS(node) {
 }
 
 /* Per-protocol option fields, keyed by the same canonical names the model
- * exposes. Anything absent here still travels in `node.raw`, which is what
- * makes the migration incremental. */
+ * exposes. Anything not modelled here is still in node.protocol_options
+ * (which is itself populated from the protocol's PROTOCOL_OPTIONS row in
+ * the Loader), so the Adapter never has to reach into `node.raw`. */
 const OPTION_FIELDS = {
 	vless: {
 		flow: (node) => node.protocol_options.flow,
@@ -332,7 +329,7 @@ export const OutboundFactory = {
 		outbound.transport = buildTransportObject(node.transport, false);
 
 		if (node.type === 'direct')
-			outbound.proxy_protocol = strToInt(node.raw.proxy_protocol);
+			outbound.proxy_protocol = strToInt(node.common.proxy_protocol);
 
 		/* removeBlankAttrs() is what the generator applies before writing, and
 		   it drops every null the field tables produced. Cleaning here means

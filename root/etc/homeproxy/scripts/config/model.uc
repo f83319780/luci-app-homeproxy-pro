@@ -93,6 +93,11 @@ export const Node = {
 		address: opts.address,
 		port: opts.port,
 
+		/* cross-protocol common fields (proxy_protocol, tcp_fast_open,
+		 * tcp_multi_path, udp_fragment). The Adapter reads from here so
+		 * it never has to reach back into `raw` for these. */
+		common: opts.common || {},
+
 		/* credentials, already canonical */
 		credentials: opts.credentials || {},
 

@@ -289,10 +289,10 @@ function generate_outbound(node) {
 	if (type(node) !== 'object' || isEmpty(node))
 		return null;
 
-	if (node.type === 'direct' && (!isEmpty(node.raw.override_address) || !isEmpty(node.raw.override_port)))
+	if (node.type === 'direct' && (!isEmpty(node.protocol_options.override_address) || !isEmpty(node.protocol_options.override_port)))
 		direct_overrides[node.id] = {
-			override_address: node.raw.override_address,
-			override_port: strToInt(node.raw.override_port)
+			override_address: node.protocol_options.override_address,
+			override_port: strToInt(node.protocol_options.override_port)
 		};
 
 	return OutboundFactory.create(node, self_mark);
