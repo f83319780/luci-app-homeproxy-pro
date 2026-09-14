@@ -10,28 +10,55 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 计数，大约完成 **45% ~ 50%**，与你的估计一致。但要注意分布：
+按文档的 9 个 PHASE 取平均，目前约 **60% ~ 65%**（PHASE 6 已接近完成，PHASE 9 到 75%，
+但 PHASE 4 仍为 0%）。剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
 |---|---|---|---|
 | 0 | Baseline | ✅ 完成 | 文档化充分 |
-| 1 | Domain Model | 🟡 ~80% | `Node` 已建；`dns/routing/access_control/server` 仍是 raw UCI dict；`Node.raw` 完全无人读 |
-| 2 | Parser | 🟡 ~50% | 已按协议拆成 `parse_<proto>_uri()`；但无 `parser/` 目录、无 normalize/validator 层、输出仍是扁平 UCI 键 |
-| 3 | Protocol Adapter | 🟡 ~75% | 客户端 outbound 已数据表化；**WireGuard endpoint 未走 Adapter 且已损坏**；server 端完全没做 |
-| 4 | Generator 拆分 | ❌ ~0% | `generate_client.uc` 仍是 1191 行单体，`generate/` 目录不存在 |
-| 5 | Subscription Pipeline | 🟡 ~70% | fetcher/decoder/filter/repository 已拆；缺 normalizer/validator；orchestrator 仍直接写 UCI |
-| 6 | Candidate Config | ❌ ~0% | 无 candidate、无 rollback；reload 仍是 `stop; start` |
-| 7 | Runtime | ❌ ~0% | `init.d/homeproxy` 仍是 417 行，`runtime/` 不存在 |
-| 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除（§1.3 改为后端 RPC）；协议表前后端仍 6 份不同步 |
-| 9 | Test / CI | 🟡 ~65% | 分层基本成型；已 pin ucode + 语法金丝雀 + 取消 SKIP + wireguard fixture；仍缺协议覆盖不变量、golden 快照、demo 自比较 |
+| 1 | Domain Model | 🟡 ~80% | `Node` 已建；`dns/routing/access_control/server` 仍是 raw UCI dict；`Node.raw` / `Config.raw` / `tls.raw` 全无人读；`ConfigQuery` 有 3 个死 helper |
+| 2 | Parser | 🟡 ~50% | 已按协议拆成 `parse_<proto>_uri()`；无 `parser/` 目录、无 normalize/validator 层、输出仍是扁平 UCI 键 |
+| 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`direct_overrides` 仍是模块级副作用，`generate_endpoint` 仍是独立函数 |
+| 4 | Generator 拆分 | ❌ ~0% | `generate_client.uc` 已涨到 1240 行，`generator/` 目录不存在，仍靠 `__LOADER_DIR__` sed 做测试 |
+| 5 | Subscription Pipeline | 🟡 ~75% | fetcher/decoder/filter/repository 已拆，已事务化 + 先抓取后 reload；缺 normalizer/validator，urltest 校准仍在 repository 之外提交 |
+| 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
+| 7 | Runtime | 🟡 ~40% | `runtime/{config,health}.sh` 已抽、重复 `sing-box check` 已去；`dns`/`firewall`/`service` 仍在 init.d（517 行） |
+| 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除；协议表前后端仍 6 份不同步，`node.js`↔`server.js` 仍有 ~229 行重复 |
+| 9 | Test / CI | 🟢 ~75% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；缺 `client.json` 快照、TLS/Transport 直测、on-target CI job |
 
-**关键判断**：已经完成的是"结构好看"的那一半；**风险最高的那一半（PHASE 4/6/7）几乎为零**。而文档的"最终成功标准"恰恰是
+**关键判断（已更新）**：文档"最终成功标准"里那条链
+`Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
+**已经成立**（§2.6 已实施）。剩下的不再是"能不能跑"，而是**可维护性**（PHASE 1/2/4/8）与
+**剩余覆盖面**（PHASE 9 + §4 安全）。
 
-```
-Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved
-```
+### 0.3 剩余大项与工时估算
 
-这条链目前完全不存在。
+按 agent 连续跟进（含在目标设备上验证）计。**估算口径**：一个 agent 的净工作时长，含改代码、
+跑套件、在设备上复现/验证、更新 golden 快照与文档；不含人工 code review 的等待时间。
+
+| # | 大项 | 规模 | 风险 | 估算（agent 工时） |
+|---|---|---|---|---|
+| A | PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入） | 大 | 中（回归面大，但有 golden 快照兜底） | 6 – 10 |
+| B | PHASE 8 LuCI 模块化（协议 registry 单一真源 + `components/`+`shared/` + 去重） | 大 | 高（浏览器流程无法自动化验证） | 9 – 15 |
+| C | §4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态） | 中 | 中（路径白名单可能影响既有配置） | 5 – 9 |
+| D | PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码） | 中 | 中 | 4 – 7 |
+| E | PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射 | 中 | 中 | 4 – 7 |
+| F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
+| G | PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐） | 中 | 低–中（on-target 部分需要设备/硬件） | 5 – 9 |
+| H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
+| I | 文档与注释债务（`architecture-review.md` 部分结论已失效、README、头注释） | 小 | 低 | 1 – 2 |
+| | **合计** | | | **43 – 75** |
+
+**最小可用集合**（只求"稳、能跑、可维护"，跳过 PHASE 1/2/3/4/5/8 的结构重构）：
+**A + C + G ≈ 16 – 28 工时**。
+
+**无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
+- 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
+- 真机 flash 一次、跑一遍 `reload`/回滚（procd 行为）。
+- LuCI 各表单的人工目视确认（快照只能证明结构没变，不能证明可用）。
+- 若要让 CI 覆盖 on-target 用例，需要一台常驻测试设备或 QEMU-in-CI 环境。
+
+按 PR 粒度折算，上表大约对应 **15 – 22 个 PR**。
 
 ### 0.2 必须先处理的三件事
 
