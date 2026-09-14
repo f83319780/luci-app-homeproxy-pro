@@ -1,0 +1,91 @@
+name: Architecture test
+
+# Runs the off-target tests that do not need an OpenWrt device:
+# the LuCI form snapshots, the i18n coverage, the ucode parser /
+# domain-model / generator regression / architecture equivalence
+# / subscription filter+decoder+repository suites.
+#
+# The test_generators.sh cases feed the generated config to
+# `sing-box check`, so the workflow installs sing-box 1.14. The
+# ucode + uci/ubus/uloop/lucihttp pieces come from
+# tests/toolchain/build-ucode-linux.sh; without them the
+# subscription repository integration test (and the domain-model
+# skeleton's cursor() walk) would not load.
+#
+# PR + push-to-main so a regression in the Adapter, the Loader,
+# or the generator paths lands caught in the PR view rather
+# than only on a manual workflow_dispatch.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: arch-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  arch-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout source tree
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Install host build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo -E apt-get update -qq
+          sudo -E apt-get install -y --no-install-recommends \
+            build-essential ca-certificates cmake curl git \
+            libjson-c-dev libmd-dev libssl-dev meson ninja-build \
+            pkg-config python3 zlib1g-dev
+
+      - name: Build ucode toolchain (libubox, libuci, libubus, ucode, lucihttp, sing-box)
+        # The script installs into $HOME/.local/ucode-testbed by default and
+        # prints the PATH setup we need below. It also verifies the modules
+        # and the lucihttp binding before exiting, so a broken build fails
+        # here rather than halfway through the test suite.
+        run: sh tests/toolchain/build-ucode-linux.sh
+
+      - name: Run LuCI form snapshot tests
+        # The snapshot renderer is a plain node script; it just re-renders
+        # the CBI form definitions through a LuCI mock and diffs the
+        # result. No build / no ucode required.
+        run: |
+          set -e
+          for target in node server; do
+            node tests/luci-form-snapshot.js . "$target" > "/tmp/snap-$target.json"
+            if ! diff -q "tests/snapshots/$target.json" "/tmp/snap-$target.json" > /dev/null; then
+              echo "::error::LuCI form snapshot for $target changed:"
+              diff "tests/snapshots/$target.json" "/tmp/snap-$target.json" | head -40
+              exit 1
+            fi
+          done
+          echo "PASS: LuCI form snapshots (node, server)"
+
+      - name: Check zh_Hans translation coverage
+        # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
+        # coverage fails here even when i18n.yml is still queued.
+        run: python3 tests/i18n-coverage.py --warn-below 100
+
+      - name: Run ucode test suite
+        env:
+          # PATH must put the toolchain bin first so the matching sing-box
+          # wins over any /usr/local/bin stray. HP_VALIDATE_DATA points at
+          # tests/toolchain/validate-data.sh, the off-target shim for
+          # /sbin/validate_data (only present on OpenWrt). UCODE_MODULES_DIR
+          # makes 'import * as m from "uci"' / "ubus" / "digest" / "lucihttp"
+          # resolve against the toolchain prefix.
+          PATH: ${{ env.HOME }}/.local/ucode-testbed/bin:$PATH
+          HP_VALIDATE_DATA: ${{ github.workspace }}/tests/toolchain/validate-data.sh
+        run: |
+          sh tests/ucode/run.sh .

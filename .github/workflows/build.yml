@@ -1,9 +1,19 @@
 name: Build
 
+# Two trigger paths produce a release:
+#   - workflow_dispatch with a version input (the legacy "manual
+#     release" path, kept for re-publishing an existing tag without
+#     having to re-tag locally)
+#   - push of a v* tag (the new "git tag && git push" path, so
+#     releases can be cut from the command line without opening
+#     the Actions tab)
+#
+# Both paths run the same build and publish steps; only the
+# "derive VERSION" step (see below) knows where the version
+# number comes from.
 on:
-  #push:
-    #branches: [main]
-  #pull_request:
+  push:
+    tags: ['v*']
   workflow_dispatch:
     inputs:
       version:
@@ -125,11 +135,23 @@ jobs:
       # ========== 发布（仅 workflow_dispatch 且填写了 version 时执行）==========
       # 瀑布流策略：每个版本一个独立 tag/release，永不删除、永不覆盖已有 release。
 
-      - name: Validate version input
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+      - name: Derive and validate release version
+        # Two trigger paths converge here:
+        #   - workflow_dispatch: read github.event.inputs.version
+        #   - push tag:         strip the leading 'v' from the tag
+        # Both must still equal the Makefile product version, otherwise
+        # the build artefact and the release tag would disagree.
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '') ||
+          (github.event_name == 'push')
         run: |
           set -euo pipefail
-          VERSION="${{ github.event.inputs.version }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # GITHUB_REF_NAME is e.g. 'v27.911.1.14-r11'; strip the 'v'.
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
           # apk-tools v3 合法版本 + 命名约束：仅数字/点/字母与结尾 -r<数字>（无 _、无 ~）
           if [[ ! "$VERSION" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]]; then
             echo "::error::版本格式非法（期望形如 27.905.1.14-r9，不允许下划线与波浪号）"
@@ -152,7 +174,7 @@ jobs:
           echo "TAG_VERSION=$TAG_VERSION" >> "${GITHUB_ENV:-/dev/null}"
 
       - name: Publish release (replacing an existing one if present)
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.version != ''
+        if: env.TAG_VERSION != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
