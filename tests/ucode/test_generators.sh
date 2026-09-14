@@ -107,4 +107,35 @@ fi
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 
+# WireGuard is emitted as a sing-box endpoint, not an outbound, and it has its
+# own builder.  A3 converted the call sites to pass a Node but left
+# generate_endpoint() reading flat UCI keys, so the key material silently
+# disappeared and sing-box rejected the config.  `sing-box check` alone is not
+# a strong enough guard (a config with no server at all can still be valid),
+# so assert the endpoint actually carries the fixture's keys.
+run_case wireguard "$ROOT/tests/fixtures/generators/wireguard.uci" generate_client.uc sing-box-c.json
+
+wg_json="$WORK/wireguard/run/sing-box-c.json"
+if [ ! -f "$wg_json" ]; then
+	echo "FAIL: wireguard: no config was generated"
+	FAILED=1
+else
+	if ! grep -qF '"type": "wireguard"' "$wg_json"; then
+		echo "FAIL: wireguard: no wireguard endpoint in the generated config"
+		FAILED=1
+	fi
+	if ! grep -qF 'iKaNuoWRQTFPD5V3OoMNdMshsMgU9t7rolJNpgNx+UM=' "$wg_json"; then
+		echo "FAIL: wireguard: the endpoint lost its private key"
+		FAILED=1
+	fi
+	if ! grep -qF 'DDcdTHUv0Q6XYDf9l93jzwwuoY/G1TC+g74QH0A9HmM=' "$wg_json"; then
+		echo "FAIL: wireguard: the peer lost its public key"
+		FAILED=1
+	fi
+	if ! grep -qF '"172.16.0.2/32"' "$wg_json"; then
+		echo "FAIL: wireguard: the endpoint lost its local address list"
+		FAILED=1
+	fi
+fi
+
 exit $FAILED
