@@ -149,5 +149,17 @@ export const ConfigQuery = {
 	 * "no proxy node", which is a legitimate configuration. */
 	main_node_id: (config) => config.general.main_node || 'nil',
 
-	main_udp_node_id: (config) => config.general.main_udp_node || 'nil'
+	main_udp_node_id: (config) => config.general.main_udp_node || 'nil',
+
+	/* endpoints is a derived list (not a UCI section): each entry is the
+	 * resolved outbound the generator eventually emits as a sing-box
+	 * endpoint. The shape is filled in by the application/service layer
+	 * (A3 / A4), not by the Loader. This helper returns an empty list
+	 * so callers can iterate unconditionally before A3 lands. */
+	endpoints: (config) => {
+		const ep = config.endpoints;
+		if (type(ep) !== 'object' || length(ep) === 0)
+			return [];
+		return ep;
+	}
 };

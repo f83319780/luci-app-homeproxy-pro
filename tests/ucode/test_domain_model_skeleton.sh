@@ -41,8 +41,11 @@ cp "$ROOT/root/etc/homeproxy/scripts/parse_uri.uc"      "$WORK/scripts/"
 
 cp "$ROOT/tests/ucode/test_domain_model_skeleton.uc" "$WORK/scripts/"
 
-# Use the existing client fixture (10 protocols).
-cp "$ROOT/tests/fixtures/generators/client.uci" "$WORK/scripts/config/homeproxy"
+# Use the dedicated domain-model fixture (tests/fixtures/generators/domain.uci),
+# which carries every UCI section the Loader is supposed to read. The
+# generator regression suite uses client.uci and custom.uci; this fixture
+# is only consumed by the domain-model test.
+cp "$ROOT/tests/fixtures/generators/domain.uci" "$WORK/scripts/config/homeproxy"
 
 if ( cd "$WORK/scripts" && ucode test_domain_model_skeleton.uc ); then
 	echo "PASS: domain model skeleton"

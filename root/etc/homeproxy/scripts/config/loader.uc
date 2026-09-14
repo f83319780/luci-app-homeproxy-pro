@@ -14,15 +14,14 @@
  *
  * What is wired in as of this commit:
  *   - owns the only `uci.cursor()` in the client configuration path
- *   - reads general + infra + nodes from UCI
+ *   - reads general + infra + nodes + dns + routing + access_control + server
  *   - never emits sing-box JSON
  *   - never mutates/commits UCI
  *
- * What is NOT yet wired in (A1.2 follow-up):
- *   - dns, routing, endpoints, access_control, server sub-objects stay empty
- *     `{}` for now. The generator still reads them with the legacy
- *     `uci.get()` calls. The two views must agree byte-for-byte before
- *     A1.2 can replace the second set of calls.
+ * What is NOT yet wired in:
+ *   - endpoints: derived at the application/service layer (it is what
+ *     `main_node` / `routing.default_outbound` resolve to, not a UCI
+ *     section). Stays an empty `{}` placeholder until A3.
  */
 
 'use strict';
@@ -36,7 +35,17 @@ const UCICONFIG = 'homeproxy';
 const SECTION = {
 	main: 'config',
 	infra: 'infra',
-	node: 'node'
+	node: 'node',
+	dns: 'dns',
+	dns_server: 'dns_server',
+	dns_rule: 'dns_rule',
+	routing: 'routing',
+	routing_node: 'routing_node',
+	routing_rule: 'routing_rule',
+	ruleset: 'ruleset',
+	control: 'control',
+	subscription: 'subscription',
+	server: 'server'
 };
 
 /* Booleans are UCI '0'/'1'; keep the conversion in one place. */
@@ -183,6 +192,96 @@ function load_credentials(get, type) {
 	return credentials;
 }
 
+/* --- domain sub-objects ------------------------------------------------ */
+
+/* Settings: only the keys that exist in UCI are kept (null is dropped), so
+ * the consumer can tell "not set" from "set to empty". A3 (Generator split)
+ * will own the actual key list - this loader just preserves what UCI has. */
+function load_settings(uci, section, keys) {
+	const settings = {};
+
+	for (let key in keys) {
+		const v = uci.get(UCICONFIG, section, key);
+		if (v != null)
+			settings[key] = v;
+	}
+
+	return settings;
+}
+
+/* Single-section + list sections grouped under a domain sub-object. Each
+ * list is the raw UCI section dict (`type` in {'array'/'object'}), and
+ * downstream code is responsible for shaping it into the sing-box field
+ * names. `enabled` flags stay as raw UCI strings here, same as Node. */
+function load_sections(uci, type) {
+	const items = [];
+
+	uci.foreach(UCICONFIG, type, (cfg) => push(items, cfg));
+
+	return items;
+}
+
+function load_dns(uci) {
+	return {
+		settings: load_settings(uci, SECTION.dns, [
+			'default_strategy', 'default_server',
+			'disable_cache', 'disable_cache_expire',
+			'client_subnet',
+			'optimistic_cache', 'optimistic_timeout',
+			'dns_timeout', 'cache_file_store_dns'
+		]),
+		servers: load_sections(uci, SECTION.dns_server),
+		rules: load_sections(uci, SECTION.dns_rule)
+	};
+}
+
+function load_routing(uci) {
+	return {
+		settings: load_settings(uci, SECTION.routing, [
+			'default_outbound', 'default_outbound_dns',
+			'domain_strategy', 'find_neighbor',
+			'udp_timeout', 'tcpip_stack', 'endpoint_independent_nat'
+		]),
+		nodes: load_sections(uci, SECTION.routing_node),
+		rules: load_sections(uci, SECTION.routing_rule),
+		rulesets: load_sections(uci, SECTION.ruleset)
+	};
+}
+
+/* access_control is two single sections: `control` (lan_proxy_mode,
+ * wan_proxy_*_ips) and `subscription` (auto_update, filter, urls). */
+function load_access_control(uci) {
+	return {
+		control: load_settings(uci, SECTION.control, [
+			'bind_interface', 'lan_proxy_mode'
+		]),
+		/* wan_proxy_*_ips are list options on the control section; collect
+		   them in their canonical form. */
+		wan_proxy_ipv4_ips: uci.get(UCICONFIG, SECTION.control, 'wan_proxy_ipv4_ips') || [],
+		wan_proxy_ipv6_ips: uci.get(UCICONFIG, SECTION.control, 'wan_proxy_ipv6_ips') || [],
+		subscription: load_settings(uci, SECTION.subscription, [
+			'auto_update', 'allow_insecure',
+			'packet_encoding', 'update_via_proxy',
+			'filter_nodes', 'user_agent'
+		]),
+		subscription_urls: uci.get(UCICONFIG, SECTION.subscription, 'subscription_url') || [],
+		filter_keywords: uci.get(UCICONFIG, SECTION.subscription, 'filter_keywords') || []
+	};
+}
+
+/* server has one enabled/log_level single section + N inbound sections
+ * (each with a `type` of vless / trojan / shadowsocks / ...). The full
+ * inbound list is preserved verbatim; A3 reshapes it into the sing-box
+ * inbounds. */
+function load_server(uci) {
+	return {
+		settings: load_settings(uci, SECTION.server, [
+			'enabled', 'log_level'
+		]),
+		inbounds: load_sections(uci, SECTION.server)
+	};
+}
+
 /* --- loader ------------------------------------------------------------- */
 
 export const Loader = {
@@ -201,18 +300,21 @@ export const Loader = {
 			proxy_mode: opt(uci, 'main', 'proxy_mode') || 'redirect_tproxy',
 			main_node: opt(uci, 'main', 'main_node') || 'nil',
 			main_udp_node: opt(uci, 'main', 'main_udp_node') || 'nil',
-			ipv6_support: bool(opt(uci, 'main', 'ipv6_support')),
-			ipv6: bool(opt(uci, 'main', 'ipv6_support')),
-			udp_timeout: opt(uci, 'infra', 'udp_timeout')
+			/* Booleans stay as raw UCI strings here, same as Node. The
+			   Adapter (A3) is the one that calls strToBool(); coercing in
+			   the Loader and again in the Adapter produced two different
+			   defaults for absent / garbage values during A1.1. */
+			ipv6_support: opt(uci, 'main', 'ipv6_support'),
+			udp_timeout: opt(uci, 'main', 'udp_timeout') || opt(uci, 'infra', 'udp_timeout')
 		};
 
-		config.infra = {
-			dns_port: opt(uci, 'infra', 'dns_port') || '5333',
-			mixed_port: opt(uci, 'infra', 'mixed_port') || '5330',
-			self_mark: opt(uci, 'infra', 'self_mark') || '100',
-			ntp_server: opt(uci, 'infra', 'ntp_server'),
-			tun_name: opt(uci, 'infra', 'tun_name')
-		};
+		config.infra = load_settings(uci, SECTION.infra, [
+			'common_port', 'mixed_port', 'redirect_port', 'tproxy_port',
+			'dns_port', 'dns_redirect',
+			'tun_name', 'tun_addr4', 'tun_addr6', 'tun_mtu',
+			'table_mark', 'self_mark', 'tproxy_mark', 'tun_mark',
+			'ntp_server', 'udp_timeout'
+		]);
 
 		uci.foreach(UCICONFIG, SECTION.node, (section) => {
 			const get = (name) => node_opt(uci, section['.name'], name);
@@ -231,6 +333,11 @@ export const Loader = {
 				raw: section
 			}));
 		});
+
+		config.dns = load_dns(uci);
+		config.routing = load_routing(uci);
+		config.access_control = load_access_control(uci);
+		config.server = load_server(uci);
 
 		return config;
 	}
