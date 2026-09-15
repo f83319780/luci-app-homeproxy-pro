@@ -252,6 +252,11 @@ echo "== test doubles still match production =="
 # corpus, so the mock may be reformatted but not changed in behaviour.
 sh "$ROOT/tests/ucode/test_mock_sync.sh" "$ROOT" "$WORK/mock_sync" || FAILED=1
 
+echo "== the factory configuration loads =="
+# root/etc/config/homeproxy ships to every new install and was never read by
+# any test; json-assets.js checks its grammar, this drives the real Loader.
+sh "$ROOT/tests/ucode/test_factory_config.sh" "$ROOT" "$WORK/factory_config" || FAILED=1
+
 echo "== homeproxy helper tests =="
 rm -rf "$WORK/homeproxy"
 mkdir -p "$WORK/homeproxy"
