@@ -141,8 +141,7 @@ function load_multiplex(get) {
 
 /* Cross-protocol common fields (every outbound protocol carries them, not
  * just one). Lives as its own sub-object instead of being repeated in
- * every PROTOCOL_OPTIONS row, and the Adapter reads from `node.common` so
- * the Adapter never has to reach back to `node.raw` for these. */
+ * every PROTOCOL_OPTIONS row, and the Adapter reads from `node.common`. */
 function load_common(get) {
 	return {
 		proxy_protocol: get('proxy_protocol'),
@@ -278,7 +277,7 @@ export const PROTOCOL_OPTIONS = {
 	/* P3-E: direct nodes carry override_address/override_port, which the
 	 * Generator uses to populate the direct_overrides table for the
 	 * routing path. Reading them from node.protocol_options keeps the
-	 * Adapter (and the Generator) off node.raw. */
+	 * Adapter (and the Generator) off the legacy `node.raw` bag. */
 	direct: {
 		override_address: 'override_address',
 		override_port: 'override_port'
@@ -327,14 +326,46 @@ function load_settings(uci, section, keys) {
 	return settings;
 }
 
-/* Single-section + list sections grouped under a domain sub-object. Each
- * list is the raw UCI section dict (`type` in {'array'/'object'}), and
- * downstream code is responsible for shaping it into the sing-box field
- * names. `enabled` flags stay as raw UCI strings here, same as Node. */
+/* PR-01 (Domain Model Completion): the raw UCI section dict that
+ * uci.foreach() yields carries internal fields prefixed with a dot
+ * (`.name`, `.index`, `.type`); downstream generators had to read those
+ * directly, and every consumer had to remember `cfg.enabled !== '1'`
+ * to gate a section. Normalise once here so consumers see a flat
+ * domain object: the dot-prefixed pseudo-fields are dropped, the UCI
+ * section name is exposed as `name`, and `enabled` (when present) is
+ * coerced to a real boolean.
+ *
+ * Fields with non-prefixed names that happen to collide with the UCI
+ * metadata (e.g. an option literally called `name` or `index`) would
+ * be shadowed; in this codebase that does not happen, and PR-04 keeps
+ * it that way. */
+function normalize_section(cfg) {
+	const item = {};
+
+	for (let k, v in cfg) {
+		if (k[0] === '.')
+			continue;
+		item[k] = v;
+	}
+
+	if ('enabled' in item)
+		item.enabled = (item.enabled === '1');
+
+	item.name = cfg['.name'];
+
+	return item;
+}
+
+/* Single-section + list sections grouped under a domain sub-object.
+ * Each list entry is the normalised section dict produced by
+ * normalize_section(): the UCI `.name`/`.index`/`.type` pseudo-fields
+ * are gone, `name` is set to the section name, and `enabled` is a
+ * boolean. Sing-box field names are still produced by the generator
+ * modules; this loader just preserves what UCI has. */
 function load_sections(uci, type) {
 	const items = [];
 
-	uci.foreach(UCICONFIG, type, (cfg) => push(items, cfg));
+	uci.foreach(UCICONFIG, type, (cfg) => push(items, normalize_section(cfg)));
 
 	return items;
 }
@@ -468,8 +499,7 @@ export const Loader = {
 				tls: load_tls(get),
 				transport: load_transport(get),
 				multiplex: load_multiplex(get),
-				protocol_options: load_protocol_options(get, get('type')),
-				raw: section
+				protocol_options: load_protocol_options(get, get('type'))
 			}));
 		});
 

@@ -40,11 +40,11 @@ import { get_outbound, isDirectOutboundTag } from './common.uc';
  * share the same fetch source (sing-box 1.14 multi-tag). */
 export function build_user_rulesets(rule_set_array, dm, ctx) {
 	for (let cfg in dm.routing.rulesets) {
-		if (cfg.enabled !== '1')
+		if (!cfg.enabled)
 			continue;
 
 		const extra_tags = cfg.extra_tags || [];
-		let rs_tag = 'cfg-' + cfg['.name'] + '-rule';
+		let rs_tag = 'cfg-' + cfg.name + '-rule';
 		if (length(extra_tags) && cfg.type !== 'inline') {
 			rs_tag = [rs_tag];
 			for (let t in extra_tags)
@@ -53,9 +53,9 @@ export function build_user_rulesets(rule_set_array, dm, ctx) {
 			   (remote: url and initial_path, local: path) */
 			const fetch_ref = (cfg.type === 'remote') ? (cfg.url || '') : (cfg.path || '');
 			if (!match(fetch_ref, /\{tag\}/))
-				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its %s source lacks a {tag} placeholder.", cfg['.name'], cfg.type));
+				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its %s source lacks a {tag} placeholder.", cfg.name, cfg.type));
 			if (cfg.type === 'remote' && !isEmpty(cfg.initial_path) && !match(cfg.initial_path, /\{tag\}/))
-				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its initial_path lacks a {tag} placeholder.", cfg['.name']));
+				warn(sprintf("homeproxy: rule-set '%s' uses extra tags but its initial_path lacks a {tag} placeholder.", cfg.name));
 		}
 
 		const ruleset = {

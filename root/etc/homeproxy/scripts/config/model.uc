@@ -11,9 +11,12 @@
  * user configured*, not what sing-box wants: no `outbound`, no `type` field
  * named after a sing-box outbound kind, no `tag` arithmetic.
  *
- * `raw` keeps the untouched UCI dict for fields the model does not interpret
- * yet. It exists so the migration can be incremental, and it is the only part
- * of the model allowed to be opaque.
+ * PR-01 (Domain Model Completion): every field the Adapter used to read off
+ * `node.raw.*` has been promoted to an explicit Node sub-object
+ * (`credentials`, `tls`, `transport`, `multiplex`, `common`,
+ * `protocol_options`), so the legacy `raw` opaque bag was dropped - no code
+ * reads it and leaving it in only made the next reader assume it was
+ * authoritative.
  */
 
 'use strict';
@@ -66,20 +69,14 @@ export const Config = {
 		general: {},
 		nodes: [],
 
-		/* Stage A1.1 placeholders: the loader does not read these yet, so
-		   they exist as empty objects to make the HomeProxyConfig shape
-		   complete. A1.2 - A1.4 fill them in: dns, routing, endpoints,
-		   access_control, server. Downstream code may assert their
-		   presence even when empty. */
+		/* The five domain sub-objects the Loader fills in from the
+		 * corresponding UCI sections (single + list). PR-01 §A now
+		 * normalises the list sections; downstream generators read only
+		 * these sub-objects. */
 		dns: {},
 		routing: {},
-		endpoints: {},
 		access_control: {},
-		server: {},
-
-		/* The full unmodelled UCI tail. Not part of the domain contract;
-		   shrinks as the refactor progresses. */
-		raw: {}
+		server: {}
 	})
 };
 
@@ -96,7 +93,7 @@ export const Node = {
 
 		/* cross-protocol common fields (proxy_protocol, tcp_fast_open,
 		 * tcp_multi_path, udp_fragment). The Adapter reads from here so
-		 * it never has to reach back into `raw` for these. */
+		 * it never has to reach back into UCI for these. */
 		common: opts.common || {},
 
 		/* credentials, already canonical */
@@ -109,10 +106,7 @@ export const Node = {
 		multiplex: opts.multiplex || {},
 
 		/* per-protocol extras, canonical names only */
-		protocol_options: opts.protocol_options || {},
-
-		/* verbatim UCI dict, for the not-yet-modelled tail */
-		raw: opts.raw || {}
+		protocol_options: opts.protocol_options || {}
 	}),
 
 	/* A node is usable only if the adapter can build a valid outbound from it.
@@ -174,34 +168,19 @@ export const ConfigQuery = {
 		return null;
 	},
 
-	/* Linear search by UCI section name (which is what the router still
-	 * uses in routing_node / dns_server / etc. references). Returns the
-	 * flat section dict so the existing uci.foreach-style consumers do
-	 * not have to change. */
+	/* Linear search by section name. PR-01 normalises list sections so
+	 * `name` is the UCI section name; the dotted `.name` UCI uses
+	 * internally is gone from the loaded shape. */
 	find_by_name: (items, name) => {
 		for (let it in items)
-			if (it['.name'] === name)
+			if (it.name === name)
 				return it;
 		return null;
 	},
 
-	node_ids: (config) => map(config.nodes, (node) => node.id),
-
-	/* Which node the routing modes route through. The default (`nil`) means
-	 * "no proxy node", which is a legitimate configuration. */
-	main_node_id: (config) => config.general.main_node || 'nil',
-
-	main_udp_node_id: (config) => config.general.main_udp_node || 'nil',
-
-	/* endpoints is a derived list (not a UCI section): each entry is the
-	 * resolved outbound the generator eventually emits as a sing-box
-	 * endpoint. The shape is filled in by the application/service layer
-	 * (A3 / A4), not by the Loader. This helper returns an empty list
-	 * so callers can iterate unconditionally before A3 lands. */
-	endpoints: (config) => {
-		const ep = config.endpoints;
-		if (type(ep) !== 'object' || length(ep) === 0)
-			return [];
-		return ep;
-	}
+	/* Which UDP node the routing modes route through. The default (`nil`)
+	 * means "no proxy node", which is a legitimate configuration. The
+	 * equivalent main_node read is one-liner enough that no helper
+	 * exists. */
+	main_udp_node_id: (config) => config.general.main_udp_node || 'nil'
 };

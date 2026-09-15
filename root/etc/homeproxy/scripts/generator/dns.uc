@@ -156,7 +156,7 @@ function append_proxy_dns(config, dm, ctx) {
 function append_custom_dns(config, dm, ctx) {
 	/* DNS servers */
 	for (let cfg in dm.dns.servers) {
-		if (cfg.enabled !== '1')
+		if (!cfg.enabled)
 			continue;
 
 		let outbound = get_outbound(cfg.outbound, dm);
@@ -164,7 +164,7 @@ function append_custom_dns(config, dm, ctx) {
 			outbound = null;
 
 		push(config.dns.servers, {
-			tag: 'cfg-' + cfg['.name'] + '-dns',
+			tag: 'cfg-' + cfg.name + '-dns',
 			type: cfg.type,
 			server: cfg.server,
 			server_port: strToInt(cfg.server_port),
@@ -187,7 +187,7 @@ function append_custom_dns(config, dm, ctx) {
 	   evaluate action; deprecated strategy/accept_empty fields are dropped. */
 	const builtin_dns_rules = [];
 	for (let cfg in dm.dns.rules) {
-		if (cfg.enabled !== '1')
+		if (!cfg.enabled)
 			continue;
 
 		const rule = {
@@ -251,7 +251,7 @@ function append_custom_dns(config, dm, ctx) {
 			   paradigm. Carry the original query-matching fields onto the evaluate
 			   prefix rule so only queries that would have hit this rule get
 			   pre-resolved; an unconditional evaluate would resolve every query. */
-			const eval_tag = '_hp_eval_' + cfg['.name'];
+			const eval_tag = '_hp_eval_' + cfg.name;
 			const eval_rule = {
 				action: 'evaluate',
 				server: get_resolver(cfg.server),

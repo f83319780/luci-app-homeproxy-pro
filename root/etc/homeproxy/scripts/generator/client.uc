@@ -280,7 +280,7 @@ export function generate(dm) {
 
 	/* User-defined rulesets are custom-mode only; passing an empty
 	 * dm.routing.rulesets through build_user_rulesets is a no-op
-	 * because every cfg in it is filtered by enabled !== '1'. */
+	 * because every cfg in it is filtered by !cfg.enabled (PR-01). */
 	if (ctx.routing_mode === 'custom')
 		build_user_rulesets(config.route.rule_set, dm, ctx);
 

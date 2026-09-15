@@ -203,7 +203,7 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 		});
 
 	for (let cfg in dm.routing.rules) {
-		if (cfg.enabled !== '1')
+		if (!cfg.enabled)
 			continue;
 
 		const rule_outbound = get_outbound(cfg.outbound, dm);

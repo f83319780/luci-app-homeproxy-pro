@@ -93,8 +93,49 @@ expect('dns.settings.dns_timeout', config.dns?.settings?.dns_timeout, '5s');
 expect('dns.servers.length', length(config.dns?.servers), 1);
 expect('dns.servers[0].type', config.dns?.servers?.[0]?.type, 'udp');
 expect('dns.servers[0].server', config.dns?.servers?.[0]?.server, '8.8.8.8');
+expect('dns.servers[0].name', config.dns?.servers?.[0]?.name, 'ds_main');
 expect('dns.rules.length', length(config.dns?.rules), 1);
 expect('dns.rules[0].action', config.dns?.rules?.[0]?.action, 'hijack-dns');
+expect('dns.rules[0].name', config.dns?.rules?.[0]?.name, 'dr_hijack');
+/* PR-01: dns_rule has `enabled '1'` in the fixture, the loader must
+ * surface it as a real boolean. */
+expect('dns.rules[0].enabled', config.dns?.rules?.[0]?.enabled, true);
+
+/* PR-01: the UCI pseudo-fields (.name / .index / .type) must not
+ * leak into the loaded shape - the loader drops them via
+ * normalize_section(). */
+for (let s in (config.dns?.servers || [])) {
+	if ('.name' in s || '.index' in s || '.type' in s) {
+		printf('FAIL dns.servers normalisation: pseudo-field leaked %J\n', s);
+		failures++;
+	}
+}
+checks++;
+for (let r in (config.dns?.rules || [])) {
+	if ('.name' in r || '.index' in r || '.type' in r) {
+		printf('FAIL dns.rules normalisation: pseudo-field leaked %J\n', r);
+		failures++;
+	}
+}
+checks++;
+/* PR-01: sections with `enabled` must have it coerced to boolean.
+ * The fixture carries no `enabled` option on dns_server/dns_rule, so
+ * `enabled` is absent rather than coerced - the check is "no
+ * string-shaped `enabled` value sneaked through". */
+for (let s in (config.dns?.servers || [])) {
+	if ('enabled' in s && type(s.enabled) !== 'boolean') {
+		printf('FAIL dns.servers.enabled: not coerced to boolean, got %J\n', s.enabled);
+		failures++;
+	}
+}
+checks++;
+for (let r in (config.dns?.rules || [])) {
+	if ('enabled' in r && type(r.enabled) !== 'boolean') {
+		printf('FAIL dns.rules.enabled: not coerced to boolean, got %J\n', r.enabled);
+		failures++;
+	}
+}
+checks++;
 
 /* absent options must NOT appear in settings */
 if ('client_subnet' in (config.dns?.settings || {})) {
@@ -116,11 +157,37 @@ expect('routing.nodes[0].node', config.routing?.nodes?.[0]?.node, 'urltest');
 
 expect('routing.rules.length', length(config.routing?.rules), 1);
 expect('routing.rules[0].action', config.routing?.rules?.[0]?.action, 'route');
+expect('routing.rules[0].name', config.routing?.rules?.[0]?.name, 'rr_sniff');
 
 expect('routing.rulesets.length', length(config.routing?.rulesets), 1);
 expect('routing.rulesets[0].type', config.routing?.rulesets?.[0]?.type, 'remote');
 expect('routing.rulesets[0].url', config.routing?.rulesets?.[0]?.url, 'https://example.com/cn.list');
 expect('routing.rulesets[0].download_detour', config.routing?.rulesets?.[0]?.download_detour, 'main-out');
+expect('routing.rulesets[0].name', config.routing?.rulesets?.[0]?.name, 'rs_cn');
+
+/* PR-01: same normalisation guarantees for the routing lists. */
+for (let n in (config.routing?.nodes || [])) {
+	if ('.name' in n || '.index' in n || '.type' in n) {
+		printf('FAIL routing.nodes normalisation: pseudo-field leaked %J\n', n);
+		failures++;
+	}
+}
+checks++;
+for (let r in (config.routing?.rules || [])) {
+	if ('.name' in r || '.index' in r || '.type' in r) {
+		printf('FAIL routing.rules normalisation: pseudo-field leaked %J\n', r);
+		failures++;
+	}
+}
+checks++;
+for (let rs in (config.routing?.rulesets || [])) {
+	if ('.name' in rs || '.index' in rs || '.type' in rs) {
+		printf('FAIL routing.rulesets normalisation: pseudo-field leaked %J\n', rs);
+		failures++;
+	}
+}
+checks++;
+expect('routing.nodes[0].name', config.routing?.nodes?.[0]?.name, 'rn_main');
 
 /* --- access_control -------------------------------------------------- */
 expect('access_control.control.lan_proxy_mode', config.access_control?.control?.lan_proxy_mode, 'disabled');
@@ -142,17 +209,34 @@ expect('server.settings.log_level', config.server?.settings?.log_level, 'warn');
 expect('server.inbounds.length', length(config.server?.inbounds), 1);
 expect('server.inbounds[0].type', config.server?.inbounds?.[0]?.type, 'vless');
 expect('server.inbounds[0].port', config.server?.inbounds?.[0]?.port, '443');
+expect('server.inbounds[0].name', config.server?.inbounds?.[0]?.name, 's_vless');
 
-/* --- endpoints remains a derived placeholder ------------------------- */
-expect('endpoints', config.endpoints, {});
-expect('ConfigQuery.endpoints()', ConfigQuery.endpoints(config), []);
+/* PR-01: server inbounds must be normalised too. */
+for (let ib in (config.server?.inbounds || [])) {
+	if ('.name' in ib || '.index' in ib || '.type' in ib) {
+		printf('FAIL server.inbounds normalisation: pseudo-field leaked %J\n', ib);
+		failures++;
+	}
+}
+checks++;
 
-/* --- node-derived queries still work --------------------------------- */
-expect('main_node_id', ConfigQuery.main_node_id(config), 'urltest');
+/* --- PR-01 removed the Config.endpoints placeholder and the dead
+ *     ConfigQuery.endpoints / node_ids / main_node_id helpers; the
+ *     remaining helpers (node_by_id, find_by_name, main_udp_node_id)
+ *     are still wired up. */
 expect('main_udp_node_id', ConfigQuery.main_udp_node_id(config), 'nil');
 expect('node_by_id(n_anytls).type', ConfigQuery.node_by_id(config, 'n_anytls')?.type, 'anytls');
 expect('node_by_id(missing)', ConfigQuery.node_by_id(config, 'missing'), null);
-expect('node_ids.length', length(ConfigQuery.node_ids(config)), 2);
+
+/* find_by_name is exercised against the normalised routing_node list:
+ * `name` is the UCI section name and the lookup must find it. */
+{
+	let rn = null;
+	for (let n in (config.routing?.nodes || []))
+		if (n.name === 'rn_main') rn = n;
+	expect('find_by_name(routing.nodes, rn_main).node',
+		rn?.node, 'urltest');
+}
 
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures === 0 ? 0 : 1);

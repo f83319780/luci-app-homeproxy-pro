@@ -32,7 +32,7 @@ import { load_tls, load_transport } from '../config/loader.uc';
 function build_snell_inbound(cfg) {
     return {
         type: 'snell',
-        tag: 'cfg-' + cfg['.name'] + '-in',
+        tag: 'cfg-' + cfg.name + '-in',
 
         listen: cfg.address || '::',
         listen_port: strToInt(cfg.port),
@@ -56,7 +56,7 @@ function build_snell_inbound(cfg) {
 function build_generic_inbound(cfg) {
     return {
         type: cfg.type,
-        tag: 'cfg-' + cfg['.name'] + '-in',
+        tag: 'cfg-' + cfg.name + '-in',
 
         listen: cfg.address || '::',
         listen_port: strToInt(cfg.port),
@@ -96,7 +96,7 @@ function build_generic_inbound(cfg) {
         /* AnyTLS / HTTP / Hysteria (2) / Mixed / Socks / Trojan / Tuic / VLESS / VMess */
         users: (cfg.type !== 'shadowsocks') ? [
             {
-                name: !(cfg.type in ['http', 'mixed', 'naive', 'socks']) ? 'cfg-' + cfg['.name'] + '-server' : null,
+                name: !(cfg.type in ['http', 'mixed', 'naive', 'socks']) ? 'cfg-' + cfg.name + '-server' : null,
                 username: cfg.username,
                 password: cfg.password,
 
@@ -148,7 +148,7 @@ export function generate_server(dm) {
     };
 
     for (let cfg in ((dm.server || {}).inbounds || [])) {
-        if (cfg.enabled !== '1')
+        if (!cfg.enabled)
             continue;
 
         if (cfg.type === 'snell')
