@@ -40,13 +40,21 @@ const CBIGenValue = form.Value.extend({
 });
 
 function getServiceStatus() {
+	/* The fallback is `null`, not `{}`: that is what lets the caller tell
+	 * "the status query did not answer" from "the service is not running".
+	 * With the default `{}` the try/catch below swallowed the difference and
+	 * reported a failed query as NOT RUNNING. */
 	return hp.rpcCall('list', ['homeproxy'],
-			{ object: 'service', params: ['name'], expect: { '': {} } }).then((res) => {
-		let isRunning = false;
+			{ object: 'service', params: ['name'], expect: { '': {} }, fallback: null }).then((res) => {
+		if (res === null)
+			return null;
+
 		try {
-			isRunning = res['homeproxy']['instances']['sing-box-s']['running'];
-		} catch (e) { }
-		return isRunning;
+			return res['homeproxy']['instances']['sing-box-s']['running'] === true;
+		} catch (e) {
+			/* It answered, and there is no such instance. */
+			return false;
+		}
 	});
 }
 
@@ -59,11 +67,9 @@ function renderStatus(isRunning, version) {
 	if (typeof version === 'string' && /^[\w.\-+]+$/.test(version))
 		safeVersion = version;
 
-	let spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
-	if (isRunning)
-		return spanTemp.format('green', _('HomeProxy Server'), safeVersion, _('RUNNING'));
-	else
-		return spanTemp.format('red', _('HomeProxy Server'), safeVersion, _('NOT RUNNING'));
+	const state = hp.statusLabel(isRunning);
+	return '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>'
+		.format(state.color, _('HomeProxy Server'), safeVersion, state.text);
 }
 
 function handleGenKey(option) {

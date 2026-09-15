@@ -60,6 +60,12 @@ echo "== frontend validators =="
 # with a fake form context instead.
 node "$ROOT/tests/frontend-validators.js" "$ROOT" || FAILED=1
 
+echo "== frontend RPC fallbacks =="
+# What the UI claims when an RPC does not answer: the protocol list must not
+# shrink (a saved node's type would be silently rewritten on the next save),
+# and the status bar must not report a failed query as NOT RUNNING.
+node "$ROOT/tests/frontend-rpc-fallbacks.js" "$ROOT" || FAILED=1
+
 echo "== frontend title escaping =="
 # Two sinks, two different escapes: a tab title decodes once, a section modal
 # title goes through form.stripTags() which *decodes entities*, so escaping
