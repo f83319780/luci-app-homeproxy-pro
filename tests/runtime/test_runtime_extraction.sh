@@ -56,7 +56,28 @@ mkdir -p "$SANDBOX/etc/homeproxy/scripts/runtime" \
          "$SANDBOX/var/run/homeproxy" \
          "$SANDBOX/dnsmasq" \
          "$SANDBOX/sbin" \
+         "$SANDBOX/init.d" \
+         "$SANDBOX/etc/crontabs" \
          "$BIN"
+
+# The auto-update entry is installed by editing the crontab in place, so the
+# file has to exist in the sandbox: on a laptop /etc/crontabs/root does not, the
+# `sed -i` fails and the run logs a warning the target never produces.  Seeded
+# with a stale entry so the delete path is actually exercised.
+printf '# existing entry\n0 2 * * * /etc/init.d/acme renew\n0 2 * * * /x #homeproxy_autosetup\n' \
+	> "$SANDBOX/etc/crontabs/root"
+
+# Stand-ins for the absolute init scripts the runtime calls.  They record the
+# call and succeed, so the trace is the same everywhere and the "Warning: failed
+# to restart ..." lines a laptop produced cannot leak into the golden.
+for initd in dnsmasq cron miniupnpd; do
+	cat > "$SANDBOX/init.d/$initd" <<'EOF'
+#!/bin/sh
+printf 'init.d/%s %s\n' "$(basename "$0")" "$*" >> "$TRACE"
+exit 0
+EOF
+	chmod +x "$SANDBOX/init.d/$initd"
+done
 
 # --- the payload the init script expects ---------------------------------
 cp "$SCRIPTS/runtime/"*.sh "$SANDBOX/etc/homeproxy/scripts/runtime/"
@@ -398,18 +419,28 @@ run_scenario() {
 #
 # `/sbin/ujail` lives in init.d before PR-05 and in runtime/service.sh after
 # it, so the rewrite has to cover both.
-sandbox_ujail() {
-	sed "s#-x \"/sbin/ujail\"#-x \"$SANDBOX/sbin/ujail\"#g" "$1" > "$1.tmp" \
-		&& mv "$1.tmp" "$1"
+# The runtime modules talk to a few ABSOLUTE paths, and those are the test's
+# only host dependence: `/etc/init.d/dnsmasq` exists on a router (so the real
+# script runs, with its own side effects) and not on a laptop, and `/sbin/ujail`
+# likewise.  Rewriting them into the sandbox is what makes the trace identical
+# on macOS, on the CI runner and on the target - the first on-target run differed
+# from line 11 purely because dnsmasq's init script was there to run.
+sandbox_paths() {
+	sed -e "s#-x \"/sbin/ujail\"#-x \"$SANDBOX/sbin/ujail\"#g" \
+	    -e "s#/etc/init.d/dnsmasq#$SANDBOX/init.d/dnsmasq#g" \
+	    -e "s#/etc/init.d/cron#$SANDBOX/init.d/cron#g" \
+	    -e "s#/etc/init.d/miniupnpd#$SANDBOX/init.d/miniupnpd#g" \
+	    -e "s#/etc/crontabs/root#$SANDBOX/etc/crontabs/root#g" \
+	    "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 }
 
 sed -e "s#^HP_DIR=\"/etc/homeproxy\"#HP_DIR=\"$SANDBOX/etc/homeproxy\"#" \
     -e "s#^RUN_DIR=\"/var/run/homeproxy\"#RUN_DIR=\"$SANDBOX/var/run/homeproxy\"#" \
     "$INITD" > "$WORK/initd.sh"
-sandbox_ujail "$WORK/initd.sh"
+sandbox_paths "$WORK/initd.sh"
 
 for module in "$SANDBOX/etc/homeproxy/scripts/runtime"/*.sh; do
-	sandbox_ujail "$module"
+	sandbox_paths "$module"
 done
 
 for anchor in "HP_DIR=\"$SANDBOX/etc/homeproxy\"" \
@@ -421,11 +452,14 @@ for anchor in "HP_DIR=\"$SANDBOX/etc/homeproxy\"" \
 	fi
 done
 
-if ! grep -qF "$SANDBOX/sbin/ujail" "$WORK/initd.sh" "$SANDBOX/etc/homeproxy/scripts/runtime"/*.sh; then
-	echo "FAIL: could not sandbox the ujail probe - the jail branch would be skipped"
-	rm -f "$DNSMASQ_CONF"
-	exit 1
-fi
+for anchor in "$SANDBOX/sbin/ujail" "$SANDBOX/init.d/dnsmasq" "$SANDBOX/init.d/cron" \
+              "$SANDBOX/etc/crontabs/root"; do
+	if ! grep -qF "$anchor" "$WORK/initd.sh" "$SANDBOX/etc/homeproxy/scripts/runtime"/*.sh; then
+		echo "FAIL: could not sandbox $anchor - the trace would depend on the host"
+		rm -f "$DNSMASQ_CONF"
+		exit 1
+	fi
+done
 
 # Scenario A: TUN client, bypass_mainland_china, no server, no ipv6.
 run_scenario "A-tun-bypass-client-only" start \
@@ -470,13 +504,38 @@ if [ ! -f "$GOLDEN" ]; then
 	exit 1
 fi
 
-if diff -u "$GOLDEN" "$TRACE.norm" > "$WORK/trace.diff"; then
+# The decision must not depend on `diff`.  This test also runs on the target
+# (tests/ucode/run.sh stages it there), and busybox has `cmp` but often no
+# `diff` - the first on-target run failed with "diff: not found" and looked
+# exactly like an orchestration change.  The golden snapshot tests already do
+# it this way: `cmp` decides, `diff` only formats the diagnosis.
+if cmp -s "$GOLDEN" "$TRACE.norm"; then
 	echo "PASS: runtime orchestration matches $(basename "$GOLDEN")"
 	echo "      ($(wc -l < "$GOLDEN") trace lines across 4 scenarios)"
-else
-	echo "FAIL: the orchestration changed:"
-	head -80 "$WORK/trace.diff"
-	exit 1
+	exit 0
 fi
+
+echo "FAIL: the orchestration changed:"
+if command -v diff > "/dev/null" 2>&1; then
+	diff -u "$GOLDEN" "$TRACE.norm" | head -80
+else
+	# No diff here: name the first differing lines and show both sides, which
+	# is enough to diagnose without the tool.
+	awk '
+		NR == FNR { golden[FNR] = $0; n = FNR; next }
+		{
+			if ($0 != golden[FNR] && shown < 20) {
+				printf "  line %d\n    golden: %s\n    actual: %s\n", FNR, golden[FNR], $0;
+				shown++;
+			}
+		}
+		END {
+			if (n > FNR)
+				printf "  (golden has %d more lines than the trace)\n", n - FNR;
+		}
+	' "$GOLDEN" "$TRACE.norm"
+fi
+
+exit 1
 
 exit 0
