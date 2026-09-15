@@ -25,6 +25,7 @@
 
 | 编号 | 事项 | 优先级 | 规模 | 阻塞于 |
 |---|---|---|---|---|
+| **P0-6** | **生成器读错 UCI 路径 + 订阅更新器静默无效**（严重回归） | **P0** | 小 | 无 · 已完成✅ |
 | **P0-1** | **两个 XSS**：label→弹窗标题、订阅 URL fragment→tab 标题 | **P0** | 小 | 无 |
 | **P0-2** | `decodeURIComponent` 让节点页**整页渲染失败**（必现） | **P0** | 极小 | 无 |
 | P0-3 | 真机配置善后：抢救 + 重建 | **P0** | 小 | 你提供节点信息 |
@@ -53,7 +54,71 @@
 
 ---
 
-## 2. P0-1 两个 XSS（最紧急）
+## 2. P0-6 生成器读错 UCI 路径 + 订阅更新器静默无效 —— 已完成✅
+
+**最严重的一项**：后端对抗性复核提出，我在**真机实测确认**。
+
+### 是什么
+两条**重构遗留的静默回归**。都不在本轮引入，但都被本轮带到了现在：
+
+**① 生成器读一个不存在的 UCI 文件。**
+`Loader.load(HP_DIR + '/config')` → `cursor('/etc/homeproxy/config')`。
+ucode 的 `cursor(dir)` 把 `dir` 当 **confdir**，所以 `uci.load('homeproxy')`
+去找 `/etc/homeproxy/config/homeproxy`。包只提供 `/etc/config/homeproxy`（conffile），
+没有任何东西创建那个目录。于是 `uci.load()` 返回 null、每个 `uci.get()` 返回 null，
+Loader 交出**纯默认值**：没有 main-out、没有 route/dns final、没有用户的端口和节点，
+而且**不报任何错**——服务照常起来，只是什么都不代理。
+
+来源：`11af0bd`（本轮之前）把正确的 `Loader.load()` 换成 `__LOADER_DIR__` 占位符，
+其注释声称"生产上会被解释为相对的 /etc/config 路径"——**这个说法是错的**；
+`0c67d77`（本轮）又把它改写成 `HP_DIR + '/config'` 而没质疑。
+
+**② 订阅更新器是静默空操作。**
+`update_subscriptions.uc` 从 `access_control.subscription` 读
+`subscription_urls` / `filter_keywords`，而 `load_access_control()` 把这两个
+直接放在 `access_control` 上（`loader.uc:303-304`）。两者恒为 `[]`，
+于是 `if (!isEmpty(subscription_urls)) call(main)` 永远为假：
+脚本退出 0、不打任何日志，**LuCI 的"更新节点"按钮与 cron 条目什么都不做**。
+
+### 真机证据（不是只读代码）
+```
+Loader.load(sentinel dir)        -> routing_mode="SENTINEL_MODE" main_node="SENTINEL_NODE"
+Loader.load('/etc/homeproxy/config') -> routing_mode="bypass_mainland_china" main_node="nil"
+Loader.load('/etc/config')           -> 真实配置的值
+```
+更新器行为（真机跑真实脚本 + 一个不可达的订阅 URL）：
+- **修复后**：日志 1 行 `Failed to update subscriptions: no valid node found.` → **main() 确实跑了**
+- **还原 bug**：日志 **0 行** → 静默空操作
+
+另外确认了 `cursor('/etc/homeproxy/config')` 在真机上取不到值，
+而 `cursor('/etc/config')` 取得到；`/etc/homeproxy/` 下只有 `resources/` 与 `scripts/`。
+
+### 修复
+- `homeproxy.uc` 新增 `export const UCICONFIG_DIR = '/etc/config';`（挨着 `HP_DIR`），
+  两个生成器改用它；测试改为改写这个常量（保持"不 sed 源文件"的分层缝隙）。
+- 更新器改读 `loaded.access_control.subscription_urls` / `.filter_keywords`，
+  与项目自己的模型测试所断言的形状一致。
+
+### 守卫（都能失败，已反向验证）
+- `tests/arch-guard.sh`（新建）：confdir 必须是 `/etc/config`、不得由 `HP_DIR` 推导、
+  `Loader.load()` 只允许 `UCICONFIG_DIR` 或裸默认两种形态；
+  更新器读的每个 `sub.<field>` 必须是 Loader 嵌在 `subscription` 里的键，
+  且 `subscription_urls`/`filter_keywords` 必须从 `access_control` 读。
+  **三条反向验证全部变红**（两种 UCI 路径写法 + 错误层级读取）。
+- `tests/ucode/test_subscription_updater_runs.sh`（新建）：端到端驱动更新器。
+  **在此之前没有任何测试执行过 `main()`**——这正是静默空操作能存活的原因。
+
+### 为什么全套测试都没抓到
+两条同一个原因：**每个测试都自己铺输入**，所以测试无法发现生产读的是另一个地方。
+`test_generators.sh` 把 fixture 恰好铺在代码会看的位置；
+模型测试断言的是**正确**的形状，反而让消费方的错误读取显得没问题。
+
+### 验收
+`tests/run.sh` 全绿（含新守卫与新测试），真机 `ALL TESTS PASSED`。
+
+---
+
+## 3. P0-1 两个 XSS（最紧急）
 
 ### 现状
 审计 §3、§4。两个独立入口，同一个终点（`dom.append` 的 `innerHTML`）：
@@ -93,7 +158,7 @@
 
 ---
 
-## 3. P0-2 `decodeURIComponent` 崩溃（必现）
+## 4. P0-2 `decodeURIComponent` 崩溃（必现）
 
 `node.js:555` 对畸形 fragment 抛 `URIError`，位置在 `render()` 里、`m.render()` 之前，
 **整页渲染不出来**。已实测 `#%`、`#100%`、`#%zz` 三种都抛，且都被校验器放行。
@@ -105,7 +170,7 @@
 
 ---
 
-## 4. P0-3 真机配置善后
+## 5. P0-3 真机配置善后
 
 设备 `/etc/config/homeproxy` 现为 feed 默认值（78 行 / 8 section / 0 节点）。
 
@@ -120,7 +185,7 @@
 
 ---
 
-## 5. P0-4 ECH 上传修复
+## 6. P0-4 ECH 上传修复
 
 审计 §6。**复核补充了一条我漏掉的**：即使补上 case，
 `homeproxy.uc:597-598` 的 `isValidPEM(content,false)` 只认
@@ -139,7 +204,7 @@ tmp 文件在成功与失败路径上都被清理。**在 P1-5 的行为测试�
 
 ---
 
-## 6. P0-5 README 指向生产路由器 —— 已完成✅
+## 7. P0-5 README 指向生产路由器 —— 已完成✅
 
 `tests/README.md:18-19` 写默认 `root@192.168.1.1`——**那是家里的生产路由器**，
 而 `run.sh:20` 的默认是 `.102`，`run.sh:12-14` 明确警告这个 fallback 会把整个 checkout
@@ -148,9 +213,13 @@ tmp 文件在成功与失败路径上都被清理。**在 P1-5 的行为测试�
 
 ---
 
-## 7. P1-1 Architecture Guard（PR-07）
+## 8. P1-1 Architecture Guard（PR-07）
 
 审计 §8.3 的六个盲区就是它的需求清单。**不卡任何人，且是后面所有改动的前提。**
+
+> **进度**：`tests/arch-guard.sh` 已建立并接入 `tests/run.sh`（P0-6 的守卫）：
+> 目前有 guard 1（生成器 confdir）与 guard 2（更新器读取层级），共 9 项检查，
+> 全部反向验证过。下面的第 1~7 条仍需补齐。
 
 ### 首批守卫
 1. **ACL ↔ 后端方法表双向差集为空**（已用 Python 验证过，固化它）
@@ -172,7 +241,7 @@ tmp 文件在成功与失败路径上都被清理。**在 P1-5 的行为测试�
 
 ---
 
-## 8. P1-2 发布路径加测试门
+## 9. P1-2 发布路径加测试门
 
 审计 §8.1。`build.yml:14-17` 在 tag/`workflow_dispatch` 触发，
 **唯一检查**是 `--warn-below 100` 的 i18n，随后直接构建、上传、发布。
@@ -189,7 +258,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 9. P1-3 mock 副本同步守卫
+## 10. P1-3 mock 副本同步守卫
 
 审计 §8.1/§8.2。`mocks/homeproxy_fetcher.uc` 的 `redactUrl`、
 `mocks/homeproxy.uc` 的 `isEmpty`/`decodeBase64Str`/`parseURL` 都是生产代码的**手抄副本**。
@@ -204,7 +273,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 10. P1-4 i18n 门补 source→pot
+## 11. P1-4 i18n 门补 source→pot
 
 `i18n-coverage.py:106-117` 只做 `.pot`→`.po`；**没有东西重新生成 `.pot` 与源码比对**。
 加一条全新未翻译的 `_()`，门禁仍 724/724 退出 0。
@@ -215,7 +284,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 11. P1-5 `luci.homeproxy` 行为测试
+## 12. P1-5 `luci.homeproxy` 行为测试
 
 审计 §8.3 的结构性根因：`tests/ucode/run.sh:63` 把它单独 `-c` 编译、**从不执行**。
 
@@ -229,7 +298,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 12. P1-6 ACL 收紧
+## 13. P1-6 ACL 收紧
 
 审计 §8.2（**推翻了我第一轮的结论**）。ACL 的 `file` 写授权管的是**浏览器会话**，
 而后端 ucode 以 root 运行、写文件**不经过**这个 ACL。
@@ -245,7 +314,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 13. P1-7 RPC 失败回退不再断言假状态
+## 14. P1-7 RPC 失败回退不再断言假状态
 
 审计 §7。`rpcCall` 的回退设计是对的，但调用方把"未知"当成"否"：
 
@@ -263,7 +332,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 14. P1-8 ~ P1-10
+## 15. P1-8 ~ P1-10
 
 ### P1-8 真机 CI 作业
 `workflow_dispatch` 或带 label 触发，SSH 到 `.102`，走 `tests/runtime/` 的 stage + drive 模式。
@@ -284,7 +353,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 15. P2 剩余项
+## 16. P2 剩余项
 
 ### P2-1 真空检查修复（**含我本会话写的那条**）
 1. `frontend-rpc-inventory.js:72` 正则放宽为 `L\.resolveDefault\s*\(`，
@@ -336,7 +405,7 @@ dnsmasq 卸载不对称；custom 模式 `chown` 告警。逐项小改，各跑�
 
 ---
 
-## 16. P3 明确不做的事（含理由）
+## 17. P3 明确不做的事（含理由）
 
 1. **浏览器人工回归**：agent 做不到，只能你做。这是**唯一**未覆盖的验证面，
    涉及 P0-1/P0-2 的端到端确认与 `(f)` 里 `null` vs 省略 `description` 那一处。
@@ -351,10 +420,12 @@ dnsmasq 卸载不对称；custom 模式 `chown` 告警。逐项小改，各跑�
 
 ---
 
-## 17. 建议推进顺序
+## 18. 建议推进顺序
 
 ```
-P0-5 README 生产路由（一行）
+P0-6 生成器 UCI 路径 + 订阅更新器（两条静默回归）   ✅ 已完成
+  ▼
+P0-5 README 生产路由（一行）                          ✅ 已完成
   ▼
 P0-2 decodeURIComponent 崩溃（必现，极小）
   ▼
@@ -388,7 +459,7 @@ P2-6 状态三件套 → P2-7 样板去重 → P2-8 代码卫生
 
 ---
 
-## 18. 需要你决定的三件事
+## 19. 需要你决定的三件事
 
 1. **ECH：A 补后端（推荐，含 ECH 专用 PEM 校验）还是 B 删按钮？**
 2. **设备上那 6 个节点 + `dns`/`server`/`subscription` 的信息你还留有吗？**
