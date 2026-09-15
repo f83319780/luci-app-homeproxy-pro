@@ -399,6 +399,30 @@ else
 fi
 
 echo
+echo "== guard 10: nothing installs or removes packages on a target =="
+
+# On 2026-09-15 an `apk add luci-app-homeproxy` on the test machine rewrote
+# /etc/config/homeproxy from the feed package and destroyed the node
+# configuration - six nodes plus the dns, server and subscription sections, with
+# no backup and no snapshot. The suite stages instead, and this is the guard
+# that keeps it that way: a package-manager *write* is never part of testing.
+#
+# Reading is fine and is used: tests/run.sh reports the target's installed
+# version with `apk list -I`, and the opkg fallback reads `opkg status`.
+# grep -v drops comment lines: this guard's own explanation quotes the command
+# it forbids, and the first version flagged itself.
+MUTATING="$(grep -rnE '(^|[^a-z-])(apk|opkg)[[:space:]]+(add|del|delete|remove|upgrade|fix|update)([[:space:]]|$)' \
+	"$ROOT/.github/workflows" "$ROOT/tests" 2>/dev/null \
+	| grep -vE ':[0-9]+:[[:space:]]*#' || true)"
+
+if [ -z "$MUTATING" ]; then
+	pass "no workflow or test runs a package-manager write"
+else
+	fail "a package-manager write appears - this is how the device config was lost:"
+	printf '      %s\n' "$MUTATING"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
