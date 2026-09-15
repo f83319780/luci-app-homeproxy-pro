@@ -32,8 +32,8 @@
 | P0-4 | ECH 上传修复（补后端含 ECH 专用校验） | **P0** | 小 | 已按推荐方案 A 完成✅ |
 | P0-5 | README 把默认目标写成**生产路由器** | **P0** | 极小 | 无 · 已完成✅ |
 | P1-1 | Architecture Guard（PR-07），含契约闭合性守卫 | P1 | 中 | 无 · 已完成✅ |
-| P1-2 | 发布路径加测试门（tag 不再裸发布） | P1 | 小 | 无 |
-| P1-3 | mock 副本同步守卫 | P1 | 小 | 无 |
+| P1-2 | 发布路径加测试门（tag 不再裸发布） | P1 | 小 | 无 · 已完成✅ |
+| P1-3 | mock 副本同步守卫 | P1 | 小 | 无 · 已完成✅ |
 | P1-4 | i18n 门补 source→pot | P1 | 小 | 无 |
 | P1-5 | `luci.homeproxy` 行为测试（含 `certificate_write` 全分支） | P1 | 中 | 无 · 已完成✅ |
 | P1-6 | ACL 收紧：删 6 条浏览器用不到的写路径 | P1 | 极小 | 无 · 已完成✅ |
@@ -266,7 +266,7 @@ tmp 文件在成功与失败路径上都被清理。**在 P1-5 的行为测试�
 
 ---
 
-## 9. P1-2 发布路径加测试门
+## 9. P1-2 发布路径加测试门 —— 已完成✅
 
 审计 §8.1。`build.yml:14-17` 在 tag/`workflow_dispatch` 触发，
 **唯一检查**是 `--warn-below 100` 的 i18n，随后直接构建、上传、发布。
@@ -276,25 +276,41 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 **计划**：A（推荐）让 build 依赖一次通过的全量测试——可复用 workflow，
 或在打包前加一步 `sh tests/ucode/run.sh .`；B 用 `workflow_run` 门控。
 
-**验收**：故意让套件失败后触发 tag → **发布不进行**；dispatch 未测试 ref → 拒绝或先测。
+**实施**：把 `arch-test.yml` 变成可复用 workflow（加 `workflow_call:`），
+`build.yml` 新增 `test` job 调用它，`build` 用 `needs: [test]` 依赖。
+**复用定义而不是抄步骤**——CI 复核指出 `arch-test.yml` 本来就手抄了 `run.sh` 的步骤，
+再抄一份只会分叉。
+
+**已验证（真跑了一次）**：`gh workflow run build.yml`（不带 version，只构建不发布）→
+`test / arch-test` 先 **completed success**，`build` 才从 queued 开始 —— 门是真实生效的。
 
 **注意**：`--warn-below` 在那一步是**刻意的**（打包不该被翻译缺口阻塞）。
-这次加的是**测试门**，不是把 i18n 改成 fail——**两者各自的原意都要保留**。
+这次加的是**测试门**，不是把 i18n 改成 fail——**两者各自的原意都要保留**，已保留。
 
 ---
 
-## 10. P1-3 mock 副本同步守卫
+## 10. P1-3 mock 副本同步守卫 —— 已完成✅
 
 审计 §8.1/§8.2。`mocks/homeproxy_fetcher.uc` 的 `redactUrl`、
 `mocks/homeproxy.uc` 的 `isEmpty`/`decodeBase64Str`/`parseURL` 都是生产代码的**手抄副本**。
 我逐行比对过：**当前忠实**，所以现在没漏检——但无机制保证明天还忠实，
 而 `test_subscription_fetcher.uc` 的**安全断言**就是对着副本断言的。
 
-**计划**：加一条**可失败的**同步断言（抽取两侧函数体、归一化、比对）。
+**实施**：没有用"抽取函数体比对文本"——副本**允许被重排**
+（`redactUrl` 的副本就已经调整了语句顺序），所以文本比对会误报。
+改成**行为等价测试**：`tests/ucode/test_mock_sync.sh` 用绝对路径同时 import
+生产模块与两个 mock，在共享语料上比对返回值（46 项检查）。
+`validation()` **刻意排除**（它就是替身），并由 `validate-data.sh` 顶部的
+"PINNED FIXTURE, NOT AN EQUIVALENT" 注释列出它不覆盖哪些类型。
 `validate-data.sh:27-30` 的 `validation()` 是另一种——**故意**与生产不同（逼近而非等价），
 **不**要求逐字节一致，而应**钉成受审的固定 fixture** 并在注释里写明它简化了什么。
 
-**验收**：改生产 `redactUrl` 语义而不动 mock → 必须红；反向验证通过。
+**反向验证**：把生产 `redactUrl` 的 query 脱敏删掉 → 5 项红；
+把 `decodeBase64Str` 的 padding 修复删掉 → 1 项红。
+
+**顺带发现并修掉一个真实隐患**：`validate-data.sh` 把两个参数**插值进 ucode 源码**，
+所以含单引号的 hostname 会闭合字符串字面量 → ucode 语法错误 → 合法名字被判为 invalid。
+改成走环境变量。真机验证：`a'b` → valid，注入尝试既不执行也不崩溃。
 
 ---
 
@@ -468,7 +484,7 @@ P1-6 ACL 收紧 ✅ → P1-1 Architecture Guard（7 组 / 33 项，全部反向�
   ▼
 P1-6 ACL 收紧（浏览器会话 vs 后端 root）                ✅ 已完成
   ▼
-P1-2 发布测试门 → P1-3 mock 同步 → P1-4 i18n 源扫描 → P2-2 fw4 stub
+P1-2 发布测试门 ✅ → P1-3 mock 同步 ✅ → P1-4 i18n 源扫描 → P2-2 fw4 stub
   ▼
 P1-7 回退假状态（先补可失败的测试）→ P2-1 真空检查 → P2-5 JSON 校验
   ▼
