@@ -60,6 +60,23 @@ case 'no-tun':
 	expect('no-tun input', input, null);
 	break;
 
+case 'bad-tun':
+	/* A tun_name that is not a valid interface name must not reach the
+	 * ruleset: the value is interpolated into an nft file that fw4 loads as
+	 * root, and `;`/`}` need no newline to break out of the rule. */
+	expect('bad-tun forward', forward, null);
+	expect('bad-tun input', input, null);
+	break;
+
+case 'good-tun':
+	/* The same path with a valid name still emits the pair, so the guard
+	 * above cannot pass by disabling the feature. */
+	expect('good-tun forward', forward,
+		'oifname singtun9 counter accept comment "!homeproxy: accept tun forward"');
+	expect('good-tun input', input,
+		'iifname singtun9 counter accept comment "!homeproxy: accept tun input"');
+	break;
+
 case 'server':
 	/* server enabled + firewall='1' + a valid port: one accept rule per
 	 * server section, keyed on the destination port. */

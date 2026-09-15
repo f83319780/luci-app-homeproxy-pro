@@ -20,8 +20,25 @@ if (match(proxy_mode, /tun/)) {
 	else
 		outbound_node = uci.get(cfgname, 'config', 'main_node') || 'nil';
 
-	if (outbound_node !== 'nil')
-		tun_name = uci.get(cfgname, 'infra', 'tun_name') || 'singtun0';
+	/* Validate the interface name before it is interpolated into an nft
+	 * ruleset that fw4 loads as root. It is a UCI value, and this file's own
+	 * threat model treats UCI as untrusted - the port and network fields a few
+	 * lines below are validated for exactly that reason, while tun_name was
+	 * not. `;` and `}` need no newline, so a value like
+	 * "singtun0 } ; chain evil { ..." would balance the template's trailing
+	 * brace and add a chain of the attacker's choosing.
+	 *
+	 * Linux interface names are at most 15 characters and cannot contain
+	 * whitespace or shell/nft metacharacters; anything outside that is not a
+	 * name we could have created, so the tun rules are simply not emitted. */
+	if (outbound_node !== 'nil') {
+		const candidate = uci.get(cfgname, 'infra', 'tun_name') || 'singtun0';
+
+		if (match(candidate, /^[A-Za-z0-9_.-]{1,15}$/) && candidate !== '.' && candidate !== '..')
+			tun_name = candidate;
+		else
+			print(sprintf('WARN: ignoring invalid tun_name "%s" (not a valid interface name).', candidate));
+	}
 }
 
 const server_enabled = uci.get(cfgname, 'server', 'enabled');
