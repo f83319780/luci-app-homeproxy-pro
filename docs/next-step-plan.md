@@ -45,7 +45,7 @@
 | P2-2 | fw4 渲染层（改为在目标机上强制，而非 stub） | P2 | 中 | 无 · 已完成✅ |
 | P2-3 | 低危安全项 + 后端复核遗留（#3-#6 已完成✅，余 #7-#12） | P2 | 小 | 无 |
 | P2-4 | 测试确定性（固定 `/tmp`→`mktemp`、`rm -rf` 引号、ssh `BatchMode`） | P2 | 小 | 无 |
-| P2-5 | JSON 资产校验 + 出厂配置解析 | P2 | 小 | 无 |
+| P2-5 | JSON 资产校验 + 出厂配置解析 | P2 | 小 | 无 · 已完成✅ |
 | P2-6 | PHASE 8 残留：状态三件套（**需先补守卫**） | P2 | 中 | P1-1 守卫 + P1-7 |
 | P2-7 | PHASE 8 残留：GridSection ×5 / 动态 load ×13 | P2 | 中 | 无 |
 | P2-8 | 代码卫生 §2.10.8 四项 | P2 | 小 | 无 |
@@ -514,10 +514,20 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 `tests/run.sh:86-87` 的 `$REMOTE_DIR` 在远端 `rm -rf` 里加引号 + `ssh -o BatchMode=yes -o ConnectTimeout=10`。
 验收：两个测试进程并行不再互相踩（当前实测两次并行均退出 1）。
 
-### P2-5 JSON 资产与出厂配置校验
-`menu.d/*.json`、`acl.d/*.json`、`capabilities/homeproxy.json`、`uci-defaults/*`
-**从未被校验**——写坏的 ACL 会静默拒绝 RPC；`root/etc/config/homeproxy` 从未被解析。
-验收：故意制造语法错误的 ACL → 测试必须红。
+### P2-5 JSON 资产与出厂配置校验 —— 已完成✅
+**已完成**：
+- `tests/json-assets.js`（68 项）：root/ 下所有 `.json` 可解析；menu.d 的 `view` action
+  指向真实存在的视图文件；ACL 的名字与 menu.d 的 `depends.acl` 一致、有 read/write、
+  方法名是字符串、**无野字符号、无重复**；capabilities 五组内容一致；
+  `etc/config/homeproxy` 是合法 UCI 语法。
+- `tests/ucode/test_factory_config.sh`（13 项）：把**出厂配置喂给真实的 Loader**。
+  **第一版是真空的**——只断言 Loader 产出了 `routing` 对象，而它总会产出
+  （缺 section 时用默认值），所以**把 section 改名也能通过**。改为从每个 section
+  读一个**具体值**之后，同一个改名会让 3 项失败。
+
+**反向验证（每类守卫一条）**：ACL JSON 语法错、menu action 指向不存在的视图、
+`depends.acl` 不存在、capabilities 各组不一致、ACL 出现野字符号、UCI 语句畸形、
+UCI 值未加引号、出厂配置 section 被改名 —— 全部变红。
 
 ### P2-6 状态三件套（**必须先有守卫**）
 `service_status`/`renderStatus` 在三个快照里**命中 0 次**。
@@ -566,7 +576,7 @@ P1-2 发布测试门 ✅ → P1-3 mock 同步 ✅ → P1-4 i18n 源扫描 ✅ �
   ▼
 P1-7 回退假状态（先补可失败的测试）  ✅ 已完成
   ▼
-P2-1 真空检查 ✅ → P2-5 JSON 校验
+P2-1 真空检查 ✅ → P2-5 JSON 校验 ✅
   ▼
 P1-10 crontab → P2-3 低危安全 → P2-4 确定性
   ▼
