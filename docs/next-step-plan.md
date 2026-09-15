@@ -53,7 +53,7 @@
 | P2-3e | 后端复核 #7 悬空引用改为具名诊断（**修复未经测试验证**） | P2 | 小 | 无 · 已完成（见说明） |
 | P2-6 | PHASE 8 残留：状态三件套（**需先补守卫**） | P2 | 中 | P1-1 守卫 + P1-7 |
 | P2-7 | PHASE 8 残留：GridSection ×5 / 动态 load ×13 | P2 | 中 | 无 |
-| P2-8 | 代码卫生 §2.10.8（`local` 已完成✅；余 pgrep/dnsmasq 卸载/chown） | P2 | 小 | 无 |
+| P2-8 | 代码卫生 §2.10.8 四项全部完成 | P2 | 小 | 无 · 已完成✅ |
 | P3-1 | **浏览器人工回归** | P3 | 很小 | **只能你做** |
 | P3-2 | 明确不做项 | — | — | 见 §16 |
 
@@ -599,9 +599,31 @@ UCI 值未加引号、出厂配置 section 被改名 —— 全部变红。
 ### P2-7 GridSection ×5 / 动态 load ×13
 纯样板去重，收益中等。**排在前面的做完之后。**
 
-### P2-8 代码卫生（§2.10.8 四项）
-`runtime/config.sh`/`health.sh` 缺 `local`；`pgrep` 耦合 procd 命令文本；
-dnsmasq 卸载不对称；custom 模式 `chown` 告警。逐项小改，各跑受影响测试。
+### P2-8 代码卫生（§2.10.8 四项） —— 已完成✅
+四项全部完成：
+
+1. **`local` 缺失**：写了个脚本逐函数比对「声明 vs 赋值」，比计划更准确——
+   `config.sh` 三个事务函数确实缺（已修）；**`dns.sh` 的 `hp_dnsmasq_write_snippets`
+   也缺**（`server=` 泄漏成全局，而已在修）；`health.sh` **其实没缺**
+   （`HP_HEALTH_LISTENER_WARNED` 是故意导出的一次性提示，`DNSMASQ_DIR` 是故意全局的计算产物）。
+2. **pgrep 与 procd 命令文本耦合**：加了 **guard 9** 把两者绑在一起——
+   任一侧改成别的写法就红。反向验证两个方向都做过。计划里说的正是"加一条断言把两者绑在一起测"。
+3. **dnsmasq 卸载不对称**：`remove_snippets` 原来无条件 `rm -rf` + 重启 dnsmasq，
+   即使 `start` 从未写入（`main_node == nil` 的正常情况）。现在两者都不存在时直接返回，
+   不做无意义的删除与重启（重启会白白清空所有客户端的 DNS 缓存）。
+4. **custom 模式 chown 告警**：`cache.db` 只在 `bypass_mainland_china` 下创建，
+   而旧代码无条件把它列进 chown，于是 custom 模式**每次启动**都报
+   "failed to change the ownership of the runtime files"。改为逐路径 chown、不存在就跳过、
+   存在的失败才具名报告。
+
+**测试**：runtime trace 新增第 5 个场景（custom 模式）——此前**没有任何场景覆盖 custom**，
+这正是那条告警能活过整轮重构的原因。golden 从 830 行长到 965 行，
+diff 只含三处：逐路径 chown、少一次 dnsmasq 重启、新场景。两个修复都反向验证过。
+
+**两次"锚点选错"的教训**（同一个文件上第二次）：新增场景时我用 `rm -f "$DNSMASQ_CONF"`
+作锚点，而它**先出现在某个失败分支里**，于是场景被插进 `if` 分支内部、从不执行——
+这就是 838 行的 golden 只带 4 个场景的原因。而场景 E 的断言读 `TRACE.norm`，
+我第一版把它放在了该文件**生成之前**，所以它一直**真空通过**。都已修正。
 
 ---
 
