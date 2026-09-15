@@ -36,7 +36,7 @@
 | P1-3 | mock 副本同步守卫 | P1 | 小 | 无 |
 | P1-4 | i18n 门补 source→pot | P1 | 小 | 无 |
 | P1-5 | `luci.homeproxy` 行为测试（含 `certificate_write` 全分支） | P1 | 中 | 无 · 已完成✅ |
-| P1-6 | ACL 收紧：删 6 条浏览器用不到的写路径 | P1 | 极小 | 无 |
+| P1-6 | ACL 收紧：删 6 条浏览器用不到的写路径 | P1 | 极小 | 无 · 已完成✅ |
 | P1-7 | RPC 失败回退不再断言假状态（含 `type` 静默改写） | P1 | 中 | 需先有可失败的测试 |
 | P1-8 | 真机 CI 作业（台账 §5 项 14） | P1 | 中 | P0-3 之后更有意义 |
 | P1-9 | 版本对齐 / "只 stage 不安装" 策略落地 | P1 | 小 | 无 |
@@ -317,7 +317,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 13. P1-6 ACL 收紧
+## 13. P1-6 ACL 收紧 —— 已完成✅
 
 审计 §8.2（**推翻了我第一轮的结论**）。ACL 的 `file` 写授权管的是**浏览器会话**，
 而后端 ucode 以 root 运行、写文件**不经过**这个 ACL。
@@ -327,9 +327,15 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 它们让仅有本应用 ACL 的**受限用户**能直接覆写 `server_privatekey.pem`，
 **绕过 `certificate_write` 的校验**。
 
-**计划**：删这 6 条，保留 4 条 `/tmp/homeproxy_cert_*.tmp`（`ui.uploadFile` 真正要写的）。
-**验收**：四个上传按钮仍工作；用受限用户尝试 `fs.write` 到 `certs/` 应被拒。
-**由 P1-1 的第 7 条守卫防复发。**
+**实施**：删掉这 6 条，保留 4 条 `/tmp/homeproxy_cert_*.tmp`。
+（注：第一次我把理由写成 JSON 注释，那会让 ACL 解析失败——已改回纯 JSON，
+理由记在提交信息、本文件与审计报告里。）
+
+**由守卫防复发**：`tests/arch-guard.sh` 的 guard 3 从视图里的**按钮名**推导出
+需要的 staging 路径，断言每个按钮都有授权、write-file 列表里**没有任何 `/etc/` 路径**、
+且前端**没有 `fs.write` 调用**（这样将来真要用 `fs.write` 就必须同时改 ACL，
+而不是继承一条陈旧授权）。两个方向都反向验证过：加回两条 `/etc/` → 红；
+删掉某个按钮的 staging → 红。
 
 ---
 
@@ -453,6 +459,8 @@ P0-1 两个 XSS（两个 sink 两个转义 + 双解码不变量测试）  ✅ �
 P0-4 ECH + P1-5 行为测试（先写测试 → 确认抓到 bug → 再修）  ✅ 已完成
   ▼
 P1-6 ACL 收紧（极小）→ P1-1 Architecture Guard（第 3 条抓 ECH，第 7 条防 ACL 复发）
+  ▼
+P1-6 ACL 收紧（浏览器会话 vs 后端 root）                ✅ 已完成
   ▼
 P1-2 发布测试门 → P1-3 mock 同步 → P1-4 i18n 源扫描 → P2-2 fw4 stub
   ▼
