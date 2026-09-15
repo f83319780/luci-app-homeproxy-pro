@@ -12,7 +12,7 @@
 'use strict';
 
 import { lsdir } from 'fs';
-import { executeCommand, isValidPEM, shellQuote } from 'homeproxy';
+import { executeCommand, isValidPEM, shellQuote, wGETVerbose } from 'homeproxy';
 
 let failures = 0,
     checks = 0;
@@ -63,6 +63,19 @@ expect('pem.key', isValidPEM(pem_key, true), true);
 expect('pem.key-as-cert', isValidPEM(pem_key, false), false);
 expect('pem.garbage', isValidPEM('not a pem at all', false), false);
 expect('pem.empty', isValidPEM('', false), false);
+
+/* wGETVerbose() must not hand wget an option the target's wget does not have.
+ * It used to pass --max-filesize, which busybox wget does not support: wget
+ * exited 2 with "unrecognized option" before making a request, so every
+ * subscription fetch failed while the test suite stayed green (the fetcher
+ * tests mock wGETVerbose itself).  A closed local port makes the fetch fail
+ * fast either way; what is asserted is that it fails for a network reason and
+ * not a usage one. */
+const wget = wGETVerbose('http://127.0.0.1:1/never');
+expect('wget.not-a-usage-error',
+	match(wget.error || '', /unrecognized option|invalid option|Usage:/) == null, true);
+expect('wget.reports-a-reason', length(wget.error || '') > 0, true);
+expect('wget.no-content-on-failure', wget.content, null);
 
 /* descriptors must not leak across calls */
 const before = fd_count();

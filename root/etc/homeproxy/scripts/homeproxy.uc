@@ -22,6 +22,8 @@ export const RUN_DIR = '/var/run/homeproxy';
  * The test suite stages a rewritten copy of this constant instead of the
  * old `__LOADER_DIR__` source sed. */
 export const UCICONFIG_DIR = '/etc/config';
+/* Largest subscription body we will fetch, in bytes. See wGETVerbose(). */
+export const HP_FETCH_CAP = 5 * 1024 * 1024;
 /* Global variables end */
 
 /* Utilities start */
@@ -168,25 +170,46 @@ export function wGETVerbose(url, ua) {
 		ua = 'Wget/1.21 (HomeProxy, like v2rayN)';
 
 	/* -nv (not -q) so wget still reports *why* a fetch failed on stderr.
-	 * --max-filesize aborts the fetch *before* the body is downloaded: a
-	 * malicious or misconfigured subscription cannot pull gigabytes onto
-	 * the router. The legacy path had no size cap and only relied on a
-	 * 512 KB read-truncation downstream, which was useless - by the time
-	 * the read cap kicked in, the full body had already been written to
-	 * /tmp by executeCommand().
 	 *
-	 * 5 MiB covers a 10 000-node subscription with ~3 KB per node plus
-	 * the base64 inflation. Anything larger is almost certainly an
-	 * attack or a misconfiguration. */
-	const output = executeCommand(`/usr/bin/wget -nv -O- --max-filesize=5m --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
-	if (output.exitcode !== 0) {
-		let reason = trim(output.stderr || '');
-		reason = reason ? replace(reason, /\s+/g, ' ') : 'no error output';
+	 * The size cap is enforced by piping through `head -c`, NOT with wget's
+	 * --max-filesize: that option does not exist in busybox wget (the target's
+	 * /usr/bin/wget), which exits 2 with "unrecognized option" before making a
+	 * single request - so every subscription fetch failed. GNU wget has no
+	 * such option either. `head` closing the pipe stops wget early, which
+	 * bounds the download; the cap is therefore CAP+1 bytes rather than
+	 * exactly CAP, and one byte past the limit means "too large".
+	 *
+	 * 5 MiB covers a 10 000-node subscription with ~3 KB per node plus the
+	 * base64 inflation. Anything larger is almost certainly an attack or a
+	 * misconfiguration.
+	 *
+	 * The pipeline does cost the exit status: `system()` returns head's, which
+	 * is always 0. A wget failure therefore arrives as an empty body plus
+	 * wget's own message on stderr, and that is reported below. */
+	/* The braces matter: executeCommand() appends `>out 2>err` to the command,
+	 * and in `a | b >out 2>err` those redirections bind to b only - wget's
+	 * stderr would go to the caller's terminal and the failure message would
+	 * be lost.  Grouping the pipeline makes both stream to the capture files. */
+	const output = executeCommand(`{ /usr/bin/wget -nv -O- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)} | head -c ${HP_FETCH_CAP + 1}; }`) || {};
+	let reason = trim(output.stderr || '');
+	reason = reason ? replace(reason, /\s+/g, ' ') : '';
 
+	if (length(output.stdout || '') > HP_FETCH_CAP)
+		return { content: null, error: `response exceeds the ${HP_FETCH_CAP} byte limit` };
+
+	if (output.exitcode !== 0) {
 		if (length(reason) > 200)
 			reason = substr(reason, 0, 200) + '...';
 
-		return { content: null, error: `wget exited with status ${output.exitcode}: ${reason}` };
+		return { content: null, error: `wget exited with status ${output.exitcode}: ${reason || 'no error output'}` };
+	}
+
+	/* head() masks wget's status, so a failed fetch shows up here instead. */
+	if (!length(trim(output.stdout)) && reason) {
+		if (length(reason) > 200)
+			reason = substr(reason, 0, 200) + '...';
+
+		return { content: null, error: `wget failed: ${reason}` };
 	}
 
 	return { content: trim(output.stdout), error: null };
