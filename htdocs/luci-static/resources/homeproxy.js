@@ -508,16 +508,26 @@ return baseclass.extend({
 			expect: { '': {} }
 		});
 
-		return ui.uploadFile('/tmp/homeproxy_certificate.tmp', ev.target)
+		/* Per-type staging file: the four buttons (server public key /
+		 * server private key / client CA / client ECH config) all
+		 * shared /tmp/homeproxy_certificate.tmp before, so two uploads
+		 * in flight would clobber each other and the wrong file could
+		 * land in the certs/ directory. The filename argument is the
+		 * UCI option name (e.g. server_publickey), which we map onto
+		 * a stable per-button path. The ACL write list in
+		 * acl.d/luci-app-homeproxy.json enumerates all four paths. */
+		const tmpPath = '/tmp/homeproxy_cert_' + filename + '.tmp';
+
+		return ui.uploadFile(tmpPath, ev.target)
 		.then(L.bind((_btn, res) => {
 			return L.resolveDefault(callWriteCertificate(filename), {}).then((ret) => {
-				if (ret.result === true)
+				if (ret && ret.result === true)
 					ui.addNotification(null, E('p', _('Your %s was successfully uploaded. Size: %sB.').format(type, res.size)));
 				else
-					ui.addNotification(null, E('p', _('Failed to upload %s, error: %s.').format(type, ret.error)));
+					ui.addNotification(null, E('p', _('Failed to upload %s, error: %s.').format(type, (ret && ret.error) || 'unknown error')));
 			});
 		}, this, ev.target))
-		.catch((e) => { ui.addNotification(null, E('p', e.message)) });
+		.catch((e) => { ui.addNotification(null, E('p', e.message || 'upload failed')) });
 	},
 
 	validateBase64Key(length, section_id, value) {

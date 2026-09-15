@@ -22,6 +22,12 @@ const callServiceList = rpc.declare({
 	expect: { '': {} }
 });
 
+/* Module-scoped guard for the view-level status poll: see the comment
+ * next to the registration site in render(). Without it, the section's
+ * render() leaks a fresh poll handler every time LuCI re-renders on
+ * a UCI commit, and the bar updates multiple times per tick. */
+let server_status_poll_registered = false;
+
 const CBIGenValue = form.Value.extend({
 	__name__: 'CBI.GenValue',
 
@@ -52,14 +58,19 @@ function getServiceStatus() {
 }
 
 function renderStatus(isRunning, version) {
-	let spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
-	let renderHTML;
-	if (isRunning)
-		renderHTML = spanTemp.format('green', _('HomeProxy Server'), version, _('RUNNING'));
-	else
-		renderHTML = spanTemp.format('red', _('HomeProxy Server'), version, _('NOT RUNNING'));
+	/* Same allow-list gate as client.js renderStatus(): the sing-box
+	 * version string is interpolated into an innerHTML sink, so we
+	 * force it through a strict regex before formatting. Anything that
+	 * does not look like a version (alnum + . - +) becomes 'unknown'. */
+	let safeVersion = 'unknown';
+	if (typeof version === 'string' && /^[\w.\-+]+$/.test(version))
+		safeVersion = version;
 
-	return renderHTML;
+	let spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
+	if (isRunning)
+		return spanTemp.format('green', _('HomeProxy Server'), safeVersion, _('RUNNING'));
+	else
+		return spanTemp.format('red', _('HomeProxy Server'), safeVersion, _('NOT RUNNING'));
 }
 
 function handleGenKey(option) {
@@ -131,16 +142,27 @@ return view.extend({
 
 		s = m.section(form.TypedSection);
 		s.render = function() {
-			poll.add(() => {
-				return L.resolveDefault(getServiceStatus()).then((res) => {
-					let view = document.getElementById('service_status');
-					view.innerHTML = renderStatus(res, features.version);
-				});
-			});
-
+			/* The status bar is rendered into the page body by the
+			 * view-level poll handler below. Registering poll.add()
+			 * here would leak a fresh handler every time the user calls
+			 * map.reset() (every UCI write re-renders this section). */
 			return E('div', { class: 'cbi-section', id: 'status_bar' }, [
 					E('p', { id: 'service_status' }, _('Collecting data...'))
 			]);
+		}
+
+		/* View-level poll: registered exactly once per navigation. The
+		 * getElementById lookup may return null when LuCI swaps the DOM
+		 * between renders, so guard against it. */
+		if (!server_status_poll_registered) {
+			server_status_poll_registered = true;
+			poll.add(() => {
+				return L.resolveDefault(getServiceStatus()).then((res) => {
+					let view = document.getElementById('service_status');
+					if (view)
+						view.innerHTML = renderStatus(res, features.version);
+				});
+			});
 		}
 
 		s = m.section(form.NamedSection, 'server', 'homeproxy', _('Global settings'));
