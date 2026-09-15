@@ -70,9 +70,9 @@ for file in "$SCRIPTS_DIR"/*.uc \
 		sed "s#'/etc/homeproxy/scripts/#'$SCRIPTS_DIR/#g" "$file" > "$target" ;;
 	esac
 
-	if ! ucode -L "$SCRIPTS_DIR" -c -o "/dev/null" "$target" 2> "/tmp/hp-ucode-syntax.err"; then
+	if ! ucode -L "$SCRIPTS_DIR" -c -o "/dev/null" "$target" 2> "$WORK/syntax.err"; then
 		echo "FAIL: ${file#"$ROOT"/}"
-		head -8 "/tmp/hp-ucode-syntax.err"
+		head -8 "$WORK/syntax.err"
 		FAILED=1
 	fi
 done
@@ -82,9 +82,9 @@ done
 # -L tree, so anything in a subdirectory is loaded by absolute path
 # in the second loop below.
 for module in homeproxy; do
-	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "/tmp/hp-ucode-syntax.err"; then
+	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "$WORK/syntax.err"; then
 		echo "FAIL: module $module"
-		head -8 "/tmp/hp-ucode-syntax.err"
+		head -8 "$WORK/syntax.err"
 		FAILED=1
 	fi
 done
@@ -98,9 +98,9 @@ for module in parser/uri parser/protocols parser/validator parser/normalize pars
               subscription/filter subscription/decoder subscription/fetcher subscription/repository \
               config/loader config/model config/adapter \
               generator/client generator/server; do
-	if ! ucode -L "$SCRIPTS_DIR" -e "import * as m from \"$SCRIPTS_DIR/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
+	if ! ucode -L "$SCRIPTS_DIR" -e "import * as m from \"$SCRIPTS_DIR/$module.uc\";" 2> "$WORK/syntax.err"; then
 		echo "FAIL: module $module"
-		head -8 "/tmp/hp-ucode-syntax.err"
+		head -8 "$WORK/syntax.err"
 		FAILED=1
 	fi
 done
@@ -117,9 +117,9 @@ for file in "$ROOT"/root/etc/init.d/* \
             "$ROOT"/root/etc/homeproxy/scripts/*.sh \
             "$ROOT"/root/etc/homeproxy/scripts/runtime/*.sh; do
 	[ -f "$file" ] || continue
-	if ! sh -n "$file" 2> "/tmp/hp-shell-syntax.err"; then
+	if ! sh -n "$file" 2> "$WORK/syntax.err"; then
 		echo "FAIL: ${file#"$ROOT"/}"
-		head -5 "/tmp/hp-shell-syntax.err"
+		head -5 "$WORK/syntax.err"
 		FAILED=1
 	fi
 done
@@ -131,7 +131,10 @@ echo "== runtime extraction equivalence (PR-05) =="
 # Drives the init script through a stubbed environment and compares the
 # resulting command/file trace against the pre-PR-05 trace.  It needs no
 # ucode, but it belongs in this suite so CI runs it on every PR.
-sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" || FAILED=1
+# Pass this run's work dir: the test defaults to its own mktemp -d, but keeping
+# it under one root makes a failed run easier to inspect and avoids a second
+# temporary tree.
+sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" "$WORK/runtime-extraction" || FAILED=1
 
 echo "== firewall template rendering =="
 # utpl ships with ucode (it is a symlink to the same binary), so this check

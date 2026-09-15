@@ -58,8 +58,12 @@ else
 fi
 
 # --- layer 2: the render -------------------------------------------------
-STAGE="$(mktemp -d)"
+# mktemp -d, and removed on every exit path: this used to leak a directory per
+# run (50 of them had accumulated on the test device), which is both untidy and
+# a determinism problem - nothing else may depend on how many runs came before.
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/hp-fwtpl.XXXXXX")"
 STAGED="$STAGE/firewall_post.ut"
+trap 'rm -rf "$STAGE"' EXIT INT TERM
 
 # Probe with ucode, not utpl: `utpl -e` is not an eval flag, it renders the
 # argument as template text and always succeeds.
