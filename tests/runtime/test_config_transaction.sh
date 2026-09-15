@@ -98,45 +98,163 @@ expect "same_file: missing file is not equal" "$?" "1"
 echo "== health probe =="
 
 # Deterministic stubs so the probe's control flow is tested rather than the
-# host's process table or a real service.  ubus/jsonfilter are stubbed too:
-# on a router they exist and would otherwise report the *real* homeproxy
-# instance, which has nothing to do with this fixture.
+# host's process table or a real service.
+#
+# The gate asks procd first (ubus + jsonfilter) and only falls back to a
+# process scan when procd cannot be asked at all.  That order is the fix for
+# the P0 in docs/architecture-improvement-plan.md 2.14: with the process scan
+# first, a STALE sing-box process left over from an earlier run kept answering
+# "alive" while procd restarted a crashing instance, so a dead service was
+# accepted and recorded as the new known-good.  The first case below pins
+# exactly that.
 BIN="$WORK/bin"
 mkdir -p "$BIN"
-cat > "$BIN/pgrep" <<'STUB'
-#!/bin/sh
-[ "${HP_FAKE_RUNNING:-0}" = "1" ]
-STUB
+
+# One sample == one ubus call, so the counter indexes the health pattern.
 cat > "$BIN/ubus" <<'STUB'
 #!/bin/sh
-echo '{}'
+n=$(cat "$HP_FAKE_COUNTER" 2>/dev/null || echo 0)
+n=$((n + 1))
+echo "$n" > "$HP_FAKE_COUNTER"
+echo 'procd-state'
+STUB
+cat > "$BIN/pgrep" <<'STUB'
+#!/bin/sh
+[ "${HP_FAKE_STALE_PROC:-0}" = "1" ] && exit 0
+exit 1
 STUB
 cat > "$BIN/jsonfilter" <<'STUB'
 #!/bin/sh
-exit 1
+# HP_FAKE_PATTERN is a string of 1/0, one character per sample.
+n=$(cat "$HP_FAKE_COUNTER" 2>/dev/null || echo 1)
+[ "$n" -ge 1 ] || n=1
+ch=$(printf '%s' "${HP_FAKE_PATTERN:-1}" | cut -c "$n")
+[ -n "$ch" ] || ch=$(printf '%s' "${HP_FAKE_PATTERN:-1}" | cut -c 1)
+up=no
+[ "$ch" = "1" ] && up=yes
+case "$*" in
+*".instances["*)
+	if [ "$up" = "yes" ]; then
+		printf '{"running":true}\n'
+	else
+		printf '{"running":false,"exit_code":1}\n'
+	fi
+	;;
+*"@.running"*) [ "$up" = "yes" ] && echo true || echo false ;;
+*"@.exit_code"*) [ "$up" = "yes" ] || echo 1 ;;
+esac
+exit 0
 STUB
-chmod +x "$BIN/pgrep" "$BIN/ubus" "$BIN/jsonfilter"
+cat > "$BIN/netstat" <<'STUB'
+#!/bin/sh
+echo "Proto Recv-Q Send-Q Local Address  Foreign Address  State  PID/Program name"
+if [ "${HP_FAKE_NO_OWNER:-0}" = "1" ]; then
+	printf 'tcp 0 0 :::%s :::* LISTEN\n' "${HP_FAKE_PORT:-5330}"
+elif [ -n "${HP_FAKE_PORT:-}" ]; then
+	printf 'tcp 0 0 :::%s :::* LISTEN 42/%s\n' "$HP_FAKE_PORT" "${HP_FAKE_PORT_OWNER:-sing-box}"
+fi
+exit 0
+STUB
+# The health budget is measured in samples, not wall-clock seconds; sleeping
+# for real would make each case take the whole budget in seconds.
+cat > "$BIN/sleep" <<'STUB'
+#!/bin/sh
+exit 0
+STUB
+chmod +x "$BIN/pgrep" "$BIN/ubus" "$BIN/jsonfilter" "$BIN/netstat" "$BIN/sleep"
 PATH="$BIN:$PATH"
 export PATH
 
 CFG="$WORK/run/sing-box-c.json"
 : > "$CFG"
+COUNTER="$WORK/sample-count"
+HP_FAKE_COUNTER="$COUNTER"
+export HP_FAKE_COUNTER
 
-HP_FAKE_RUNNING=0
-export HP_FAKE_RUNNING
+reset_samples() {
+	echo 0 > "$COUNTER"
+}
+
+# 1. procd says down while a stale process still matches the scan.
+HP_FAKE_PATTERN=0 HP_FAKE_STALE_PROC=1
+export HP_FAKE_PATTERN HP_FAKE_STALE_PROC
+reset_samples
 hp_instance_running "sing-box-c" "$CFG"
-expect "instance_running: reports down" "$?" "1"
+expect "instance_running: a stale process does not override procd" "$?" "1"
 
-HP_FAKE_RUNNING=1
+# 2. procd says running and reports no failed exit code.
+HP_FAKE_PATTERN=1 HP_FAKE_STALE_PROC=0
+export HP_FAKE_PATTERN HP_FAKE_STALE_PROC
+reset_samples
 hp_instance_running "sing-box-c" "$CFG"
 expect "instance_running: reports up" "$?" "0"
 
-hp_wait_instance "sing-box-c" "$CFG" 1
-expect "wait_instance: succeeds while running" "$?" "0"
+# 3. hp_wait_service needs the instance healthy for several CONSECUTIVE
+#    samples: one lucky poll must not be enough (that is what let a
+#    crash-restart loop pass the old gate).
+HP_FAKE_PATTERN=101010
+export HP_FAKE_PATTERN
+reset_samples
+hp_wait_service "sing-box-c" "$CFG" 6 3
+expect "wait_service: alternating samples never reach the stability window" "$?" "1"
 
-HP_FAKE_RUNNING=0
+# 4. A bad sample early in the window resets the count, and a later healthy run
+#    still succeeds.
+HP_FAKE_PATTERN=110111
+export HP_FAKE_PATTERN
+reset_samples
+hp_wait_service "sing-box-c" "$CFG" 6 3
+expect "wait_service: recovers after a bad sample" "$?" "0"
+
+# 5. Listener attribution.  "The port is in the listen table" is not enough: in
+#    the failure this gate exists for, the port was listening but owned by the
+#    process that had taken it.
+HP_FAKE_PORT=5330 HP_FAKE_PORT_OWNER=sing-box
+export HP_FAKE_PORT HP_FAKE_PORT_OWNER
+hp_listener_owned "sing-box" 5330
+expect "listener: owned by sing-box" "$?" "0"
+
+HP_FAKE_PORT_OWNER=socat
+export HP_FAKE_PORT_OWNER
+hp_listener_owned "sing-box" 5330
+expect "listener: listening but owned by another process fails" "$?" "1"
+
+HP_FAKE_NO_OWNER=1
+export HP_FAKE_NO_OWNER
+hp_listener_owned "sing-box" 5330
+expect "listener: no owner column is reported as unavailable" "$?" "2"
+unset HP_FAKE_NO_OWNER
+
+HP_FAKE_PORT=5330 HP_FAKE_PORT_OWNER=sing-box
+export HP_FAKE_PORT HP_FAKE_PORT_OWNER
+hp_listener_owned "sing-box" 5330 5399
+expect "listener: a missing port fails" "$?" "1"
+
+# 6. The whole sample: procd up and the listeners owned.
+HP_FAKE_PATTERN=1
+export HP_FAKE_PATTERN
+reset_samples
+hp_service_healthy "sing-box-c" "$CFG" 5330
+expect "service_healthy: procd up and listeners owned" "$?" "0"
+
+HP_FAKE_PORT_OWNER=socat
+export HP_FAKE_PORT_OWNER
+reset_samples
+hp_service_healthy "sing-box-c" "$CFG" 5330
+expect "service_healthy: procd up but the listener was taken by another process" "$?" "1"
+
+# 7. hp_wait_instance is kept for compatibility.
+HP_FAKE_PORT_OWNER=sing-box HP_FAKE_PATTERN=1
+export HP_FAKE_PORT_OWNER HP_FAKE_PATTERN
+reset_samples
 hp_wait_instance "sing-box-c" "$CFG" 1
-expect "wait_instance: times out when down" "$?" "1"
+expect "wait_instance (compat): succeeds while running" "$?" "0"
+
+HP_FAKE_PATTERN=0
+export HP_FAKE_PATTERN
+reset_samples
+hp_wait_instance "sing-box-c" "$CFG" 1
+expect "wait_instance (compat): times out when down" "$?" "1"
 
 printf '%d checks, %d failures\n' "$CHECKS" "$FAILURES"
 exit $FAILED

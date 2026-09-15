@@ -205,11 +205,17 @@ hp_procd_log_cleaner() {
 #                          function of UCI, so it would rebuild the very file
 #                          that just failed)
 #   otherwise           -> generate, then make sure a live file exists,
-#                          falling back to the known-good copy and recording
-#                          the new one when generation succeeded
+#                          falling back to the known-good copy when it does not
 #
 # Returns 1 only when there is nothing to run at all (generation failed and
 # no known-good copy exists), which is what made start_service bail out.
+#
+# It deliberately does NOT touch the known-good copy any more.  It used to
+# record the freshly generated file immediately, which meant that by the time
+# the health gate ran, the "previous" configuration the rollback would need had
+# already been overwritten by the candidate - so a failed reload had nothing to
+# roll back to.  Promotion is now a separate step, taken only after the gate
+# has passed (hp_promote_known_good, called from start_service).
 hp_start_generated_config() {
 	local side="$1"
 	local hp_dir="$2"
@@ -246,8 +252,7 @@ hp_start_generated_config() {
 	hp_ensure_live "$live" "$good"
 	case "$?" in
 	0)
-		hp_known_good "$live" "$good" \
-			|| log "Warning: could not refresh the known-good ${label} configuration." ;;
+		;;
 	1)
 		log "Error: failed to generate a valid ${label} configuration; falling back to the last known-good one." ;;
 	*)
@@ -257,3 +262,24 @@ hp_start_generated_config() {
 
 	return 0
 }
+
+# hp_promote_known_good <side> <run-dir> <good-dir>
+# Record the live configuration as the new known-good copy.  Called only after
+# the health gate has proven that the configuration actually runs, so the
+# rollback target is always something that came up.
+hp_promote_known_good() {
+	local side="$1"
+	local run_dir="$2"
+	local good_dir="$3"
+	local label
+
+	case "$side" in
+	c) label="client" ;;
+	s) label="server" ;;
+	*) log "Error: unknown configuration side '${side}'."; return 1 ;;
+	esac
+
+	hp_known_good "$run_dir/sing-box-${side}.json" "$good_dir/sing-box-${side}.json" \
+		|| log "Warning: could not refresh the known-good ${label} configuration."
+}
+
