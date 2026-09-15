@@ -135,12 +135,22 @@ build "$(clone jow-/ucode "$UCODE_REV")" \
 # luci.http for urldecode_params()/urlencode()/urldecode(). luci.http is a
 # thin ucode wrapper around this C module, so it has to exist for the
 # generators to even load. Built after ucode, whose headers it needs.
+#
+# Two flags are load-bearing, and omitting them is what left this step
+# failing on CI (ucode/module.h not found, then a bare -lucode):
+#   -I$PREFIX/include     upstream adds no include path for ucode, whose
+#     module.h in turn pulls in json-c (from apt, so that part resolves).
+#   -L$PREFIX/lib         upstream links `-lucode` by bare name without a
+#     find_library() call, relying on libucode being in a default search
+#     path. $PREFIX is not one.
+# The macOS script passes the same two for the same reasons.
 LUCIHTTP_DIR="$(clone jow-/lucihttp)"
 echo "==> building lucihttp"
 cmake -S "$LUCIHTTP_DIR" -B "$LUCIHTTP_DIR/build" $CMAKE_COMMON \
 	-DBUILD_LUA=OFF -DBUILD_TESTS=OFF \
 	-DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-	-DCMAKE_C_FLAGS="-Wno-error" >/dev/null
+	-DCMAKE_SHARED_LINKER_FLAGS="-L$PREFIX/lib" \
+	-DCMAKE_C_FLAGS="-Wno-error -I$PREFIX/include" >/dev/null
 cmake --build "$LUCIHTTP_DIR/build" -j"$(nproc)" >/dev/null
 cmake --install "$LUCIHTTP_DIR/build" >/dev/null
 
