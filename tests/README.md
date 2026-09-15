@@ -16,12 +16,16 @@ tests/run.sh
   `sing-box check`, so they need sing-box ≥ 1.14 as well (available on an
   OpenWrt/ImmortalWrt target). When the host running `tests/run.sh` has neither,
   the checkout is copied over ssh to `$HP_TEST_HOST` (default
-  `root@192.168.1.1`) and the tests run there:
+  `root@192.168.1.102`, the dedicated test machine) and the tests run there:
 
   ```sh
-  HP_TEST_HOST=root@192.168.1.1 tests/run.sh
-  HP_TEST_DIR=/tmp/hp-tests      tests/run.sh
+  HP_TEST_HOST=root@192.168.1.102 tests/run.sh
+  HP_TEST_DIR=/tmp/hp-tests        tests/run.sh
   ```
+
+  Point `$HP_TEST_HOST` at the **test machine, never the production router**:
+  the fallback untars the whole checkout into `$HP_TEST_DIR` on the target, and
+  `192.168.1.1` is the box the house actually routes through.
 
 `tests/run.sh` exits non-zero if anything fails. The ucode part can also be run
 on its own on a target:
