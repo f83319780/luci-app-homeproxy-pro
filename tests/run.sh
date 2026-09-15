@@ -17,8 +17,29 @@
 #   HP_TEST_DIR=/tmp/hp-tests          tests/run.sh
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# One work root per invocation. The sub-suites default to fixed paths like
+# /tmp/hp-ucode-tests, so two concurrent runs of this script (a local one and a
+# CI one over ssh, say) deleted each other's staging mid-test. mktemp -d gives
+# each run its own, and the trap removes it.
+WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hp-run.XXXXXX")" || exit 1
 HOST="${HP_TEST_HOST:-root@192.168.1.102}"
-REMOTE_DIR="${HP_TEST_DIR:-/tmp/hp-tests}"
+
+# The remote staging dir is per-run too, derived from the work root. With a
+# shared /tmp/hp-tests two concurrent runs deleted each other's checkout
+# mid-suite: "could not stage the tests" was the reproducible symptom.
+# HP_TEST_DIR still overrides it.
+REMOTE_DIR="${HP_TEST_DIR:-/tmp/hp-tests-$(basename "$WORK_ROOT")}"
+
+# Both roots are removed on every exit path. The remote one needs ssh, so if the
+# host is unreachable this is a no-op rather than an error.
+cleanup() {
+	rm -rf "$WORK_ROOT"
+	case "${STAGED_REMOTELY:-0}" in
+	1) ssh -o BatchMode=yes -o ConnectTimeout=10 "$HOST" "rm -rf '$REMOTE_DIR'" 2>/dev/null || true ;;
+	esac
+}
+trap cleanup EXIT INT TERM
 FAILED=0
 
 echo "== zh_Hans translation coverage =="
@@ -82,7 +103,7 @@ echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init
 # script refactor did not change behaviour.
-sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" || FAILED=1
+sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" "$WORK_ROOT/runtime-extraction" || FAILED=1
 
 echo "== architecture guard =="
 # Cross-file invariants that no single-layer test can see: the generators must
@@ -105,17 +126,29 @@ if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1
 		FAILED=1
 		;;
 	esac
-	sh "$ROOT/tests/ucode/run.sh" "$ROOT" || FAILED=1
+	sh "$ROOT/tests/ucode/run.sh" "$ROOT" "$WORK_ROOT/ucode" || FAILED=1
 else
 	echo "(no local ucode/sing-box, executing on $HOST)"
+	# BatchMode: a host-key or password prompt would otherwise hang the suite
+	# forever with no output. ConnectTimeout bounds an unreachable host.
+	#
+	# $REMOTE_DIR is expanded here and quoted inside the remote command: it was
+	# interpolated bare into `rm -rf`, so a value with a space would have
+	# removed two paths instead of one.
+	SSH="ssh -o BatchMode=yes -o ConnectTimeout=10"
 	if tar czf - -C "$ROOT" --exclude .git --exclude node_modules . \
-		| ssh "$HOST" "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && tar xzf - -C $REMOTE_DIR"; then
+		| $SSH "$HOST" "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR' && tar xzf - -C '$REMOTE_DIR'"; then
+		STAGED_REMOTELY=1
 		# HP_REQUIRE_FW4: a target always has firewall4, so the fw4 render
 		# layer in test_firewall_template.sh must actually run there. Without
 		# this, a target missing it would report NOT RUN and the suite would
 		# still pass, which is how a device-only layer quietly stops being
 		# exercised at all.
-		ssh "$HOST" "HP_REQUIRE_FW4=1 sh $REMOTE_DIR/tests/ucode/run.sh $REMOTE_DIR" || FAILED=1
+		# The second argument is the work dir. Without it the remote run fell
+		# back to ucode/run.sh's default /tmp/hp-ucode-tests, so two concurrent
+		# suite runs on the target shared it and deleted each other's staging -
+		# "could not sandbox ... missing anchor".
+		$SSH "$HOST" "HP_REQUIRE_FW4=1 sh '$REMOTE_DIR/tests/ucode/run.sh' '$REMOTE_DIR' '$REMOTE_DIR/work'" || FAILED=1
 	else
 		echo "FAIL: could not stage the tests on $HOST"
 		FAILED=1

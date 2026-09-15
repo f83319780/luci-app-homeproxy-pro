@@ -36,7 +36,41 @@
 #   HP_UPDATE_GOLDEN=1    rewrite the baseline instead of comparing
 
 ROOT="${1:-.}"
-WORK="${2:-/tmp/hp-runtime-trace}"
+# Per-run by default rather than a fixed /tmp path. This script has two
+# callers (tests/run.sh and tests/ucode/run.sh) and one of them passed no work
+# dir, so two concurrent suite runs shared /tmp/hp-runtime-trace and deleted
+# each other's sandbox mid-test - the reproducible symptom was "could not
+# sandbox ... missing anchor". tests/runtime/test_config_transaction.sh already
+# defaults to mktemp -d.
+WORK="${2:-$(mktemp -d "${TMPDIR:-/tmp}/hp-runtime-trace.XXXXXX")}"
+OWN_WORK=0
+[ -n "${2:-}" ] || OWN_WORK=1
+
+# The dnsmasq conf path is the one shared resource left: it must stay at
+# /tmp/etc/dnsmasq.conf.hp_test because the payload is what derives the section
+# name, so it cannot move into $WORK. Concurrent runs therefore take turns on
+# it, via mkdir (atomic everywhere, no flock dependency), with a bounded wait so
+# a stale lock cannot hang the suite.
+DNSMASQ_LOCK="/tmp/etc/.hp-runtime-trace.lock"
+mkdir -p "$(dirname "$DNSMASQ_LOCK")"
+_lock_tries=0
+while ! mkdir "$DNSMASQ_LOCK" 2>/dev/null; do
+	_lock_tries=$((_lock_tries + 1))
+	if [ "$_lock_tries" -gt 120 ]; then
+		echo "FAIL: another run has held $DNSMASQ_LOCK for over two minutes"
+		exit 1
+	fi
+	sleep 1
+done
+
+# A trap rather than a line at the end: this script exits early on several
+# failure paths, and the first version of this cleanup was inserted into the
+# middle of one of them.
+cleanup() {
+	rmdir "$DNSMASQ_LOCK" 2>/dev/null
+	[ "$OWN_WORK" = 1 ] && rm -rf "$WORK"
+}
+trap cleanup EXIT INT TERM
 
 ROOT="$(cd "$ROOT" && pwd)"
 SCRIPTS="$ROOT/root/etc/homeproxy/scripts"
