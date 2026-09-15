@@ -42,6 +42,9 @@ jobs:
 
       # 发布前确认新增文案已同步进 zh_Hans（豁免项见 tests/i18n-ignore.txt）
       - name: Check zh_Hans translation coverage
+        # Deliberately a warning here: packaging a release should not be
+        # blocked by a translation gap, and the PR gate (i18n.yml, arch-test)
+        # already fails on one.  This step is here to record the number.
         run: python3 tests/i18n-coverage.py --warn-below 100
 
       - name: Cache apk-tools binary

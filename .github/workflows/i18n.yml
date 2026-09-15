@@ -25,4 +25,7 @@ jobs:
       # listed in tests/i18n-ignore.txt. Reports a warning annotation plus a
       # job summary entry instead of failing the run.
       - name: Check zh_Hans translation coverage
-        run: python3 tests/i18n-coverage.py --warn-below 100
+        # --fail-below, not --warn-below: the latter prints a ::warning and
+        # exits 0, so this workflow could never fail.  The ignore list
+        # (tests/i18n-ignore.txt) is what makes 100% achievable.
+        run: python3 tests/i18n-coverage.py --fail-below 100
