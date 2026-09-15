@@ -32,7 +32,17 @@ env:
   APK_TOOLS_REF: 'b5a31c0d865342ad80be10d68f1bb3d3ad9b0866'
 
 jobs:
+  # The release gate.  A tag used to publish binaries from a commit the test
+  # suite had never run on - build.yml triggered on tags and workflow_dispatch
+  # while arch-test.yml only ran on push-to-main and pull requests, and the two
+  # pipelines were independent.  Calling the suite here makes the release depend
+  # on it, and reuses the definition instead of duplicating its steps (which is
+  # how the two would drift apart).
+  test:
+    uses: ./.github/workflows/arch-test.yml
+
   build:
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source tree
