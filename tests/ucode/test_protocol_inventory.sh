@@ -3,14 +3,21 @@
 #
 # Protocol inventory invariant.
 #
-# The protocol surface is spread over five places that must agree:
+# The protocol surface is spread over several places that must agree.  PR-02
+# moved two of them, so the paths here are the current ones:
 #
-#   parse_uri.uc        scheme -> type            (what a share link becomes)
+#   parser/uri.uc       scheme -> type            (what a share link becomes)
 #   model.uc            CREDENTIALS               (which UCI option holds each credential)
-#   loader.uc           PROTOCOL_OPTIONS          (which UCI option holds each protocol option)
+#   parser/mapping.uc   PROTOCOL_TO_UCI           (which UCI option holds each protocol option;
+#                                                  the Loader imports it as PROTOCOL_OPTIONS)
 #   adapter.uc          REQUIRED_CREDENTIALS      (what a buildable node needs)
 #   adapter.uc          OPTION_FIELDS             (what becomes a sing-box field)
 #   snapshots/generator/outbounds.json            (what is actually emitted)
+#
+# The frontend has a matching check of its own,
+# tests/frontend-protocol-inventory.js: the browser's protocol list must be a
+# subset of what the backend models, which is the direction this shape test
+# cannot see.
 #
 # Adding a protocol to one of them and forgetting another is the failure mode
 # this test exists for: WireGuard shipped with no loader row (so the endpoint

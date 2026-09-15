@@ -969,6 +969,12 @@ PR-05 之后 init.d 只剩生命周期编排 + 配置读取 + 三个 service 函
 
 ### 2.8 PHASE 8 — LuCI 模块化
 
+> **本节是 PR-06 开工前的现状分析，行号已过期。** 落地记录与当前状态见 §2.11.8：协议真源、
+> 快照覆盖率、node↔server 的 mux/TUIC/hysteria/password 去重、RPC 单一入口、死代码都已落地；
+> 下面这张"重复项"表里剩下的只有 client.js 内部那两块、GridSection 脚手架与动态 load 样板、
+> 以及跨文件的状态三件套。保留本节是为了留住"当初为什么判断值得做"的依据，
+> **不要**按它的行号去找代码。
+
 已经做对的：TLS/Transport 表单块确实抽到了 `homeproxy.js:109-237` / `:243-323`，并被
 `node.js:812`、`server.js:415` 复用。但目标目录 `view/homeproxy/{protocol,components,shared}/`
 不存在，且还有真实重复：
