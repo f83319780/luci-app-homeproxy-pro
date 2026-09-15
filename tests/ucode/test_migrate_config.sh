@@ -101,8 +101,13 @@ cp "$ROOT/tests/ucode/test_migrate_config.uc" "$STAGE/"
 # shebang is fine), but this test *imports* it, and the target ucode
 # rejects a `#!` line in a module ("Unexpected character" at line 1,
 # followed by cascading lexer errors).
+# The crontab path is a literal in the source (/etc/crontabs/root).  Point the
+# staged copy at the sandbox too, or the run would edit the device's real
+# crontab - the migration is supposed to do that once on a real upgrade, but a
+# test must not.
 sed -e '1{/^#!\/usr\/bin\/ucode$/d;}' \
 	-e 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
+	-e "s|'/etc/crontabs/root'|'$SANDBOX/crontab'|" \
 	"$STAGE/migrate_config.uc" > "$STAGE/migrate_config.uc.new"
 
 # Hard guard: if an anchor ever stops matching (someone reformats the
@@ -120,12 +125,45 @@ if head -1 "$STAGE/migrate_config.uc.new" | grep -q '^#!'; then
 	echo "      (the '#!/usr/bin/ucode' anchor no longer matches)"
 	exit 1
 fi
+if ! grep -q "'$SANDBOX/crontab'" "$STAGE/migrate_config.uc.new"; then
+	echo "FAIL: migrate_config regressions: could not redirect the crontab path"
+	echo "      (the \"'/etc/crontabs/root'\" anchor no longer matches)"
+	exit 1
+fi
+
+# A crontab that still carries the legacy entry, plus one line that must
+# survive.  The migration has to remove exactly the former.
+cat > "$SANDBOX/crontab" <<'CRONTAB'
+0 3 * * * /etc/homeproxy/scripts/update_crond.sh
+*/5 * * * * /usr/bin/echo keep-me
+CRONTAB
 mv "$STAGE/migrate_config.uc.new" "$STAGE/migrate_config.uc"
 
 if ( cd "$STAGE" && ucode -L "$STAGE" test_migrate_config.uc "$SANDBOX" ); then
 	echo "PASS: migrate_config regressions"
 else
 	echo "FAIL: migrate_config regressions"
+	FAILED=1
+fi
+
+# The crontab cleanup, asserted from the shell so the .uc test does not have to
+# know about files.  The old form ran `sed -i ... 2>/dev/null`, so on a host
+# whose sed has no bare -i (BSD) it failed silently and left the entry behind -
+# and the marker was set anyway, so the migration never retried.
+if grep -q 'update_crond.sh' "$SANDBOX/crontab"; then
+	echo "FAIL: migrate_config regressions: the legacy update_crond.sh crontab entry survived"
+	grep -n 'update_crond.sh' "$SANDBOX/crontab" | head -2
+	FAILED=1
+fi
+
+if ! grep -q 'keep-me' "$SANDBOX/crontab"; then
+	echo "FAIL: migrate_config regressions: the crontab rewrite dropped an unrelated line"
+	cat "$SANDBOX/crontab"
+	FAILED=1
+fi
+
+if ! grep -q "option crontab '1'" "$SANDBOX/homeproxy"; then
+	echo "FAIL: migrate_config regressions: the crontab marker was not set after a successful edit"
 	FAILED=1
 fi
 
