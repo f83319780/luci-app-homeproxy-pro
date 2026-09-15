@@ -86,24 +86,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.depends({'type': 'shadowtls', 'shadowtls_version': '2'});
 	o.depends({'type': 'shadowtls', 'shadowtls_version': '3'});
 	o.depends({'type': 'socks', 'socks_version': '5'});
-	o.validate = function(section_id, value) {
-		if (section_id) {
-			let type = this.section.formvalue(section_id, 'type');
-			let required_type = [ 'anytls', 'shadowsocks', 'shadowtls', 'snell', 'trojan' ];
-
-			if (required_type.includes(type)) {
-				if (type === 'shadowsocks') {
-					let encmode = this.section.formvalue(section_id, 'shadowsocks_encrypt_method');
-					if (encmode === 'none')
-						return true;
-				}
-				if (!value)
-					return _('Expecting: %s').format(_('non-empty value'));
-			}
-		}
-
-		return true;
-	}
+	o.validate = hp.validatePassword([ 'anytls', 'shadowsocks', 'shadowtls', 'snell', 'trojan' ]);
 	o.modalonly = true;
 
 	/* Direct config */

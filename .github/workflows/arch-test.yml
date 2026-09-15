@@ -89,6 +89,12 @@ jobs:
         # not: it does not catch a rejection.
         run: node tests/frontend-rpc-inventory.js .
 
+      - name: Check the frontend validators
+        # The snapshots cannot see a `validate` callback (it is a function), so
+        # the shared password validator - and the 2022-blake3 key check the node
+        # form was missing - is covered behaviourally instead.
+        run: node tests/frontend-validators.js .
+
       - name: Check zh_Hans translation coverage
         # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
         # coverage fails here even when i18n.yml is still queued.

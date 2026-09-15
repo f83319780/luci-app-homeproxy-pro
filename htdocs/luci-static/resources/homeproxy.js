@@ -165,6 +165,43 @@ return baseclass.extend({
 		o.modalonly = true;
 	},
 
+	/* The password field's validator, shared by both forms.
+	 *
+	 * `required_types` is genuinely per-side (the two forms offer different
+	 * protocols, and the server only shows the field when a user name is set),
+	 * so it stays at the call site.  What must not differ is the 2022 check:
+	 * the server form validated that a 2022-blake3 key has the base64 length
+	 * sing-box insists on, the node form did not - so a client could save a key
+	 * that makes the generated configuration fail to decode ("decode key:
+	 * illegal base64 data"), which only shows up when generation runs. */
+	validatePassword(required_types) {
+		const self = this;
+
+		return function(section_id, value) {
+			if (section_id) {
+				const type = this.section.formvalue(section_id, 'type');
+
+				if (required_types.includes(type)) {
+					if (type === 'shadowsocks') {
+						const encmode = this.section.formvalue(section_id, 'shadowsocks_encrypt_method');
+
+						if (encmode === 'none')
+							return true;
+						else if (encmode === '2022-blake3-aes-128-gcm')
+							return self.validateBase64Key(24, section_id, value);
+						else if (['2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'].includes(encmode))
+							return self.validateBase64Key(44, section_id, value);
+					}
+
+					if (!value)
+						return _('Expecting: %s').format(_('non-empty value'));
+				}
+			}
+
+			return true;
+		};
+	},
+
 	/* Hysteria's bandwidth caps.  A separate renderer because the two forms
 	   place the pair at different points in the section; calling it where each
 	   form used to declare them preserves both option orders exactly. */

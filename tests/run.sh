@@ -52,6 +52,11 @@ echo "== frontend rpc boundary =="
 # not. Source-level because the behaviour needs a browser.
 node "$ROOT/tests/frontend-rpc-inventory.js" "$ROOT" || FAILED=1
 
+echo "== frontend validators =="
+# A `validate` callback is a function, so no snapshot records it; this drives it
+# with a fake form context instead.
+node "$ROOT/tests/frontend-validators.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init

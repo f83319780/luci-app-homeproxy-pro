@@ -203,15 +203,12 @@ const deps = {
 
 /* --- LuCI runtime mock end --------------------------------------------- */
 
+/* The loader itself lives in tests/lib/luci-module.js, shared with the
+ * frontend invariant tests; this just binds it to the mock runtime above. */
+const { loadLuciModule: loadModule } = require('./lib/luci-module.js');
+
 function loadLuciModule(file, extraDeps) {
-	let src = fs.readFileSync(file, 'utf8');
-	src = src.replace(/^'require ([^']+) as (\w+)';$/gm,
-		(_m, mod, alias) => `const ${alias} = __deps[${JSON.stringify(mod)}];`);
-	src = src.replace(/^'require ([^']+)';$/gm,
-		(_m, mod) => `const ${mod.split('.').pop().replace(/[^\w]/g, '_')} = __deps[${JSON.stringify(mod)}];`);
-	/* eslint-disable-next-line no-new-func */
-	const factory = new Function('__deps', '_', 'E', 'L', src);
-	return factory(Object.assign({}, deps, extraDeps), _, E, L);
+	return loadModule(file, Object.assign({}, deps, extraDeps), { _: _, E: E, L: L });
 }
 
 function main() {
