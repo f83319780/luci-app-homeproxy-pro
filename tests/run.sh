@@ -9,11 +9,15 @@
 # python3 / node). The ucode tests run locally when ucode and sing-box are
 # available, otherwise the checkout is copied to $HP_TEST_HOST and run there.
 #
-#   HP_TEST_HOST=root@192.168.1.1 tests/run.sh
-#   HP_TEST_DIR=/tmp/hp-tests      tests/run.sh
+# The default is the dedicated test machine, NOT the production router: the
+# fallback untars the whole checkout into $HP_TEST_DIR on the target, which
+# must never land on the box the house actually routes through.
+#
+#   HP_TEST_HOST=root@192.168.1.102 tests/run.sh
+#   HP_TEST_DIR=/tmp/hp-tests          tests/run.sh
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-HOST="${HP_TEST_HOST:-root@192.168.1.1}"
+HOST="${HP_TEST_HOST:-root@192.168.1.102}"
 REMOTE_DIR="${HP_TEST_DIR:-/tmp/hp-tests}"
 FAILED=0
 
@@ -37,6 +41,12 @@ for target in node client server; do
 		FAILED=1
 	fi
 done
+
+echo "== runtime extraction equivalence (PR-05) =="
+# Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
+# branch below. A host without the toolchain can still prove that the init
+# script refactor did not change behaviour.
+sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" || FAILED=1
 
 echo "== ucode tests =="
 if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then

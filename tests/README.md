@@ -163,6 +163,7 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/ucode/test_inbound_adapter.uc` | PR-04: `InboundFactory`'s protocol-shape decisions — snell / shadowsocks must get no `users[]` block (a snell users entry is read as an extra user key and makes sing-box reject the section), vless / vmess keep `flow` / `alterId` per-user, the snell listener set omits `udp_fragment` / `udp_timeout` / `network`, the server-only TLS tail (key material, ECH key, REALITY private key + handshake, ACME) reaches `buildTLSObject()`, hysteria v1 emits `obfs` as a string while hysteria2 emits the object, and the per-protocol credential requirements are enforced. |
 | `tests/ucode/test_protocol_inventory.sh` | Cross-checks the protocol surface: every type named by `parse_uri.uc`, `CREDENTIALS`, `PROTOCOL_OPTIONS`, `REQUIRED_CREDENTIALS`, `OPTION_FIELDS` and the golden snapshot must agree. This is the check that catches "added a protocol to one table and forgot another". |
 | `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
+| `tests/runtime/test_runtime_extraction.sh` | PR-05: drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci`, fake procd, fixture UCI) across three scenarios and diffs the resulting command + file trace against `tests/fixtures/runtime/trace.pre-pr05.txt`, which was captured from the 517-line pre-PR-05 init script. A diff means the PHASE 7 extraction changed behaviour. Pure shell, no ucode needed, so it also runs on a host without the toolchain. Regenerate the golden with `HP_UPDATE_GOLDEN=1`, or point `HP_INITD` at another revision to re-capture it. |
 
 `tests/ucode/mocks/homeproxy.uc` is a test double for the real module: only
 `validation()` is stubbed (the real one runs `/sbin/validate_data`, which does
@@ -195,7 +196,7 @@ harness provides:
 | `scripts/update_crond.sh` | A fixed list of invocations against hard-coded `/etc/homeproxy/scripts` paths. Covered by the shell syntax check. |
 | `scripts/clean_log.sh` | `while true; do sleep 180; …` — testing the rotation needs the loop made injectable first. Covered by the shell syntax check. |
 | `htdocs/.../view/homeproxy/status.js` | A LuCI view; its behaviour is only observable in a browser. |
-| `init.d/homeproxy` | procd semantics need a real procd. `tests/runtime/test_config_transaction.sh` covers the transaction helpers it calls, and the shell syntax check covers the script itself. |
+| `init.d/homeproxy` | procd semantics need a real procd. PR-05 shrank it from 517 to 253 lines by moving the dnsmasq / fw4 / tproxy-TUN / service-plumbing into `scripts/runtime/{service,dns,firewall,net}.sh`; `tests/runtime/test_runtime_extraction.sh` proves the move kept the command-and-file behaviour identical, and the shell syntax check covers every file. What still needs a target is procd itself. |
 
 ## Architecture regression coverage
 
@@ -212,10 +213,21 @@ relied on. Two tests replaced it:
   the loader option table, the adapter tables and the golden snapshot all name
   the same set of protocols.
 
-`root/etc/init.d/homeproxy` is now exercised for what can be checked off-target:
-`tests/ucode/run.sh` syntax-checks it and the `runtime/` helpers, and
-`tests/runtime/test_config_transaction.sh` covers the transaction semantics.
-procd itself is still only exercised on a target.
+`root/etc/init.d/homeproxy` is exercised for what can be checked off-target:
+`tests/ucode/run.sh` syntax-checks it and the `runtime/` helpers,
+`tests/runtime/test_config_transaction.sh` covers the transaction semantics, and
+`tests/runtime/test_runtime_extraction.sh` pins the orchestration order
+(generate before teardown, known-good before firewall, cron before
+`config_load`, early return before `mkdir`) against the pre-PR-05 trace.
+
+procd itself is still only exercised on a target. PR-05 was verified on the
+ImmortalWrt test machine (`root@192.168.1.102`): `start` brought up both
+`sing-box-c` and `log-cleaner` instances (proving that a procd instance
+registered from a *sourced module* works), `reload` passed the health gate and
+refreshed known-good, and `stop` removed the instances, the TUN device, the ip
+rules, the dnsmasq snippets and the live configuration while keeping the
+known-good copy. That run is a manual step, not a CI job — see the plan's
+PHASE 9 row for the on-target CI gap.
 
 ## Adding cases
 
