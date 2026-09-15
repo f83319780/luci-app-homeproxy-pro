@@ -214,6 +214,19 @@ else
 	FAILED=1
 fi
 
+echo "== subscription fetcher tests =="
+rm -rf "$WORK/fetcher"
+mkdir -p "$WORK/fetcher"
+cp "$ROOT/root/etc/homeproxy/scripts/subscription/fetcher.uc" "$WORK/fetcher/fetcher.uc"
+cp "$ROOT/tests/ucode/mocks/homeproxy_fetcher.uc" "$WORK/fetcher/homeproxy.uc"
+cp "$ROOT/tests/ucode/test_subscription_fetcher.uc" "$WORK/fetcher/"
+if ( cd "$WORK/fetcher" && ucode -L "$WORK/fetcher" test_subscription_fetcher.uc ); then
+	echo "PASS: subscription fetcher tests"
+else
+	echo "FAIL: subscription fetcher tests"
+	FAILED=1
+fi
+
 echo "== executeCommand() failure-path test =="
 rm -rf "$WORK/homeproxy_inject"
 mkdir -p "$WORK/homeproxy_inject"
