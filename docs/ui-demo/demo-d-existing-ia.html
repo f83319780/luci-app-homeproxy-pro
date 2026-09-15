@@ -169,7 +169,7 @@ td.nm{font-weight:600}
     <!-- ============ 改动摘要 ============ -->
     <section class="pane" id="p-summary">
       <div class="card">
-        <h3>这次只动两件事：<span class="sp"></span><span class="mono" style="font-weight:400">信息架构，不重写页面</span></h3>
+        <h3>这次只动信息架构：<span class="sp"></span><span class="mono" style="font-weight:400">不重写页面</span></h3>
 
         <div class="diff">
           <div class="box">
@@ -183,7 +183,7 @@ td.nm{font-weight:600}
             <h4>改动后（Demo D）</h4>
             <div class="mini"><span class="on">客户端设置</span><span>节点设置</span><span>服务器设置</span><span class="new">访问控制 ↑</span><span>服务状态</span></div>
             <div style="margin:10px 0 5px;font-size:11.5px;color:var(--ink-3)">客户端设置 的二级：</div>
-            <div class="mini"><span class="on">分流设置</span><span>DNS 设置</span><span>规则集设置</span><span class="new">资源管理 ↑</span></div>
+            <div class="mini"><span class="on">节点配置</span><span>分流设置</span><span>DNS 设置</span><span>规则集设置</span><span class="new">资源管理 ↑</span></div>
           </div>
         </div>
 
@@ -191,9 +191,10 @@ td.nm{font-weight:600}
           <span>◆</span>
           <div>
             <b>① 访问控制升到一级</b>（它回答"<b>谁</b>走代理"，与"<b>怎么</b>走"不同层）。<br>
-            <b>② 客户端设置的二级收敛为三项</b>：路由设置 + 路由节点 → <b>分流设置</b>；DNS 设置 + DNS 服务器 + DNS 缓存 → <b>DNS 设置</b>；规则集 → <b>规则集设置</b>。<br>
-            <b>③ 资源管理从「服务状态」搬进「客户端设置」</b>（域名库/IP 库是客户端的原料，放在状态页是错位）。<br>
-            <span style="color:var(--ink-2)">逐项对应见「服务状态 → 迁移对照」页，没有功能被丢掉。</span>
+            <b>② 新增「节点配置」二级 tab</b>：把 代理模式 + 主节点 + 主 UDP 节点（含 URLTest 参数）从「路由设置」里抽出来，集中回答"<b>用哪个节点、以什么模式用</b>"。<br>
+            <b>③ 客户端设置的二级收敛</b>：路由节点 + 分流规则 + 默认出站 → <b>分流设置</b>；DNS 设置 + DNS 服务器 + DNS 缓存 → <b>DNS 设置</b>；规则集 → <b>规则集设置</b>。七项变五项。<br>
+            <b>④ 资源管理从「服务状态」搬进「客户端设置」</b>（域名库/IP 库是客户端的原料，放在状态页是错位）。<br>
+            <span style="color:var(--ink-2)">逐项对应见「迁移对照」页，没有功能被丢掉。</span>
           </div>
         </div>
 
@@ -205,18 +206,70 @@ td.nm{font-weight:600}
       </div>
     </section>
 
+    <!-- ============ 客户端设置 / 节点配置（新增 tab） ============ -->
+    <section class="pane" id="p-client-nodeconf">
+      <div class="card" style="border-color:color-mix(in srgb,var(--mov) 40%,var(--line))">
+        <h3>节点配置<span class="sp"></span>
+          <span class="tag" style="background:var(--mov-soft);color:var(--mov)">新增 tab</span>
+          <span style="font-weight:400;font-size:12px;color:var(--ink-3)">原属「路由设置」</span></h3>
+        <div class="note m"><span>◆</span><div>「用哪个节点、以什么模式用」与「哪些流量不走默认节点」是两件事。
+        把前者独立成页后，<b>分流设置</b>只剩纯分流内容，不用在节点选择里翻找规则。</div></div>
+
+        <div class="sub-h" style="margin-top:18px">代理模式</div>
+        <div class="row"><div class="lbl">代理模式<small>决定默认流量怎么走（UCI: routing_mode）</small></div>
+          <div class="fld">
+            <select>
+              <option>绕过中国大陆</option>
+              <option>仅代理中国大陆</option>
+              <option>GFWList</option>
+              <option>全局</option>
+              <option>自定义分流</option>
+            </select>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:6px">当前：<b>绕过中国大陆</b>（默认值）</div>
+          </div></div>
+        <div class="note w"><span>⚠</span><div>选「<b>自定义分流</b>」时会<b>立即保存并展开</b>「分流设置」——
+        这是现有行为（<span class="mono">client.js:825 onchange → map.save</span>），改版后要保留，
+        并给出提示，避免用户以为"还没保存"。</div></div>
+
+        <div class="sub-h">代理节点</div>
+        <div class="row"><div class="lbl">主节点<small>UCI: main_node</small></div>
+          <div class="fld"><select>
+            <option>anytls-bwg</option><option>hy2-bwg</option><option>ss-2022-bwg</option>
+            <option>vless-reality</option><option>URLTest</option><option>禁用</option>
+          </select></div></div>
+        <div class="row"><div class="lbl">主 UDP 节点<small>UCI: main_udp_node</small></div>
+          <div class="fld"><select>
+            <option>同主节点</option><option>anytls-bwg</option><option>hy2-bwg</option>
+            <option>ss-2022-bwg</option><option>URLTest</option><option>禁用</option>
+          </select></div></div>
+
+        <div class="sub-h">URLTest 参数<span style="font-weight:400;color:var(--ink-3);font-size:12px">（仅当主节点 / 主 UDP 节点选 URLTest 时生效）</span></div>
+        <div class="row"><div class="lbl">参与测速的节点</div>
+          <div class="fld"><span class="mono">anytls-bwg · hy2-bwg · ss-2022-bwg</span></div></div>
+        <div class="row"><div class="lbl">测试间隔</div>
+          <div class="fld"><input type="text" value="180" style="max-width:120px"> <span style="color:var(--ink-3)">秒</span></div></div>
+        <div class="row"><div class="lbl">容差</div>
+          <div class="fld"><input type="text" value="50" style="max-width:120px"> <span style="color:var(--ink-3)">毫秒</span></div></div>
+      </div>
+
+      <div class="card">
+        <h3>为什么 URLTest 参数也放这里</h3>
+        <div style="font-size:13px;color:var(--ink-2)">
+          这三个字段在现有代码里是 <span class="mono">depends('main_node', 'urltest')</span> 的子项，
+          跟着主节点走。如果主节点在「节点配置」、参数留在「分流设置」，
+          用户会看到一个<b>与节点选择脱节、且经常是空的分流页</b>。
+        </div>
+      </div>
+    </section>
+
     <!-- ============ 客户端设置 / 分流设置 ============ -->
     <section class="pane" id="p-client-split">
       <div class="card">
-        <h3>基础分流<span class="sp"></span><span style="font-weight:400;font-size:12px;color:var(--ink-3)">原「路由设置」</span></h3>
-        <div class="row"><div class="lbl">路由模式<small>决定默认流量怎么走</small></div>
-          <div class="fld"><select><option>绕过中国大陆</option><option>全局代理</option><option>自定义</option></select></div></div>
-        <div class="row"><div class="lbl">主节点</div>
-          <div class="fld"><select><option>anytls-bwg</option><option>hy2-bwg</option><option>ss-2022-bwg</option><option>vless-reality</option><option>URLTest</option><option>禁用</option></select></div></div>
-        <div class="row"><div class="lbl">主 UDP 节点</div>
-          <div class="fld"><select><option>同主节点</option><option>anytls-bwg</option><option>禁用</option></select></div></div>
-        <div class="row"><div class="lbl">URLTest 测试间隔 / 容差</div>
-          <div class="fld"><input type="text" value="180 秒 / 50 毫秒" style="max-width:220px"></div></div>
+        <h3>默认出站<span class="sp"></span><span style="font-weight:400;font-size:12px;color:var(--ink-3)">没有规则命中时用它（原「路由设置」尾部）</span></h3>
+        <div class="row"><div class="lbl">默认出站<small>UCI: default_outbound</small></div>
+          <div class="fld"><select><option>direct-out（直连）</option><option>main-out（主节点）</option><option>block-out（阻断）</option></select></div></div>
+        <div class="note" style="margin-top:12px"><span>ℹ</span>
+          <div>节点选择已移到 <a class="a m" data-jump="client" data-sub="nodeconf">客户端设置 → 节点配置</a>。</div></div>
       </div>
 
       <div class="card">
@@ -478,7 +531,8 @@ td.nm{font-weight:600}
         <table>
           <thead><tr><th>现有位置</th><th>改版后</th><th style="width:150px">变化</th></tr></thead>
           <tbody>
-            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由设置</td><td class="nm">客户端设置 → 分流设置</td><td>合并</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由设置 → 代理模式 / 主节点 / 主 UDP 节点 / URLTest 参数</td><td class="nm">客户端设置 → <b>节点配置</b></td><td style="color:var(--mov);font-weight:700">拆出新 tab</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由设置 → 默认出站</td><td class="nm">客户端设置 → 分流设置 → 默认出站</td><td>合并</td></tr>
             <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由节点</td><td class="nm">客户端设置 → 分流设置 → 路由节点</td><td>合并</td></tr>
             <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由规则</td><td class="nm">客户端设置 → 分流设置 → 分流规则<div style="font-weight:400;font-size:12px;color:var(--ink-3)">并在「规则集设置 → 统一规则视图」可见</div></td><td>保留 + 总表</td></tr>
             <tr><td class="mono" style="text-decoration:line-through">客户端设置 → DNS 设置</td><td class="nm" rowspan="3">客户端设置 → DNS 设置</td><td rowspan="3" style="color:var(--mov);font-weight:700">合并 3 → 1</td></tr>
@@ -501,7 +555,8 @@ td.nm{font-weight:600}
           <tbody>
             <tr><td class="nm">新增一级 tab</td><td class="mono">root/usr/share/luci/menu.d/luci-app-homeproxy.json</td><td>加一条 <span class="mono">…/homeproxy/acl</span>，<span class="mono">order</span> 排在 server(20) 与 status(30) 之间</td></tr>
             <tr><td class="nm">新增 view</td><td class="mono">htdocs/…/view/homeproxy/acl.js</td><td>把 <span class="mono">client.js</span> 里 <span class="mono">s.tab('control')</span> 起的 5 个子 tab 整体搬过去</td></tr>
-            <tr><td class="nm">二级 tab 收敛</td><td class="mono">client.js</td><td><span class="mono">routing/routing_node</span> → <span class="mono">分流设置</span>；<span class="mono">dns/dns_server/dns_cache</span> → <span class="mono">DNS 设置</span>；<span class="mono">ruleset</span> → <span class="mono">规则集设置</span>；<span class="mono">control</span> 移出</td></tr>
+            <tr><td class="nm">二级 tab 收敛</td><td class="mono">client.js</td><td>新增 <span class="mono">s.tab('nodeconf')</span>；<span class="mono">routing</span> 拆成 <span class="mono">nodeconf</span>（代理模式/主节点/主 UDP 节点/URLTest）+ <span class="mono">分流设置</span>（路由节点/分流规则/默认出站）；<span class="mono">dns/dns_server/dns_cache</span> → <span class="mono">DNS 设置</span>；<span class="mono">ruleset</span> → <span class="mono">规则集设置</span>；<span class="mono">control</span> 移出</td></tr>
+            <tr><td class="nm">taboption 改归属</td><td class="mono">client.js:688-745、817</td><td><span class="mono">main_node</span> / <span class="mono">main_urltest_*</span> / <span class="mono">main_udp_node</span> / <span class="mono">routing_mode</span> 的第一个参数由 <span class="mono">'routing'</span> 改成 <span class="mono">'nodeconf'</span>。<b>只改 tab 名，不动 depends 与 onchange</b></td></tr>
             <tr><td class="nm">资源管理搬家</td><td class="mono">status.js → client.js</td><td><span class="mono">status.js:218</span> 的 <span class="mono">NamedSection _('Resources management')</span> 移到 client 的 <span class="mono">resources</span> tab</td></tr>
             <tr><td class="nm">ACL 权限</td><td class="mono">root/usr/share/rpcd/acl.d/luci-app-homeproxy.json</td><td>新 view 需要 <span class="mono">read/write</span> 声明，否则菜单项不显示</td></tr>
           </tbody>
@@ -521,6 +576,7 @@ td.nm{font-weight:600}
 /* ---------- 结构定义：一级 tab → 二级 tab ---------- */
 const NAV = {
   client: { tabs: [
+    { id:'nodeconf',  label:'节点配置', moved:true },
     { id:'split',     label:'分流设置' },
     { id:'dns',       label:'DNS 设置' },
     { id:'ruleset',   label:'规则集设置' },
