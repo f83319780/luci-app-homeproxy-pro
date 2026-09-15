@@ -36,14 +36,24 @@ run_case() {
 	: > "$dir/resources/proxy_list.txt"
 
 	if grep -q "__RULESET_DIR__" "$fixture"; then
-		# The fixture needs a real local rule-set on disk.
+		# The fixture needs a real local rule-set on disk. The path must
+		# live under /tmp/homeproxy_* (validateHomeProxyPath() in
+		# homeproxy.uc whitelists /etc/homeproxy/ and /tmp/homeproxy_
+		# only, and the custom fixture exercises the local-rule-set
+		# path whitelist gate introduced by the security patch).
 		printf '%s' '{"version":1,"rules":[{"domain_suffix":["example.com"]}]}' > "$dir/ruleset/src.json"
 		if ! sing-box rule-set compile "$dir/ruleset/src.json" -o "$dir/ruleset/test.srs"; then
 			echo "FAIL: $name: could not compile the local rule-set fixture"
 			FAILED=1
 			return
 		fi
-		sed "s#__RULESET_DIR__#$dir/ruleset#" "$fixture" > "$dir/config/homeproxy"
+		# Stage the ruleset under a /tmp/homeproxy_* directory so the
+		# whitelist recognises the staging path. Production paths
+		# typically live at /etc/homeproxy/ruleset/...
+		HP_RULESET="/tmp/homeproxy_test_ruleset/$name"
+		mkdir -p "$HP_RULESET"
+		cp "$dir/ruleset/test.srs" "$HP_RULESET/test.srs"
+		sed "s#__RULESET_DIR__#$HP_RULESET#" "$fixture" > "$dir/config/homeproxy"
 	else
 		cp "$fixture" "$dir/config/homeproxy"
 	fi

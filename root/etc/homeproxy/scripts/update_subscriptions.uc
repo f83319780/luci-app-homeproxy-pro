@@ -15,7 +15,7 @@ import { cursor } from 'uci';
 import { init_action } from 'luci.sys';
 
 import {
-	wGETVerbose, getTime, isEmpty, HP_DIR, RUN_DIR
+	wGETVerbose, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl
 } from 'homeproxy';
 
 import { parse_uri } from 'parse_uri';
@@ -136,9 +136,9 @@ function main() {
 		}
 
 		if (count === 0)
-			log(sprintf('No valid node found in %s.', url));
+			log(sprintf('No valid node found in %s.', redactUrl(url)));
 		else
-			log(sprintf('Successfully fetched %s nodes of total %s from %s.', count, length(nodes), url));
+			log(sprintf('Successfully fetched %s nodes of total %s from %s.', count, length(nodes), redactUrl(url)));
 	}
 
 	if (isEmpty(node_result)) {
