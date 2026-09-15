@@ -38,14 +38,24 @@ export function decode(content, log, url) {
 		nodes = parsed.servers || parsed;
 
 		/* Shadowsocks SIP008: each entry is a JSON object with
-		 * server + method, not a URI string. The pre-B1 code only
-		 * inspected the first entry and then marked the whole
-		 * array; we keep that quirk so a SIP008 list and a
-		 * mixed list with one SIP008 entry in front both still
-		 * work. */
-		if (nodes[0] && nodes[0].server && nodes[0].method) {
+		 * server + method, not a URI string.
+		 *
+		 * The probe has to check the type first.  It used to be a bare
+		 * `nodes[0].server`, which THROWS in ucode when nodes[0] is a
+		 * string ("left-hand side expression is not an array or
+		 * object") - and the throw was swallowed by the JSON
+		 * try/catch below, so a perfectly valid `{"servers":["vless://…"]}`
+		 * or `["vless://…"]` subscription fell through to the base64
+		 * fallback, failed there too and decoded to an empty list.  Two
+		 * real subscription shapes were silently discarded, and the
+		 * decoder test had recorded that as the contract.  The same
+		 * guard applies inside the loop so a mixed list (SIP008 objects
+		 * plus share links) keeps both halves instead of losing
+		 * everything on the first string. */
+		if (type(nodes[0]) === 'object' && nodes[0].server && nodes[0].method) {
 			for (let i = 0; i < length(nodes); i++)
-				nodes[i].nodetype = 'sip008';
+				if (type(nodes[i]) === 'object')
+					nodes[i].nodetype = 'sip008';
 		}
 	} catch (e) {
 		const tag = url ? sprintf('for %s, ', url) : '';

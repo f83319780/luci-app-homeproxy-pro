@@ -34,22 +34,36 @@ expect('empty string', decode('',   LOG, 'sub'), []);
 expect('null content', decode(null, LOG, 'sub'), []);
 
 /* --- JSON with 'servers' key (clash proxy-provider) --- */
-/* Same pre-existing quirk as below: the SIP008 detector does
- * `nodes[0].server`, which throws in ucode when nodes[0] is a
- * string. The try/catch turns the throw into a base64 fallback,
- * which then fails because the JSON is not valid base64. Net
- * result: [] for both URI-array and {servers: [...]} inputs.
- * Documented here as the behaviour the orchestrator has relied on;
- * the quirk is unchanged by B1.1. */
+/* These two shapes used to decode to [] - see the note in
+ * subscription/decoder.uc: the SIP008 probe read `.server` off a
+ * string, ucode threw, the JSON try/catch swallowed it and the
+ * base64 fallback failed.  Both are legitimate subscription
+ * payloads whose entries are plain share links, so the assertion is
+ * now "the links survive" rather than "the old bug is preserved"
+ * (plan 3.2: do not keep a bug as the contract). */
 {
 	const out = decode('{"servers":["vless://a", "trojan://b"]}', LOG, 'sub');
-	expect('json servers: empty (quirk)', length(out), 0);
+	expect('json servers: length',  length(out), 2);
+	expect('json servers: entry 0', out[0], 'vless://a');
+	expect('json servers: entry 1', out[1], 'trojan://b');
 }
 
 /* --- JSON array of URI strings --- */
 {
 	const out = decode('["vless://a", "trojan://b"]', LOG, 'sub');
-	expect('json uri array: empty (quirk)', length(out), 0);
+	expect('json uri array: length',  length(out), 2);
+	expect('json uri array: entry 1', out[1], 'trojan://b');
+}
+
+/* --- mixed: SIP008 objects and share links in one list --- */
+{
+	const mixed = '[{"server":"1.2.3.4","server_port":8388,'
+	            + '"password":"x","method":"chacha20-ietf-poly1305"},'
+	            + '"vless://a"]';
+	const out = decode(mixed, LOG, 'sub');
+	expect('mixed: length',        length(out), 2);
+	expect('mixed: object tagged', out[0].nodetype, 'sip008');
+	expect('mixed: link kept',     out[1], 'vless://a');
 }
 
 /* --- SIP008: array of objects with server+method --- */
