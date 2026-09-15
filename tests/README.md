@@ -166,23 +166,32 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
 | `tests/runtime/test_runtime_extraction.sh` | Drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci` / `netstat`, fake procd and jsonfilter state, fixture UCI) across four scenarios and diffs the resulting command + file trace against a baseline. Two baselines exist and are captured with the SAME harness, so the diff between them is exactly the intentional change: `tests/fixtures/runtime/trace.pre-pr05.txt` (the 517-line init script before PHASE 7 moved the plumbing out — the record that the extraction was behaviour-preserving) and `tests/fixtures/runtime/trace.golden.txt` (after the health-gate fix). Scenario D is the P0 regression: a candidate whose `mixed_port` is already taken must be rejected by the health gate, the previous known-good must survive, and the reload must roll back onto it. Pure shell, no ucode needed. Regenerate with `HP_UPDATE_GOLDEN=1` (optionally `HP_GOLDEN=` / `HP_INITD=` to target another baseline or revision). |
 
-### What the LuCI form snapshots do not cover
+### What the LuCI form snapshots cover
 
-Worth knowing before trusting them: a snapshot records an option's name, kind,
-title, dependency and default, and (for the options it reaches) its value list.
-Two gaps were measured while building the protocol registry:
+A snapshot records, for every option the form builds: kind, name, title,
+description, dependency set, the `ListValue` value list, and the non-function
+properties that were set on it.  Options are nested, so a `SectionValue`
+option's nested form is included.
 
-| Target | Options captured | Note |
+That last part was missing until it was fixed: `Option.toJSON()` skipped the
+`subsection` key, which is where `SectionValue` keeps the nested form, so the
+node form's entire body and client.js's rule sections were invisible.  The
+measured effect of the fix:
+
+| Target | Options dumped | Snapshot size |
 |---|---|---|
-| `node.json` | 14 | The node form's options live in the subsection of a
-`taboption(..., form.SectionValue, ...)`, and the node form's picker is not in
-the dump — so most of `node.js` is not guarded by its snapshot at all. |
-| `client.json` | 30 | — |
-| `server.json` | 97 | Includes the `type` picker and its 13 values. |
+| `node.json` | 13 → **117** | 3.5 KB → 34.6 KB |
+| `client.json` | 29 → **206** | 8.6 KB → 56.3 KB |
+| `server.json` | 95 → 95 | 25.9 KB → 27.8 KB |
 
-That asymmetry is why `tests/frontend-protocol-inventory.js` exists: a change to
-the protocol list, the kind of change PHASE 8 is about, is invisible to three of
-the four snapshots as they are currently dumped.
+Before that fix, a change to the protocol picker - exactly the kind of change
+PHASE 8 makes - was visible in `server.json` only.  That is why
+`tests/frontend-protocol-inventory.js` also exists: it asserts the *meaning* of
+the protocol table against the backend, which a structural snapshot cannot.
+
+What the snapshots still cannot tell you: whether the form is *usable*. They
+prove a change to the option tree is deliberate and reviewable; they say nothing
+about whether the resulting page works in a browser.
 
 `tests/ucode/mocks/homeproxy.uc` is a test double for the real module: only
 `validation()` is stubbed (the real one runs `/sbin/validate_data`, which does

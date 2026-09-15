@@ -71,6 +71,11 @@ class Option {
 			description: this.__description === undefined ? null : this.__description,
 			depends: this.__depends,
 			values: this.__values,
+			/* A SectionValue option owns the nested form (`o.subsection`).
+			   Skipping it dropped the node form's entire body - every
+			   per-protocol option - and client.js's rule sections, which is
+			   why node.json held 14 options while server.json held 97. */
+			subsection: this.subsection ? this.subsection.toJSON() : null,
 			props: props
 		};
 	}
