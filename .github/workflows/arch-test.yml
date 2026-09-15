@@ -108,6 +108,22 @@ jobs:
         # coverage fails here, and with --warn-below it never could.
         run: python3 tests/i18n-coverage.py --fail-below 100
 
+      - name: Check the translation template is current
+        # The coverage check above only reads po/templates/homeproxy.pot ->
+        # po/zh_Hans/homeproxy.po, so it cannot see a string that was never
+        # added to the template.  Adding `_('brand new string')` to a view left
+        # it reporting 100%: the .pot was simply never regenerated, and the new
+        # string was invisible to every gate.  Regenerating from source and
+        # requiring no diff closes that hole - a new string must appear in the
+        # template (and therefore in the coverage count) before it can pass.
+        run: |
+          bash .github/rescan-translation.sh
+          if ! git diff --quiet -- po/; then
+            echo "::error title=Translation template::po/ is out of date - run .github/rescan-translation.sh and commit the result"
+            git diff --stat -- po/
+            exit 1
+          fi
+
       - name: Run ucode test suite
         env:
           # PATH must put the toolchain bin first so the matching sing-box
