@@ -10,10 +10,13 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **75% ~ 80%**（PHASE 6 已接近完成，PHASE 9 到 75%，
+按文档的 9 个 PHASE 取平均，目前约 **80% ~ 85%**（PHASE 6 已接近完成，PHASE 9 到 95%，
 PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
 §4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
-防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格）。
+防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
+PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、
+`migrate_config` 36 项、`firewall_pre` 8 场景 + CI 快照循环补 `client`，仅剩 on-target CI job，
+详见 §2.9）。
 剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
@@ -27,12 +30,13 @@ PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed
 | 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
 | 7 | Runtime | 🟡 ~40% | `runtime/{config,health}.sh` 已抽、重复 `sing-box check` 已去；`dns`/`firewall`/`service` 仍在 init.d（517 行） |
 | 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除；协议表前后端仍 6 份不同步，`node.js`↔`server.js` 仍有 ~229 行重复 |
-| 9 | Test / CI | 🟢 ~75% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；缺 `client.json` 快照、TLS/Transport 直测、on-target CI job |
+| 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 
 **关键判断（已更新）**：文档"最终成功标准"里那条链
 `Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
-**已经成立**（§2.6 已实施）。剩下的不再是"能不能跑"，而是**可维护性**（PHASE 1/2/4/8）与
-**剩余覆盖面**（PHASE 9 + §4 安全）。
+**已经成立**（§2.6 已实施）。**PHASE 4 Generator 拆分、§4 安全 8/9、PHASE 9 收尾 5/6 也已落地**，
+所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，而是纯粹的结构性债务：
+**可维护性**（PHASE 1/2/8）与**领域化收尾**（PHASE 3/5）。
 
 ### 0.3 剩余大项与工时估算
 
@@ -47,14 +51,16 @@ PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed
 | D | PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码） | 中 | 中 | 4 – 7 |
 | E | PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射 | 中 | 中 | 4 – 7 |
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
-| G | PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐） | 中 | 低–中（on-target 部分需要设备/硬件） | 5 – 9 |
+| ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 | H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
 | I | 文档与注释债务（`architecture-review.md` 部分结论已失效、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（含已完成的 A、C 部分）** | | | **31 – 56** |
+| | **合计（A / C / G 大部分已完成）** | | | **26 – 47** |
 
-**最小可用集合**（只求"稳、能跑、可维护"，跳过 PHASE 1/2/3/4/5/8 的结构重构）：
-**A + C + G ≈ 16 – 28 工时**。
-建议顺序（风险/收益比）A → C → G（先拆 generator 拿到可维护性，再补安全，再补测试覆盖）→ D/E/H（结构与领域模型）→ F（等有 on-target CI 再做）→ B（放在最后，且必须配人工回归）。
+**最小可用集合**（只求"稳、能跑、可维护"）：
+~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
+`db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`）。原定的三步顺序已走完：
+A → C → G。**下一批从 D/E/H 开始**（结构与领域模型），再 F（等有 on-target CI 再做），
+最后 B（LuCI 模块化，必须配人工回归）。
 
 **无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
 - 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
@@ -518,11 +524,11 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
 建议：先做**一份权威协议表**（JS 侧导出给 LuCI，ucode 侧由同一份数据生成或由一致性测试守护），
 再拆目录；否则拆完还是 6 份。
 
-### 2.9 PHASE 9 — Test / CI
+### 2.9 PHASE 9 — Test / CI ✅ 收尾已落地（`client.json` / TLS-Transport / fetcher / migrate / firewall_pre / CI）
 
 现状分层（实测）：
 - `python3 tests/i18n-coverage.py --warn-below 100` → **PASS**（724/724）
-- `node tests/luci-form-snapshot.js` node/server → **PASS**（与 `tests/snapshots/*.json` 一致）
+- `node tests/luci-form-snapshot.js` ~~node/server~~ node/client/server → **PASS**（与 `tests/snapshots/*.json` 一致）
 - `sh tests/ucode/run.sh` → 本机 **NOT RUN**（无 ucode；已加 `command -v ucode` 守卫，
   现在明确打印 NOT RUN 并以退出码 2 结束，而不是把每个用例误报成 FAIL）
 - 目标设备上 → **PASS**（`SUITE_RC=0`，`^FAIL` 计数 0）
@@ -555,18 +561,38 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
    / golden 快照 / endpoint-only 协议。ssh 与 wireguard 的缺口正是这类。
 7. ✅ **golden JSON 快照**：`tests/snapshots/generator/outbounds.json`（14 协议），
    并额外跑真实 `sing-box check`（找出 §1.6 的 4 个缺陷）。
-8. ⬜ `client.json` 表单快照：`luci-form-snapshot.js` 仍只接受 `node|server`，`client.js` 无快照。
-9. ⬜ TLS/Transport 单测：仍没有直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject` 的测试
-   （目前由 golden 快照 + generator fixture 间接覆盖）。
+8. ~~⬜ `client.json` 表单快照：`luci-form-snapshot.js` 仍只接受 `node|server`，`client.js` 无快照。~~ ✅ 已落地（commit `db1d200`）—— `luci-form-snapshot.js` 接受 `node|client|server`，新增 `tests/snapshots/client.json`（677 行）；mock 补 `tools.firewall.addIPOption/addMACOption` 与 `hp_has_tproxy`/`hp_has_tun`/`hp_has_ip_full`；`tests/run.sh` 与 `.github/workflows/arch-test.yml` 的快照循环都加了 `client`。
+9. ~~⬜ TLS/Transport 单测：仍没有直接调用 `load_tls/load_transport/buildTLSObject/buildTransportObject` 的测试
+   （目前由 golden 快照 + generator fixture 间接覆盖）。~~ ✅ 已落地（commit `ac910b6`）——
+   `tests/ucode/test_tls_transport.uc`，37 项断言直调 `buildTLSObject` / `buildTransportObject`：
+   服务端不得有 `insecure` / `utls`、reality 的 `public_key` 只在客户端 / `private_key` 只在服务端、
+   ECH 客户端与服务端字段分叉、`cert_path` 走 `validateHomeProxyPath` 白名单。
 10. ✅ demo 测试的两条空操作 sed 随测试一起删除。
 11. ✅ `tests/README.md` 已彻底改写，不再残留 `demo/architecture/` 的描述。
-12. 🟡 `tests/ucode/run.sh` 新增 **shell 语法检查**（`init.d/homeproxy` + `runtime/*.sh`），
-    补上了这类文件此前完全不被检查的空白。
+12. ✅ `tests/ucode/run.sh` 新增 **shell 语法检查**（`init.d/*` + `homeproxy/scripts/*.sh` +
+    `homeproxy/scripts/runtime/*.sh`），补上了这类文件此前完全不被检查的空白。
+13. ✅ `tests/ucode/test_subscription_fetcher.uc` + `mocks/homeproxy_fetcher.uc`：7 项断言，
+    覆盖空/非空响应与**日志脱敏**（`https://***@host/path?***`）。顺带修掉 `fetcher.uc` 里
+    `wGETVerbose` **漏 import** 的真实缺陷——该函数从未被 import，只因没有任何测试驱动过
+    `update_subscriptions.uc` 才一直没暴露（commit `b23f9c3`）。
+14. ✅ `tests/ucode/test_migrate_config.sh` + `.uc`：36 项断言，跑在沙箱 UCI 上，覆盖
+    1.14 DNS 改名、`dns_server.address` 拆分、`rcode://` 转 predefined、`rule_set_ipcidr_match_source`
+    改名、`block-out`/`block-dns` → `action='reject'`、`auto_firewall` 重分发、`block-dns`
+    默认服务器替换（commit `e17b75d`）。
+15. ✅ `tests/ucode/test_firewall_pre.sh`：`firewall_pre.uc` 的 8 个行为场景（tun 放行对、
+    逐 server 放行、显式 network 收窄、**非法 port/network 必须 WARN 且跳过**、
+    `firewall='0'` 退出、tun+server 共存）。非法值一旦被直接插进 nft 语句，
+    nft 会因一行报错丢掉**整份** ruleset（commit `b0e4a33`）。
 
-仍然无测试的文件（未变）：`client.js`、`status.js`、`migrate_config.uc`、`update_resources.sh`、
-`update_crond.sh`、`clean_log.sh`、`firewall_pre.uc`。
+本轮已补上测试的文件：~~`client.js`~~（表单快照）、~~`migrate_config.uc`~~、
+~~`firewall_pre.uc`~~、~~`subscription/fetcher.uc`~~。
+
+仍然无**直接**测试的文件（已在 `tests/README.md` 里逐条给出理由）：
+`status.js`（LuCI 视图，只有浏览器里可观测）、`update_resources.sh`、
+`update_crond.sh`、`clean_log.sh`（网络往返 / 固定调用列表 / `while true` 循环，
+离线只能覆盖法参数分支，已由 shell 语法检查兜住）。
 `init.d/homeproxy` 现在有 shell 语法检查 + 事务语义测试，但 procd 行为仍需 on-target CI；
-`luci.homeproxy` 的 RPC 已在设备上跑过真实 rpcd（见附录）；`subscription/fetcher.uc` 仍无单测。
+`luci.homeproxy` 的 RPC 已在设备上跑过真实 rpcd（见附录）。
 
 ---
 
@@ -671,14 +697,22 @@ P1（可靠性 — 文档 PHASE 6/7 的核心目标）
       (procd cannot be driven off-device)
 
 P2（结构）
-15. refactor(gen): split generate_client.uc into generator/*.uc             # §2.4
-16. refactor(gen): generator becomes an importable library (drop sed hooks) # §2.4
-17. refactor(parser): parser/ dir + single canonical field mapping          # §2.2
-18. refactor(gen): server inbound through domain model + InboundFactory     # §2.3
-19. refactor(runtime): extract runtime/{service,dns,firewall}.uc            # §2.7
-20. refactor(luci): shared/rpc.js + components/ + protocol registry         # §2.8
-21. security: split ACL wildcard; backend path allowlist                    # §4
-22. test: client.json form snapshot; TLS/Transport unit tests               # §2.9
+15. ✅ refactor(gen): split generate_client.uc into generator/*.uc            # §2.4  (`0c67d77`)
+16. ✅ refactor(gen): generator becomes an importable library (drop sed hooks)# §2.4  (`0c67d77`)
+17. ⬜ refactor(parser): parser/ dir + single canonical field mapping         # §2.2
+18. ⬜ refactor(gen): server inbound through domain model + InboundFactory    # §2.3
+19. ⬜ refactor(runtime): extract runtime/{service,dns,firewall}.uc           # §2.7
+20. ⬜ refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.8
+21. ✅ security: split ACL wildcard; backend path allowlist                   # §4     (`d9a4dac`)
+22. ✅ security: frontend XSS / poll / RPC-error / cert-tmp hardening         # §4     (`0bd1b65`)
+23. ✅ test: client.json form snapshot                                        # §2.9   (`db1d200`)
+24. ✅ test: TLS/Transport unit tests                                         # §2.9   (`ac910b6`)
+25. ✅ test: subscription fetcher unit tests (+ fix a missing import)         # §2.9   (`b23f9c3`)
+26. ✅ test: migrate_config regressions                                       # §2.9   (`e17b75d`)
+27. ✅ test: firewall_pre behaviour + client snapshot in the CI job           # §2.9   (`b0e4a33`)
+
+**下一步（D/E/H）**：17 → 19 → 18 → 20，即先做结构（parser 目录化、
+runtime 抽离、server inbound 领域化），最后做 LuCI 模块化（必须配人工回归）。
 ```
 
 ---
@@ -701,7 +735,7 @@ P2（结构）
 | 检查 | 结果 |
 |---|---|
 | `python3 tests/i18n-coverage.py --warn-below 100` | **PASS** 724/724，10 条 ignore |
-| `node tests/luci-form-snapshot.js . node` / `server` | **PASS**（与 `tests/snapshots/*.json` 一致；删除 388 行前端 parser 后仍一致） |
+| `node tests/luci-form-snapshot.js . node` / `client` / `server` | **PASS**（与 `tests/snapshots/*.json` 一致；删除 388 行前端 parser 后仍一致；`client` 快照于本阶段补齐） |
 | `sh tests/ucode/run.sh`（本机） | **NOT RUN** — 无 ucode；已加守卫，现在明确输出 NOT RUN 并以退出码 2 结束 |
 
 **修复前**（HEAD `599a10b`）：
