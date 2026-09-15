@@ -18,7 +18,10 @@
  * next to the registration site in render(). Without it, the section's
  * render() leaks a fresh poll handler every time LuCI re-renders on
  * a UCI commit, and the bar updates multiple times per tick. */
-let server_status_poll_registered = false;
+/* Built on the first render, so the poll closure captures that render's
+ * features.version. The "have we registered" state lives inside
+ * hp.statusPoller(), shared with the other view. */
+let ensureStatusPoll = null;
 
 const CBIGenValue = form.Value.extend({
 	__name__: 'CBI.GenValue',
@@ -147,21 +150,18 @@ return view.extend({
 		/* View-level poll: registered exactly once per navigation. The
 		 * getElementById lookup may return null when LuCI swaps the DOM
 		 * between renders, so guard against it. */
-		if (!server_status_poll_registered) {
-			server_status_poll_registered = true;
-			poll.add(() => {
-				/* getServiceStatus() already never rejects - it resolves to null
-				 * when the query did not answer - so wrapping it in
-				 * L.resolveDefault() is a no-op. Worse, L.resolveDefault
-				 * substitutes for a null *result*, which would turn that
-				 * meaningful null back into undefined. */
-				return getServiceStatus().then((res) => {
+		if (ensureStatusPoll === null)
+			ensureStatusPoll = hp.statusPoller({
+				poll: poll,
+				read: getServiceStatus,
+				paint: function(res) {
 					let view = document.getElementById('service_status');
 					if (view)
 						view.innerHTML = renderStatus(res, features.version);
-				});
+				}
 			});
-		}
+
+		ensureStatusPoll();
 
 		s = m.section(form.NamedSection, 'server', 'homeproxy', _('Global settings'));
 
