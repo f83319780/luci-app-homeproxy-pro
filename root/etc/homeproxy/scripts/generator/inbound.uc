@@ -15,7 +15,7 @@
 
 'use strict';
 
-import { isEmpty, strToInt, strToTime, strToBool } from 'homeproxy';
+import { isEmpty, strToInt, strToTime, strToBool } from '../homeproxy.uc';
 
 /* Append the always-on inbounds. dns-in is the local UDP listener the
  * DNS chain hands queries to; mixed-in is the SOCKS/HTTP listener the

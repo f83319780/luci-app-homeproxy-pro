@@ -27,7 +27,7 @@
 import { mkdtemp, writefile } from 'fs';
 import { Loader } from './config/loader.uc';
 import { generate } from './generator/client.uc';
-import { removeBlankAttrs, RUN_DIR, UCICONFIG_DIR } from 'homeproxy';
+import { removeBlankAttrs, RUN_DIR, UCICONFIG_DIR } from './homeproxy.uc';
 
 const dm = Loader.load(UCICONFIG_DIR);
 const config = removeBlankAttrs(generate(dm));

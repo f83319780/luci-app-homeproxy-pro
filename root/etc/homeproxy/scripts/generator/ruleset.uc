@@ -29,7 +29,7 @@
 
 'use strict';
 
-import { isEmpty, validateHomeProxyPath } from 'homeproxy';
+import { isEmpty, validateHomeProxyPath } from '../homeproxy.uc';
 
 import { get_outbound, isDirectOutboundTag } from './common.uc';
 

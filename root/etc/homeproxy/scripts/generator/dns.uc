@@ -28,7 +28,7 @@
 
 'use strict';
 
-import { isEmpty, strToBool, strToInt, strToTime, parseURL, validation, parse_port } from 'homeproxy';
+import { isEmpty, strToBool, strToInt, strToTime, parseURL, validation, parse_port } from '../homeproxy.uc';
 
 
 import { get_outbound, get_resolver, get_ruleset } from './common.uc';

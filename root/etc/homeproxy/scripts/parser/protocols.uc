@@ -24,7 +24,7 @@
 
 import { urldecode, urlencode } from 'luci.http';
 
-import { decodeBase64Str, isEmpty, parseURL } from 'homeproxy';
+import { decodeBase64Str, isEmpty, parseURL } from '../homeproxy.uc';
 
 /* https://shadowsocks.org/guide/sip008.html */
 export function parse_sip008_uri(uri) {

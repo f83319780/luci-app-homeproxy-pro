@@ -34,7 +34,7 @@
 
 'use strict';
 
-import { isEmpty, strToInt, strToBool, strToTime } from 'homeproxy';
+import { isEmpty, strToInt, strToBool, strToTime } from '../homeproxy.uc';
 
 import { ConfigQuery } from '../config/model.uc';
 import { OutboundFactory, EndpointFactory } from '../config/adapter.uc';

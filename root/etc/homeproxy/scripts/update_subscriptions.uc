@@ -40,7 +40,7 @@ import { cursor } from 'uci';
 
 import {
 	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl, shellQuote
-} from 'homeproxy';
+} from './homeproxy.uc';
 
 import { parse_uri } from './parser/uri.uc';
 import { normalize } from './parser/normalize.uc';

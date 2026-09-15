@@ -22,7 +22,7 @@
 
 'use strict';
 
-import { validation } from 'homeproxy';
+import { validation } from '../homeproxy.uc';
 
 /* Each entry carries a stable `kind` (so callers / tests can branch on
  * it) and a `message` for the log line. Adding a new rule is:
