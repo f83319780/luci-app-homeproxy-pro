@@ -415,9 +415,18 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 同时彻底关掉 `apk` 改写配置这条路径。
 
 ### P1-10 crontab `sed -i` 不对称 —— 已完成✅
-`migrate_config.uc:67` 改用 `hp_crontab_drop` 同样的临时文件写法，**不再吞错误**。
-顺手核对 `update_resources.sh:106`（优先级更低）。
-验收：非 busybox sed 环境下迁移能真正删掉条目，失败时有日志。
+**已完成**：改用临时文件 + `mv -f`（与 `hp_crontab_drop` 一致），
+**只有两步都成功才设置标记**，否则 `warn` 并留待下次重试。
+
+带出两个连带修正：
+- mock 必须补 `shellQuote`（迁移测试 import 的是 mock，而我的改动用到了它）——
+  这正是 mock 该有的"逐字副本"职责，`test_mock_sync.sh` 也随之从 46 项涨到 57 项。
+- 迁移测试现在把 crontab 路径也重定向进沙箱（带硬守卫，与 cursor 重定向同款），
+  并断言：旧行被删、无关行保留、标记被设置。
+
+**验证（真机）**：PATH 里放一个拒绝 `-i` 的 `sed`（模拟 BSD sed）——
+旧写法**留下旧行且错误被丢弃**，新写法删掉且保留无关行。
+再把 crontab 目录设为只读让 `mv` 失败：**标记不被设置**，且不留临时文件。
 
 ---
 
