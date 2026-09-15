@@ -7,20 +7,12 @@
 'use strict';
 'require form';
 'require poll';
-'require rpc';
 'require uci';
 'require ui';
 'require view';
 
 'require homeproxy as hp';
 'require tools.widgets as widgets';
-
-const callServiceList = rpc.declare({
-	object: 'service',
-	method: 'list',
-	params: ['name'],
-	expect: { '': {} }
-});
 
 /* Module-scoped guard for the view-level status poll: see the comment
  * next to the registration site in render(). Without it, the section's
@@ -48,7 +40,8 @@ const CBIGenValue = form.Value.extend({
 });
 
 function getServiceStatus() {
-	return L.resolveDefault(callServiceList('homeproxy'), {}).then((res) => {
+	return hp.rpcCall('list', ['homeproxy'],
+			{ object: 'service', params: ['name'], expect: { '': {} } }).then((res) => {
 		let isRunning = false;
 		try {
 			isRunning = res['homeproxy']['instances']['sing-box-s']['running'];
@@ -80,15 +73,9 @@ function handleGenKey(option) {
 		return this.map.findElement('id', 'widget.' + this.cbid(section_id).replace(/\.[^\.]+$/, '.') + option);
 	}, this);
 
-	const callSingBoxGenerator = rpc.declare({
-		object: 'luci.homeproxy',
-		method: 'singbox_generator',
-		params: ['type', 'params'],
-		expect: { '': {} }
-	});
-
 	if (typeof option === 'object') {
-		return callSingBoxGenerator(option.type, option.params).then((res) => {
+		return hp.rpcCall('singbox_generator', [option.type, option.params],
+				{ params: ['type', 'params'], expect: { '': {} } }).then((res) => {
 			if (res.result)
 				option.callback.call(this, res.result).forEach(([k, v]) => {
 					widget(k).value = v ?? '';

@@ -8,7 +8,6 @@
 'require form';
 'require network';
 'require poll';
-'require rpc';
 'require uci';
 'require validation';
 'require view';
@@ -16,13 +15,6 @@
 'require homeproxy as hp';
 'require tools.firewall as fwtool';
 'require tools.widgets as widgets';
-
-const callServiceList = rpc.declare({
-	object: 'service',
-	method: 'list',
-	params: ['name'],
-	expect: { '': {} }
-});
 
 /* Module-scoped guard: register the view-level status poll exactly
  * once, regardless of how many times the view's render() runs (LuCI
@@ -32,22 +24,9 @@ const callServiceList = rpc.declare({
  * per tick. */
 let client_status_poll_registered = false;
 
-const callReadDomainList = rpc.declare({
-	object: 'luci.homeproxy',
-	method: 'acllist_read',
-	params: ['type'],
-	expect: { '': {} }
-});
-
-const callWriteDomainList = rpc.declare({
-	object: 'luci.homeproxy',
-	method: 'acllist_write',
-	params: ['type', 'content'],
-	expect: { '': {} }
-});
-
 function getServiceStatus() {
-	return L.resolveDefault(callServiceList('homeproxy'), {}).then((res) => {
+	return hp.rpcCall('list', ['homeproxy'],
+			{ object: 'service', params: ['name'], expect: { '': {} } }).then((res) => {
 		let isRunning = false;
 		try {
 			isRunning = res['homeproxy']['instances']['sing-box-c']['running'];
@@ -1702,7 +1681,8 @@ return view.extend({
 		so.datatype = 'hostname';
 		so.depends({'homeproxy.config.routing_mode': 'custom', '!reverse': true});
 		so.load = function(/* ... */) {
-			return L.resolveDefault(callReadDomainList('proxy_list')).then((res) => {
+			return hp.rpcCall('acllist_read', ['proxy_list'],
+					{ params: ['type'], expect: { '': {} } }).then((res) => {
 				/* acllist_read returns { content: null, error: '...' }
 				 * when the backend rejected the request (bad type, file
 				 * unreadable, ...). Surface the error instead of silently
@@ -1713,7 +1693,7 @@ return view.extend({
 			}, {});
 		}
 		so.write = function(_section_id, value) {
-			return callWriteDomainList('proxy_list', value).then((ret) => {
+			return hp.rpcCall('acllist_write', ['proxy_list', value], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 				/* Without this, a backend error like "UCI commit failed"
 				 * is silently dropped and the user sees the old value
 				 * reappear after refresh with no explanation. */
@@ -1725,7 +1705,7 @@ return view.extend({
 		so.remove = function(/* ... */) {
 			let routing_mode = this.section.formvalue('config', 'routing_mode');
 			if (routing_mode !== 'custom')
-				return callWriteDomainList('proxy_list', '').then((ret) => {
+				return hp.rpcCall('acllist_write', ['proxy_list', ''], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 					if (ret && ret.result === false)
 						throw (ret.error || 'unknown error');
 					return true;
@@ -1751,14 +1731,15 @@ return view.extend({
 		so.datatype = 'hostname';
 		so.depends({'homeproxy.config.routing_mode': 'custom', '!reverse': true});
 		so.load = function(/* ... */) {
-			return L.resolveDefault(callReadDomainList('direct_list')).then((res) => {
+			return hp.rpcCall('acllist_read', ['direct_list'],
+					{ params: ['type'], expect: { '': {} } }).then((res) => {
 				if (res && res.error)
 					ui.addNotification(null, E('p', _('Failed to read domain list: %s.').format(res.error)));
 				return res ? res.content : '';
 			}, {});
 		}
 		so.write = function(_section_id, value) {
-			return callWriteDomainList('direct_list', value).then((ret) => {
+			return hp.rpcCall('acllist_write', ['direct_list', value], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 				if (ret && ret.result === false)
 					throw (ret.error || 'unknown error');
 				return true;
@@ -1767,7 +1748,7 @@ return view.extend({
 		so.remove = function(/* ... */) {
 			let routing_mode = this.section.formvalue('config', 'routing_mode');
 			if (routing_mode !== 'custom')
-				return callWriteDomainList('direct_list', '').then((ret) => {
+				return hp.rpcCall('acllist_write', ['direct_list', ''], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 					if (ret && ret.result === false)
 						throw (ret.error || 'unknown error');
 					return true;
