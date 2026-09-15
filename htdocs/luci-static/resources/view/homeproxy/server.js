@@ -333,6 +333,10 @@ return view.extend({
 		/* Snell config start */
 		o = s.option(form.ListValue, 'snell_version', _('Snell version'),
 			_('The pre-shared key (password) above must be 12-255 bytes for v6.'));
+		/* {5, 6} is the INBOUND's valid set: sing-box 1.14 rejects version 4
+		   on a snell inbound and accepts 5 and 6 (6 needs a >= 12 byte psk).
+		   The node form offers {4, 6} for the same reason, mirrored.  Do not
+		   "unify" these two lists - see the plan's 2.11. */
 		o.value('5', _('v5'));
 		o.value('6', _('v6'));
 		o.default = '5';

@@ -483,6 +483,11 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	/* Snell config start */
 	o = s.option(form.ListValue, 'snell_version', _('Snell version'),
 		_('sing-box implements Snell v4/v5 wire as v4 and v6. The pre-shared key (Password above) must be 12-255 bytes for v6.'));
+	/* {4, 6} is the OUTBOUND's valid set, not a subset someone forgot to
+	   finish: sing-box 1.14 rejects version 5 on a snell outbound
+	   ("unsupported version: 5") and accepts 4 and 6.  The server form offers
+	   {5, 6} because its INBOUND is the mirror image (version 4 is rejected
+	   there).  Measured against the target sing-box; see the plan's 2.11. */
 	o.value('4', _('v4'));
 	o.value('6', _('v6'));
 	o.default = '4';
