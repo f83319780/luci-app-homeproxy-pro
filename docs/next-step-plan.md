@@ -43,7 +43,7 @@
 | P1-10 | crontab `sed -i` 不对称修复 | P1 | 极小 | 无 |
 | P2-1 | 真空检查修复（含我本会话那条正则） | P2 | 小 | 无 |
 | P2-2 | fw4 渲染层进 CI | P2 | 中 | 无 |
-| P2-3 | 低危安全项：`CAP_SYS_PTRACE`、`E()` sink、大小上限、`/tmp` TOCTOU | P2 | 小 | 无 |
+| P2-3 | 低危安全项 + 后端复核遗留（#3-#6 已完成✅，余 #7-#12） | P2 | 小 | 无 |
 | P2-4 | 测试确定性（固定 `/tmp`→`mktemp`、`rm -rf` 引号、ssh `BatchMode`） | P2 | 小 | 无 |
 | P2-5 | JSON 资产校验 + 出厂配置解析 | P2 | 小 | 无 |
 | P2-6 | PHASE 8 残留：状态三件套（**需先补守卫**） | P2 | 中 | P1-1 守卫 + P1-7 |
@@ -439,7 +439,45 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 方案：toolchain 里加最小 `fw4` stub（或 golden 渲染产物 fixture）。
 验收：CI 不再出现 NOT RUN，且改坏模板能被抓到。
 
-### P2-3 低危安全项（各自独立、都很小）
+### P2-3 低危安全项与后端复核遗留
+
+> **进度（用真实订阅地址验证过）**：后端复核的 12 项里已修完 **#1 #2 #3 #4 #5 #6**
+> （#1/#2 见 P0-6，#3 见下），剩余 **#7 #8 #9 #10 #11 #12**。
+>
+> 真机端到端（全程沙箱，未触碰设备配置）：
+> 抓取 804 字节 → 解码 4 个节点 → 解析 → 仓库写入 **4 个独立 section** →
+> 生成器输出 → **目标机自带的 sing-box 1.14.1 `check` 通过**。
+> 第二次运行同一订阅：**0 added / 0 removed**（不再反复删建）。
+>
+> **#3 `wget --max-filesize` 已完成**：busybox wget 没有这个选项，
+> 它在**发出请求之前**就以 "unrecognized option" 退出 2 ——
+> 我在 `d9a4dac` 那次"加抓取体积上限"的安全加固里引入的，
+> 结果是**每一次订阅抓取都失败**。现改用 `head -c`（busybox 支持）在管道上截断；
+> 管道需要 `{ ...; }` 分组，否则 `executeCommand` 追加的 `>out 2>err`
+> 只作用于管道最后一个命令，wget 的 stderr 会逃到调用者终端（这个坑是测试抓出来的）。
+> 真机验证：真实抓取 1333 字节无错误；把上限降到 200 字节时正确报
+> "response exceeds the 200 byte limit"。
+> 守卫：`test_homeproxy_utils.uc` 现在断言"失败不是用法错误"——
+> 这正是一条能抓住此类问题的测试（抓取器自身的测试 mock 掉了 `wGETVerbose`）。
+>
+> **#4 已完成**：`generator/outbound.uc` 用了 `get_resolver()` 却没有 import，
+> ucode 报 "access to undeclared variable" 直接终止生成——但只在自定义
+> `routing_node` 设了 `domain_resolver` 时触发（UI 提供该选项，且**没有任何 fixture 覆盖**）。
+> 已补 import，并让 `custom.uci` 设置该选项。
+>
+> **#5 已完成，且比复核描述的更严重**：复核说是"churn + 日志错"，
+> 实际是**多节点塌缩成一个损坏的 section**——`repository.uc` 用
+> `md5(grouphash + node.label)` 当 section 名，而 `normalize()` 只给 `name`，
+> `label` 恒为 null → 同一订阅的**所有节点算出同一个 section 名** →
+> 4 个节点写进 1 个 section，出现 `type 'anytls'` 却带着 shadowsocks 密码套件和
+> vless flow 的混合体。已修（编排器带上 label + 仓库改为 `label || name`），
+> 并把测试里那个**不忠实**的 `canonical_node` 助手（它自己补了 `label`，
+> 这正是 bug 被掩盖的原因）改成与 `normalize()` 一致。
+>
+> **#6 已完成**：vmess 丢 `packet_encoding`；golden 快照把缺失锁住了，
+> 重新生成后恰好只多出 `"packet_encoding": "packetaddr"`——**这个 diff 就是证据**。
+
+### P2-3 低危安全项（其余）
 - `capabilities/homeproxy.json` **去掉 `CAP_SYS_PTRACE`**（五组），
   回归验证 TUN/tproxy 仍可用。**上游继承，但要在这里修掉。**
 - `E(tag, <裸字符串>)` 一律改为 `E(tag, {}, [ ... ])`
