@@ -239,6 +239,12 @@ echo "== subscription updater actually runs =="
 # URL points at a closed port, so main() fails before its reload call.
 sh "$ROOT/tests/ucode/test_subscription_updater_runs.sh" "$ROOT" "$WORK/updater_runs" || FAILED=1
 
+echo "== rpcd method behaviour =="
+# The rpcd module used to be syntax-checked and never executed, which is how
+# certificate_write('client_ech_conf') stayed broken from the initial commit:
+# the frontend called it, the ACL granted it, and the backend had no case.
+sh "$ROOT/tests/ucode/test_rpc_methods.sh" "$ROOT" "$WORK/rpc_methods" || FAILED=1
+
 echo "== homeproxy helper tests =="
 rm -rf "$WORK/homeproxy"
 mkdir -p "$WORK/homeproxy"
