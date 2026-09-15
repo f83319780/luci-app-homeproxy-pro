@@ -60,6 +60,12 @@ echo "== frontend validators =="
 # with a fake form context instead.
 node "$ROOT/tests/frontend-validators.js" "$ROOT" || FAILED=1
 
+echo "== frontend title escaping =="
+# Two sinks, two different escapes: a tab title decodes once, a section modal
+# title goes through form.stripTags() which *decodes entities*, so escaping
+# alone would hand it live markup. This models both decodes.
+node "$ROOT/tests/frontend-title-escaping.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init
