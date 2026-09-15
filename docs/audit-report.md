@@ -52,6 +52,8 @@ LAN 直连 IP/MAC 与 WAN 直连/代理 CIDR 清单。抢救脚本
 
 | # | 级别 | 问题 | 位置 |
 |---|---|---|---|
+| 0a | **严重** | 生成器读不存在的 UCI 文件 → 配置全默认（**已修**） | `generate_client.uc:32` |
+| 0b | **严重** | 订阅更新器静默空操作（**已修**） | `update_subscriptions.uc:85,87` |
 | 1 | **严重** | **远程订阅 label → 存储型 XSS**（LuCI `stripTags` 解码实体） | `homeproxy.js:793` + `node.js:681` |
 | 2 | **高** | **订阅 URL fragment → 打开页面即 XSS** | `node.js:557,679` |
 | 3 | 中高 | `decodeURIComponent` 抛 `URIError` → **整个节点页渲染失败** | `node.js:555-557` |
@@ -386,6 +388,40 @@ https://h/p#%zz    → URIError: URI malformed
 - `rpcCall` 是唯一的 `rpc.declare` 点，每个调用点都走它，warn-once 集合是真的。
 - `log_clean`/`singbox_generator` 用 ucode 的 `in` 判数组**值成员**（不是 JS 的键判断），
   我专门确认过——这个白名单是有效的。
+
+### 8.5 后端复核（第三路）：12 项发现，其中 2 项严重
+
+第三路独立复核审计 ucode 后端。它把语义结论对照了**钉住的上游源码**
+（jow-/ucode @85922056 的 `compiler.c`/`vm.c`/`lib.c`/`lib/uci.c`/`lib/fs.c`、
+busybox `networking/wget.c` + `libbb/getopt32.c`、GNU wget 1.21.4、sing-box v1.14.0
+`option/*.go`），但**无法运行套件**（本机与它都没有 ucode），所以它的发现我都自己复验了。
+
+| # | 级别 | 发现 | 状态 |
+|---|---|---|---|
+| 1 | **严重** | 生成器 `Loader.load(HP_DIR + '/config')` 读不存在的 UCI 文件 → 配置全默认 | **已修（P0-6）**，真机证实 |
+| 2 | **严重** | 订阅更新器从错误层级读 `subscription_urls`/`filter_keywords` → `main()` 永不执行，静默空操作 | **已修（P0-6）**，真机反向证实 |
+| 3 | 高 | `wget --max-filesize` 在 busybox/GNU wget 上都不存在 → 每次订阅抓取失败；且尺寸上限并未生效（body 先进 tmpfs） | 待修 |
+| 4 | 高 | `generator/outbound.uc` 用 `get_resolver()` 但从未 import → 设了 `domain_resolver` 的自定义 routing_node 会让生成器崩 | 待修 |
+| 5 | 中 | `repository.uc` 用 `node.label` 算新 section 名，而 `normalize()` 只给 `name` → 每次运行把订阅节点全部删除重建（churn + 日志错） | 待修 |
+| 6 | 中 | vmess 丢 `packet_encoding`（`mapping.uc` 的 vmess 行没有它），且 golden 快照把 bug 锁住了 | 待修（快照 diff 即证据） |
+| 7 | 中 | 悬空节点引用（`main_node`/`routing_node.node` 指向已删节点）触发 null 解引用崩溃，而不是 `die("node ... is missing")` | 待修 |
+| 8 | 中 | 订阅更新无锁；回滚是非原子的整文件 `writefile`（对比 `update_resources.sh` 用了 `flock`） | 待修 |
+| 9 | 低 | 生成器固定名临时文件 `sing-box-c.json.tmp` → 并发 generate 可能装上半写文件 | 待修 |
+| 10 | 低 | UCI 字符串（`tun_name`、IP/MAC/端口列表）未校验就进 nft 模板（上游同款） | 待修 |
+| 11 | 低 | `wget --header-file` 不存在 → 带 GitHub token 的资源更新必然失败（上游同款） | 待修 |
+| 12 | 低中 | 一个畸形 `ss://` userinfo 让整个订阅更新中止（`split(null)` → 索引 null 抛错） | 待修 |
+
+**它确认"干净"的项**（与我的结论一致）：`for..in` 的数组/对象语义、`in` 的成员判断、
+网络数据无 shell 注入、`decodeBase64Str` 的 padding、sing-box 1.14 接受全部已发出的字段、
+busybox 兼容性、`executeCommand` 的随机 0700 临时目录与 512 KB 读上限、
+仓库 `apply_nodes` 单次 commit 与失败保留语义、init.d 健康门。
+
+**#1 为什么最严重**：它让**每一个**用户、**每一次** start/reload 都拿到一份
+默认配置——没有 main-out、没有 route/dns final、没有节点。而且**不报错**。
+这台测试机之所以没暴露它，是因为设备上跑的是 **feed 包**（上游代码，用 `cursor()` 正确），
+本仓库的代码此前**只经测试夹具跑过**，从未作为安装包在设备上启动过——
+这条正好是审计 §4 那个"版本错位"发现的真实后果。
+
 
 ---
 
