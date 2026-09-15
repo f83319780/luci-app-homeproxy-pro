@@ -38,6 +38,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { loadLuciModule } = require('./lib/luci-module.js');
+
 const root = path.resolve(process.argv[2] || '.');
 const scripts = path.join(root, 'root/etc/homeproxy/scripts');
 
@@ -45,25 +47,13 @@ const scripts = path.join(root, 'root/etc/homeproxy/scripts');
  * mock would test the mock.  `protocols` only needs the module to evaluate its
  * top-level statements, so the imports are stubbed just far enough for that. */
 function loadHomeproxy() {
-	const file = path.join(root, 'htdocs/luci-static/resources/homeproxy.js');
-	let src = fs.readFileSync(file, 'utf8');
-	src = src.replace(/^'require ([^']+) as (\w+)';$/gm,
-		(_m, mod, alias) => `const ${alias} = __deps[${JSON.stringify(mod)}];`);
-	src = src.replace(/^'require ([^']+)';$/gm,
-		(_m, mod) => `const ${mod.split('.').pop().replace(/[^\w]/g, '_')} = __deps[${JSON.stringify(mod)}];`);
-
-	const deps = {
-		baseclass: { extend: (o) => o },
-		form: { DynamicList: { extend: (o) => o } },
-		fs: {}, rpc: {}, uci: {}, ui: {}
-	};
-	const _ = (s) => s;
-	const E = () => null;
-	const L = {};
-
-	/* eslint-disable-next-line no-new-func */
-	const factory = new Function('__deps', '_', 'E', 'L', src);
-	return factory(deps, _, E, L);
+	return loadLuciModule(
+		path.join(root, 'htdocs/luci-static/resources/homeproxy.js'),
+		{
+			baseclass: { extend: (o) => o },
+			form: { DynamicList: { extend: (o) => o } },
+			fs: {}, rpc: {}, uci: {}, ui: {}
+		});
 }
 
 /* Read the keys of one `export const NAME = { ... }` table.  Only depth-1 keys

@@ -209,29 +209,7 @@ return view.extend({
 		o.depends('type', 'snell');
 		o.depends('type', 'trojan');
 		o.depends('type', 'tuic');
-		o.validate = function(section_id, value) {
-			if (section_id) {
-				let type = this.section.formvalue(section_id, 'type');
-				let required_type = [ 'anytls', 'http', 'mixed', 'naive', 'shadowsocks', 'snell', 'socks', 'trojan' ];
-
-				if (required_type.includes(type)) {
-					if (type === 'shadowsocks') {
-						let encmode = this.section.formvalue(section_id, 'shadowsocks_encrypt_method');
-						if (encmode === 'none')
-							return true;
-						else if (encmode === '2022-blake3-aes-128-gcm')
-							return hp.validateBase64Key(24, section_id, value);
-						else if (['2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'].includes(encmode))
-							return hp.validateBase64Key(44, section_id, value);
-					}
-
-					if (!value)
-						return _('Expecting: %s').format(_('non-empty value'));
-				}
-			}
-
-			return true;
-		}
+		o.validate = hp.validatePassword([ 'anytls', 'http', 'mixed', 'naive', 'shadowsocks', 'snell', 'socks', 'trojan' ]);
 		o.modalonly = true;
 
 		/* AnyTLS config */
