@@ -641,21 +641,22 @@
 					"values": [
 						[
 							"cubic",
-							null
+							"CUBIC"
 						],
 						[
 							"new_reno",
-							null
+							"New Reno"
 						],
 						[
 							"bbr",
-							null
+							"BBR"
 						]
 					],
 					"subsection": null,
 					"props": {
 						"default": "cubic",
-						"modalonly": true
+						"modalonly": true,
+						"rmempty": false
 					}
 				},
 				{

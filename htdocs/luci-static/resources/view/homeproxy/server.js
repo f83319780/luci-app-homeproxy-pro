@@ -349,42 +349,7 @@ return view.extend({
 		o.modalonly = true;
 
 		/* Tuic config start */
-		o = s.option(CBIGenValue, 'uuid', _('UUID'));
-		o.password = true;
-		o.depends('type', 'tuic');
-		o.depends('type', 'vless');
-		o.depends('type', 'vmess');
-		o.validate = hp.validateUUID;
-		o.modalonly = true;
-
-		o = s.option(form.ListValue, 'tuic_congestion_control', _('Congestion control algorithm'),
-			_('QUIC congestion control algorithm.'));
-		o.value('cubic');
-		o.value('new_reno');
-		o.value('bbr');
-		o.default = 'cubic';
-		o.depends('type', 'tuic');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'tuic_auth_timeout', _('Auth timeout'),
-			_('How long the server should wait for the client to send the authentication command (in seconds).'));
-		o.datatype = 'uinteger';
-		o.default = '3';
-		o.depends('type', 'tuic');
-		o.modalonly = true;
-
-		o = s.option(form.Flag, 'tuic_enable_zero_rtt', _('Enable 0-RTT handshake'),
-			_('Enable 0-RTT QUIC connection handshake on the client side. This is not impacting much on the performance, as the protocol is fully multiplexed.<br/>' +
-				'Disabling this is highly recommended, as it is vulnerable to replay attacks.'));
-		o.depends('type', 'tuic');
-		o.modalonly = true;
-
-		o = s.option(form.Value, 'tuic_heartbeat', _('Heartbeat interval'),
-			_('Interval for sending heartbeat packets for keeping the connection alive (in seconds).'));
-		o.datatype = 'uinteger';
-		o.default = '10';
-		o.depends('type', 'tuic');
-		o.modalonly = true;
+		hp.renderTuicOptions(s, { side: 'server', uuidWidget: CBIGenValue });
 		/* Tuic config end */
 
 		/* VLESS / VMess config start */
