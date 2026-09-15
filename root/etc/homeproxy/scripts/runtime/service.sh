@@ -118,8 +118,19 @@ hp_prepare_runtime_files() {
 		mkdir -p "$hp_dir/certs" || log "Warning: failed to create ${hp_dir}/certs."
 	fi
 
-	chown sing-box:sing-box "$run_dir"/sing-box-*.json "$run_dir"/sing-box-*.log "$hp_dir"/cache.db 2>"/dev/null" \
-		|| log "Warning: failed to change the ownership of the runtime files to sing-box."
+	# chown each path that is actually there.
+	#
+	# cache.db is only created by the bypass_mainland_china path, so on a
+	# custom-mode router the old one-shot chown listed a path that does not
+	# exist, failed, and logged "failed to change the ownership of the runtime
+	# files" on every single start - a warning that was always there and never
+	# meant anything. A missing path is not worth reporting; failing to chown a
+	# file that exists still is.
+	for f in "$run_dir"/sing-box-*.json "$run_dir"/sing-box-*.log "$hp_dir"/cache.db; do
+		[ -e "$f" ] || continue
+		chown sing-box:sing-box "$f" 2>"/dev/null" \
+			|| log "Warning: failed to change the ownership of ${f} to sing-box."
+	done
 }
 
 # hp_procd_client_instance <prog> <hp-dir> <run-dir> <routing-mode> <disable-gso>

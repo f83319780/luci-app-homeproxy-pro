@@ -481,7 +481,8 @@ for anchor in "HP_DIR=\"$SANDBOX/etc/homeproxy\"" \
               "RUN_DIR=\"$SANDBOX/var/run/homeproxy\""; do
 	if ! grep -qF "$anchor" "$WORK/initd.sh"; then
 		echo "FAIL: could not sandbox $INITD - missing anchor: $anchor"
-		rm -f "$DNSMASQ_CONF"
+		
+rm -f "$DNSMASQ_CONF"
 		exit 1
 	fi
 done
@@ -521,6 +522,15 @@ run_scenario "D-health-gate-rollback" reload \
 	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
 	HP_TEST_OCCUPIED_AFTER=5399
 
+# Scenario E: custom routing mode. sing-box writes cache.db only under
+# bypass_mainland_china, so in custom mode the runtime-file chown listed a path
+# that does not exist - and reported "failed to change the ownership of the
+# runtime files to sing-box" on every start. The trace records the log, so this
+# scenario fails if that warning comes back.
+run_scenario "E-custom-routing-no-cache-db" start \
+	proxy_mode=tun routing_mode=custom \
+	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0
+
 rm -f "$DNSMASQ_CONF"
 
 # Strip the sandbox prefix so the trace is portable.
@@ -543,9 +553,24 @@ fi
 # `diff` - the first on-target run failed with "diff: not found" and looked
 # exactly like an orchestration change.  The golden snapshot tests already do
 # it this way: `cmp` decides, `diff` only formats the diagnosis.
+# Scenario E specifically: the golden comparison above would report a difference
+# without saying which scenario caused it, and this is the one whose whole point
+# is the absence of a warning. It has to run after TRACE.norm is built - the
+# first version of this check read the file before it existed and therefore
+# always passed.
+if awk '/^===== scenario: E-custom-routing-no-cache-db/,0' "$TRACE.norm" \
+	| grep -q "failed to change the ownership of the runtime files"; then
+	echo "FAIL: custom mode still reports a chown failure for the missing cache.db"
+	awk '/^===== scenario: E-custom-routing-no-cache-db/,0' "$TRACE.norm" \
+		| grep -n "failed to change the ownership" | head -2
+	exit 1
+fi
+
 if cmp -s "$GOLDEN" "$TRACE.norm"; then
 	echo "PASS: runtime orchestration matches $(basename "$GOLDEN")"
-	echo "      ($(wc -l < "$GOLDEN") trace lines across 4 scenarios)"
+	# Counted from the golden rather than hardcoded: a scenario added without
+	# this line would quietly claim the old number.
+	echo "      ($(wc -l < "$GOLDEN") trace lines across $(grep -c '^===== scenario: ' "$GOLDEN") scenarios)"
 	exit 0
 fi
 
