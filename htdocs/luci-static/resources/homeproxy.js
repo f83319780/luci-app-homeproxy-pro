@@ -165,6 +165,77 @@ return baseclass.extend({
 		o.modalonly = true;
 	},
 
+	/* TUIC.  Both sides share the congestion control, the 0-RTT flag and the
+	   heartbeat; the client adds its dialling knobs (UDP relay mode, UDP over
+	   stream) and the server its auth timeout.  The UUID widget is the one real
+	   asymmetry - the server can mint one, the client has to be handed one - so
+	   it is passed in rather than duplicated (`options.uuidWidget`, defaulting
+	   to a plain value field).  Emitting in this order reproduces both forms'
+	   previous option order exactly. */
+	renderTuicOptions(section, options) {
+		const side = options.side || 'client';
+		const uuidWidget = options.uuidWidget || form.Value;
+		let o;
+
+		o = section.option(uuidWidget, 'uuid', _('UUID'));
+		o.password = true;
+		o.depends('type', 'tuic');
+		o.depends('type', 'vless');
+		o.depends('type', 'vmess');
+		o.validate = this.validateUUID;
+		o.modalonly = true;
+
+		/* The labels are shared: the server form used to show the raw values
+		   ('cubic', 'new_reno', 'bbr') for the same option the node form
+		   labelled CUBIC / New Reno / BBR, which is the kind of drift a single
+		   definition prevents. */
+		o = section.option(form.ListValue, 'tuic_congestion_control', _('Congestion control algorithm'),
+			_('QUIC congestion control algorithm.'));
+		o.value('cubic', _('CUBIC'));
+		o.value('new_reno', _('New Reno'));
+		o.value('bbr', _('BBR'));
+		o.default = 'cubic';
+		o.depends('type', 'tuic');
+		o.rmempty = false;
+		o.modalonly = true;
+
+		if (side === 'client') {
+			o = section.option(form.ListValue, 'tuic_udp_relay_mode', _('UDP relay mode'),
+				_('UDP packet relay mode.'));
+			o.value('', _('Default'));
+			o.value('native', _('Native'));
+			o.value('quic', _('QUIC'));
+			o.depends('type', 'tuic');
+			o.modalonly = true;
+
+			o = section.option(form.Flag, 'tuic_udp_over_stream', _('UDP over stream'),
+				_('This is the TUIC port of the UDP over TCP protocol, designed to provide a QUIC stream based UDP relay mode that TUIC does not provide.'));
+			o.depends({'type': 'tuic', 'tuic_udp_relay_mode': ''});
+			o.modalonly = true;
+		}
+		else {
+			o = section.option(form.Value, 'tuic_auth_timeout', _('Auth timeout'),
+				_('How long the server should wait for the client to send the authentication command (in seconds).'));
+			o.datatype = 'uinteger';
+			o.default = '3';
+			o.depends('type', 'tuic');
+			o.modalonly = true;
+		}
+
+		o = section.option(form.Flag, 'tuic_enable_zero_rtt', _('Enable 0-RTT handshake'),
+			_('Enable 0-RTT QUIC connection handshake on the client side. This is not impacting much on the performance, as the protocol is fully multiplexed.<br/>' +
+				'Disabling this is highly recommended, as it is vulnerable to replay attacks.'));
+		o.depends('type', 'tuic');
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'tuic_heartbeat', _('Heartbeat interval'),
+			_('Interval for sending heartbeat packets for keeping the connection alive (in seconds).'));
+		o.datatype = 'uinteger';
+		o.default = '10';
+		o.depends('type', 'tuic');
+		o.modalonly = true;
+	},
+
 	/* Render the protocol picker from `protocols`.  This is what keeps the
 	   two forms from drifting: they used to carry a hand-written value list
 	   each, which is how `snell` ended up with a complete form block (and a

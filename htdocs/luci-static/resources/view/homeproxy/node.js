@@ -310,49 +310,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	/* SSH config end */
 
 	/* TUIC config start */
-	o = s.option(form.Value, 'uuid', _('UUID'));
-	o.password = true;
-	o.depends('type', 'tuic');
-	o.depends('type', 'vless');
-	o.depends('type', 'vmess');
-	o.validate = hp.validateUUID;
-	o.modalonly = true;
-
-	o = s.option(form.ListValue, 'tuic_congestion_control', _('Congestion control algorithm'),
-		_('QUIC congestion control algorithm.'));
-	o.value('cubic', _('CUBIC'));
-	o.value('new_reno', _('New Reno'));
-	o.value('bbr', _('BBR'));
-	o.default = 'cubic';
-	o.depends('type', 'tuic');
-	o.rmempty = false;
-	o.modalonly = true;
-
-	o = s.option(form.ListValue, 'tuic_udp_relay_mode', _('UDP relay mode'),
-		_('UDP packet relay mode.'));
-	o.value('', _('Default'));
-	o.value('native', _('Native'));
-	o.value('quic', _('QUIC'));
-	o.depends('type', 'tuic');
-	o.modalonly = true;
-
-	o = s.option(form.Flag, 'tuic_udp_over_stream', _('UDP over stream'),
-		_('This is the TUIC port of the UDP over TCP protocol, designed to provide a QUIC stream based UDP relay mode that TUIC does not provide.'));
-	o.depends({'type': 'tuic','tuic_udp_relay_mode': ''});
-	o.modalonly = true;
-
-	o = s.option(form.Flag, 'tuic_enable_zero_rtt', _('Enable 0-RTT handshake'),
-		_('Enable 0-RTT QUIC connection handshake on the client side. This is not impacting much on the performance, as the protocol is fully multiplexed.<br/>' +
-			'Disabling this is highly recommended, as it is vulnerable to replay attacks.'));
-	o.depends('type', 'tuic');
-	o.modalonly = true;
-
-	o = s.option(form.Value, 'tuic_heartbeat', _('Heartbeat interval'),
-		_('Interval for sending heartbeat packets for keeping the connection alive (in seconds).'));
-	o.datatype = 'uinteger';
-	o.default = '10';
-	o.depends('type', 'tuic');
-	o.modalonly = true;
+	hp.renderTuicOptions(s, { side: 'client' });
 	/* Tuic config end */
 
 	/* VMess / VLESS config start */
