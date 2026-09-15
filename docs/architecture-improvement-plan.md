@@ -1818,7 +1818,10 @@ P2（结构）
        init.d 517 → 253 行；新增 runtime/{service,dns,firewall,net}.sh；离机差分 trace
        等价测试（tests/runtime/test_runtime_extraction.sh + fixtures/runtime/trace.pre-pr05.txt）
        + 真机 192.168.1.102 procd 生命周期验证
-20. ⬜ refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.11  (PR-06)
+20. ✅ refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.11  (PR-06)
+      协议真源 `767a46d`、RPC 单一入口 `de436df`、模块加载器与三条前端不变量测试；
+      "components/" 的职责由 `homeproxy.js` 的共享渲染器承担（mux/TUIC/hysteria/校验体）
+      而不是新建目录——见 §2.11.8(f) 对两处刻意不做的说明
 20b. ⬜ arch: architecture-guard checks in CI                                 # §2.12  (PR-07，建议先做)
 21. ✅ security: split ACL wildcard; backend path allowlist                   # §4     (`d9a4dac`)
 22. ✅ security: frontend XSS / poll / RPC-error / cert-tmp hardening         # §4     (`0bd1b65`)
