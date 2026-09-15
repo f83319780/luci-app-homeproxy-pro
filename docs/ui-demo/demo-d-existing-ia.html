@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HomeProxy — Demo D 现有模式改版（访问控制升一级 + 客户端设置分三）</title>
+<style>
+:root{
+  --bg:#eef1f6; --panel:#fff; --ink:#1c2430; --ink-2:#5a6779; --ink-3:#8d99ab;
+  --line:#d8dee9; --line-2:#eaeef5;
+  --brand:#2f6df6; --brand-soft:#e9f0ff;
+  --ok:#12a150; --ok-soft:#e6f7ee;
+  --bad:#e5484d; --bad-soft:#fdecec;
+  --warn:#b8860b; --warn-soft:#fdf5e2;
+  --mov:#0d9488; --mov-soft:#e3f5f2;      /* 本次移动/新增：青色 */
+  --radius:10px; --radius-s:7px;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f141c; --panel:#171e29; --ink:#e9eef6; --ink-2:#9dabbd; --ink-3:#6d7b8f;
+    --line:#2a3646; --line-2:#1e2733;
+    --brand:#5b8dff; --brand-soft:#1a2740;
+    --ok:#3dd68c; --ok-soft:#12301f;
+    --bad:#ff6369; --bad-soft:#3a1a1c;
+    --warn:#e3b341; --warn-soft:#33290f;
+    --mov:#2dd4bf; --mov-soft:#10312e;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased}
+.page{max-width:1180px;margin:0 auto;padding:26px 20px 90px}
+
+/* ---------- 页头（照搬现有页面的标题区） ---------- */
+.hd h1{margin:0 0 6px;font-size:31px;letter-spacing:-.6px}
+.hd p{margin:0;color:var(--ink-2)}
+.hd .run{margin-top:12px;font-weight:700;font-style:italic;color:var(--ok)}
+.hd .run.bad{color:var(--bad)}.hd .run.warn{color:var(--warn)}
+
+/* ---------- 一级 tab：现有 luci 的 boxed tab ---------- */
+.tabbar{display:flex;flex-wrap:wrap;gap:4px;margin:22px 0 0;border-bottom:2px solid var(--line);padding-bottom:0}
+.tabbar.plain{border-bottom-width:1px}
+.tabbar button{
+  font:600 14px/1 inherit;font-family:inherit;
+  color:var(--ink-2);background:transparent;border:1px solid transparent;border-bottom:none;
+  padding:9px 15px;border-radius:var(--radius-s) var(--radius-s) 0 0;cursor:pointer;
+  position:relative;top:2px;white-space:nowrap}
+.tabbar button:hover{color:var(--ink);background:var(--line-2)}
+.tabbar button:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.tabbar button.on{
+  color:var(--brand);background:var(--panel);border-color:var(--line);border-bottom:2px solid var(--panel);
+  margin-bottom:-2px}
+.tabbar button.moved::after{
+  content:"移动";position:absolute;top:-7px;right:-3px;font-size:9.5px;font-weight:700;
+  background:var(--mov);color:#fff;border-radius:99px;padding:1px 5px;letter-spacing:.02em}
+.tabbar.sub{margin-top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:8px 10px 0}
+.tabbar.sub button{font-size:13px;padding:7px 13px;top:0;border-radius:var(--radius-s) var(--radius-s) 0 0}
+.tabbar.sub button.on{margin-bottom:-1px}
+
+/* ---------- 内容区 ---------- */
+.pane{display:none;padding-top:20px}
+.pane.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
+.card>h3{margin:0 0 14px;font-size:15px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card>h3 .sp{flex:1}
+.sub-h{margin:20px 0 10px;font-size:13px;font-weight:700;color:var(--ink-2)}
+.sub-h:first-child{margin-top:0}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:820px){.grid2,.grid3{grid-template-columns:1fr}}
+
+/* luci 风格的表单行 */
+.row{display:flex;align-items:flex-start;gap:16px;padding:11px 0;border-bottom:1px solid var(--line-2)}
+.row:last-child{border-bottom:none}
+.row .lbl{flex:0 0 210px;font-weight:600}
+.row .lbl small{display:block;font-weight:400;color:var(--ink-3);font-size:11.5px;line-height:1.4;margin-top:2px}
+.row .fld{flex:1;min-width:0}
+select,input[type=text]{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:var(--radius-s);
+  background:var(--panel);color:var(--ink);max-width:100%}
+select{min-width:220px}
+input[type=text]{width:100%}
+@media (max-width:640px){.row{flex-direction:column;gap:6px}.row .lbl{flex:none}}
+
+/* 表格 */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px;border-bottom:1px solid var(--line-2);vertical-align:top}
+th{color:var(--ink-3);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap}
+tbody tr:hover{background:var(--line-2)}
+td.nm{font-weight:600}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--ink-2)}
+.a{color:var(--brand);font-weight:600;font-size:12.5px;cursor:pointer;text-decoration:none}
+.a.d{color:var(--bad)}.a.m{color:var(--mov)}
+.sep{color:var(--line);margin:0 6px}
+.tag{display:inline-block;padding:1px 7px;border-radius:5px;background:var(--line-2);color:var(--ink-2);font-size:11px;font-weight:700}
+.tag.r{background:var(--brand-soft);color:var(--brand)}
+.tag.d{background:#f1ebfe;color:#7c3aed}
+@media (prefers-color-scheme: dark){.tag.d{background:#241a3d;color:#a78bfa}}
+.btn{font:600 13px inherit;font-family:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  padding:7px 13px;border-radius:var(--radius-s);cursor:pointer}
+.btn:hover{border-color:var(--ink-3)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.sm{padding:4px 9px;font-size:12px}
+.toggle{width:36px;height:21px;border-radius:99px;background:var(--line);position:relative;display:inline-block;vertical-align:middle}
+.toggle::after{content:"";position:absolute;top:2.5px;left:2.5px;width:16px;height:16px;border-radius:99px;background:#fff;transition:.15s}
+.toggle.on{background:var(--brand)}.toggle.on::after{left:17.5px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.chip{padding:5px 12px;border-radius:99px;border:1px solid var(--line);font-size:12.5px;font-weight:700;
+  color:var(--ink-2);background:var(--panel);cursor:pointer}
+.chip.on{background:var(--brand-soft);border-color:color-mix(in srgb,var(--brand) 35%,var(--line));color:var(--brand)}
+.chip .n{opacity:.7;margin-left:5px;font-variant-numeric:tabular-nums}
+.note{display:flex;gap:9px;padding:11px 13px;border-radius:var(--radius-s);font-size:12.5px;
+  background:var(--brand-soft);border:1px solid color-mix(in srgb,var(--brand) 22%,transparent)}
+.note.m{background:var(--mov-soft);border-color:color-mix(in srgb,var(--mov) 26%,transparent)}
+.note.w{background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 30%,transparent)}
+.empty{text-align:center;padding:30px;color:var(--ink-3)}
+.statusbar{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px 16px;margin-top:18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:7px;padding:4px 11px;border-radius:99px;font-weight:700;font-size:12.5px;
+  background:var(--ok-soft);color:var(--ok)}
+.pill .dot{width:7px;height:7px;border-radius:99px;background:currentColor}
+.pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.spacer{flex:1}
+
+/* ---------- 改动对照 ---------- */
+.diff{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center}
+@media (max-width:820px){.diff{grid-template-columns:1fr}}
+.diff .box{border:1px solid var(--line);border-radius:var(--radius-s);padding:12px 14px;background:var(--panel)}
+.diff .box h4{margin:0 0 8px;font-size:12px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+.diff .ar{font-size:20px;color:var(--mov);text-align:center;font-weight:700}
+.mini{display:flex;flex-wrap:wrap;gap:5px}
+.mini span{padding:3px 9px;border-radius:99px;font-size:12px;font-weight:600;background:var(--line-2);color:var(--ink-2)}
+.mini span.on{background:var(--brand-soft);color:var(--brand)}
+.mini span.new{background:var(--mov-soft);color:var(--mov)}
+.mini span.gone{text-decoration:line-through;opacity:.55}
+.legend{position:fixed;right:14px;bottom:14px;background:var(--panel);border:1px solid var(--line);
+  border-radius:99px;padding:7px 14px;font-size:12px;color:var(--ink-2);box-shadow:0 6px 20px rgba(16,24,40,.12)}
+.legend b{color:var(--mov)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- ============ 页头 ============ -->
+  <header class="hd">
+    <h1>HomeProxy</h1>
+    <p>为 ARM64/AMD64 设计的现代 ImmortalWrt 代理平台。</p>
+    <p class="run" id="runline">HomeProxy (sing-box v1.14.1) 运行中</p>
+    <div style="margin-top:14px;display:flex;gap:9px;flex-wrap:wrap">
+      <button class="btn" data-jump="summary">改动摘要</button>
+      <button class="btn" data-jump="migration">迁移对照 / 落地改动</button>
+    </div>
+  </header>
+
+  <!-- ============ 一级 tab（现有：4 项 → 改版：5 项） ============ -->
+  <nav class="tabbar" id="lvl1">
+    <button data-p="client" class="on">客户端设置</button>
+    <button data-p="node">节点设置</button>
+    <button data-p="server">服务器设置</button>
+    <button data-p="acl" class="moved">访问控制</button>
+    <button data-p="status">服务状态</button>
+  </nav>
+
+  <!-- ============ 二级 tab（随一级切换） ============ -->
+  <nav class="tabbar sub" id="lvl2"></nav>
+
+  <main>
+    <!-- ============ 改动摘要 ============ -->
+    <section class="pane" id="p-summary">
+      <div class="card">
+        <h3>这次只动两件事：<span class="sp"></span><span class="mono" style="font-weight:400">信息架构，不重写页面</span></h3>
+
+        <div class="diff">
+          <div class="box">
+            <h4>改动前（现有）</h4>
+            <div class="mini"><span class="on">客户端设置</span><span>节点设置</span><span>服务器设置</span><span>服务状态</span></div>
+            <div style="margin:10px 0 5px;font-size:11.5px;color:var(--ink-3)">客户端设置 的二级：</div>
+            <div class="mini"><span class="on">路由设置</span><span>路由节点</span><span>DNS 设置</span><span>DNS 服务器</span><span>规则集</span><span>访问控制</span><span>DNS 缓存</span><span>资源管理<i style="font-style:normal;opacity:.6">（在服务状态）</i></span></div>
+          </div>
+          <div class="ar">→</div>
+          <div class="box" style="border-color:color-mix(in srgb,var(--mov) 40%,var(--line))">
+            <h4>改动后（Demo D）</h4>
+            <div class="mini"><span class="on">客户端设置</span><span>节点设置</span><span>服务器设置</span><span class="new">访问控制 ↑</span><span>服务状态</span></div>
+            <div style="margin:10px 0 5px;font-size:11.5px;color:var(--ink-3)">客户端设置 的二级：</div>
+            <div class="mini"><span class="on">分流设置</span><span>DNS 设置</span><span>规则集设置</span><span class="new">资源管理 ↑</span></div>
+          </div>
+        </div>
+
+        <div class="note m" style="margin-top:16px">
+          <span>◆</span>
+          <div>
+            <b>① 访问控制升到一级</b>（它回答"<b>谁</b>走代理"，与"<b>怎么</b>走"不同层）。<br>
+            <b>② 客户端设置的二级收敛为三项</b>：路由设置 + 路由节点 → <b>分流设置</b>；DNS 设置 + DNS 服务器 + DNS 缓存 → <b>DNS 设置</b>；规则集 → <b>规则集设置</b>。<br>
+            <b>③ 资源管理从「服务状态」搬进「客户端设置」</b>（域名库/IP 库是客户端的原料，放在状态页是错位）。<br>
+            <span style="color:var(--ink-2)">逐项对应见「服务状态 → 迁移对照」页，没有功能被丢掉。</span>
+          </div>
+        </div>
+
+        <div style="margin-top:16px">
+          <button class="btn primary" data-jump="client">看改版后的 客户端设置</button>
+          <button class="btn" data-jump="acl">看 访问控制</button>
+          <button class="btn" data-jump="migration">看迁移对照</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 客户端设置 / 分流设置 ============ -->
+    <section class="pane" id="p-client-split">
+      <div class="card">
+        <h3>基础分流<span class="sp"></span><span style="font-weight:400;font-size:12px;color:var(--ink-3)">原「路由设置」</span></h3>
+        <div class="row"><div class="lbl">路由模式<small>决定默认流量怎么走</small></div>
+          <div class="fld"><select><option>绕过中国大陆</option><option>全局代理</option><option>自定义</option></select></div></div>
+        <div class="row"><div class="lbl">主节点</div>
+          <div class="fld"><select><option>anytls-bwg</option><option>hy2-bwg</option><option>ss-2022-bwg</option><option>vless-reality</option><option>URLTest</option><option>禁用</option></select></div></div>
+        <div class="row"><div class="lbl">主 UDP 节点</div>
+          <div class="fld"><select><option>同主节点</option><option>anytls-bwg</option><option>禁用</option></select></div></div>
+        <div class="row"><div class="lbl">URLTest 测试间隔 / 容差</div>
+          <div class="fld"><input type="text" value="180 秒 / 50 毫秒" style="max-width:220px"></div></div>
+      </div>
+
+      <div class="card">
+        <h3>路由节点（1）<span class="sp"></span><button class="btn sm">新增路由节点</button></h3>
+        <table><thead><tr><th>名称</th><th>节点</th><th>出站</th><th style="width:110px"></th></tr></thead><tbody>
+          <tr><td class="nm">rn-direct</td><td class="mono">n_direct</td><td class="mono">direct-out</td>
+              <td><a class="a">编辑</a><span class="sep">·</span><a class="a d">删除</a></td></tr>
+        </tbody></table>
+        <div class="note" style="margin-top:14px"><span>ℹ</span><div>让指定流量走指定节点，与主节点互不影响。</div></div>
+      </div>
+
+      <div class="card">
+        <h3>分流规则（8）<span class="sp"></span><a class="a m" data-jump-rules="routing">到统一规则视图查看 ›</a></h3>
+        <table><thead><tr><th style="width:36px">启用</th><th>名称</th><th>匹配</th><th>动作</th><th style="width:100px"></th></tr></thead><tbody>
+          <tr><td><span class="toggle on"></span></td><td class="nm">国内域名直连</td><td class="mono">rule_set: geosite-cn</td><td>direct-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">国内 IP 直连</td><td class="mono">rule_set: geoip-cn</td><td>direct-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">广告域名阻断</td><td class="mono">rule_set: geosite-ads</td><td>block-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">Telegram 走代理</td><td class="mono">ip_cidr 91.108.0.0/16</td><td>main-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">局域网直连</td><td class="mono">ip_cidr 192.168.0.0/16</td><td>direct-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">特定进程走代理</td><td class="mono">process_name: clash</td><td>main-out</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">DNS 查询劫持</td><td class="mono">port: 53</td><td>hijack-dns</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle"></span></td><td class="nm">备用规则</td><td class="mono">domain_keyword: test</td><td>direct-out</td><td><a class="a">编辑</a></td></tr>
+        </tbody></table>
+        <div style="margin-top:14px"><button class="btn primary">新增分流规则</button></div>
+      </div>
+    </section>
+
+    <!-- ============ 客户端设置 / DNS 设置 ============ -->
+    <section class="pane" id="p-client-dns">
+      <div class="card">
+        <h3>DNS 服务器（2）<span class="sp"></span><span style="font-weight:400;font-size:12px;color:var(--ink-3)">原独立 tab</span><button class="btn sm">新增</button></h3>
+        <table><thead><tr><th>名称</th><th>地址</th><th>启用</th><th style="width:80px"></th></tr></thead><tbody>
+          <tr><td class="nm">default-dns</td><td class="mono">8.8.8.8</td><td><span class="toggle on"></span></td><td><a class="a">编辑</a></td></tr>
+          <tr><td class="nm">china-dns</td><td class="mono">223.5.5.5</td><td><span class="toggle on"></span></td><td><a class="a">编辑</a></td></tr>
+        </tbody></table>
+      </div>
+
+      <div class="card">
+        <h3>解析与缓存<span class="sp"></span><span style="font-weight:400;font-size:12px;color:var(--ink-3)">原「DNS 缓存 (1.14)」独立 tab</span></h3>
+        <div class="row"><div class="lbl">默认解析策略</div><div class="fld"><select><option>prefer_ipv4</option><option>prefer_ipv6</option><option>ipv4_only</option><option>ipv6_only</option></select></div></div>
+        <div class="row"><div class="lbl">DNS 缓存</div><div class="fld"><span class="toggle on"></span></div></div>
+        <div class="row"><div class="lbl">乐观缓存<small>先回旧结果，后台再刷新</small></div><div class="fld"><span class="toggle on"></span></div></div>
+        <div class="row"><div class="lbl">乐观缓存超时</div><div class="fld"><input type="text" value="3 天" style="max-width:160px"></div></div>
+        <div class="row"><div class="lbl">持久化缓存<small>重启后仍保留</small></div><div class="fld"><span class="toggle on"></span></div></div>
+      </div>
+
+      <div class="card">
+        <h3>DNS 规则（3）<span class="sp"></span><a class="a m" data-jump-rules="dns">到统一规则视图查看 ›</a></h3>
+        <table><thead><tr><th style="width:36px">启用</th><th>名称</th><th>匹配</th><th>动作</th><th style="width:100px"></th></tr></thead><tbody>
+          <tr><td><span class="toggle on"></span></td><td class="nm">国内域名用国内 DNS</td><td class="mono">rule_set: geosite-cn</td><td>china-dns</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">代理域名用远端 DNS</td><td class="mono">rule_set: geosite-!cn</td><td>default-dns</td><td><a class="a">编辑</a></td></tr>
+          <tr><td><span class="toggle on"></span></td><td class="nm">私有 IP 反查</td><td class="mono">ip_is_private: 是</td><td>system-dns</td><td><a class="a">编辑</a></td></tr>
+        </tbody></table>
+        <div style="margin-top:14px"><button class="btn primary">新增 DNS 规则</button></div>
+      </div>
+    </section>
+
+    <!-- ============ 客户端设置 / 规则集设置 ============ -->
+    <section class="pane" id="p-client-ruleset">
+      <div class="card">
+        <h3>规则集（2）<span class="sp"></span><button class="btn sm">新增规则集</button></h3>
+        <table><thead><tr><th>名称</th><th>类型</th><th>来源</th><th>启用</th><th style="width:80px"></th></tr></thead><tbody>
+          <tr><td class="nm">geosite-cn</td><td><span class="tag">远程</span></td><td class="mono">sing-box 官方 geosite</td><td><span class="toggle on"></span></td><td><a class="a">编辑</a></td></tr>
+          <tr><td class="nm">geoip-cn</td><td><span class="tag">远程</span></td><td class="mono">sing-box 官方 geoip</td><td><span class="toggle on"></span></td><td><a class="a">编辑</a></td></tr>
+        </tbody></table>
+        <div class="note" style="margin-top:14px"><span>ℹ</span><div>规则集是分流/DNS 规则的<b>引用来源</b>，本身不含动作，所以单独一页。</div></div>
+      </div>
+
+      <div class="card">
+        <h3>统一规则视图<span class="sp"></span>
+          <span style="font-weight:400;font-size:12px;color:var(--ink-3)">跨「分流规则 / DNS 规则」的总表</span></h3>
+        <div class="chips">
+          <span class="chip on" data-f="all">全部<span class="n">11</span></span>
+          <span class="chip" data-f="routing">分流规则<span class="n">8</span></span>
+          <span class="chip" data-f="dns">DNS 规则<span class="n">3</span></span>
+          <span class="chip" data-f="off">已停用<span class="n">1</span></span>
+        </div>
+        <table id="rt">
+          <thead><tr><th style="width:36px">启用</th><th>名称</th><th style="width:86px">类型</th><th>匹配条件</th><th style="width:140px">动作</th></tr></thead>
+          <tbody>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">国内域名直连</td><td><span class="tag r">分流</span></td><td class="mono">rule_set: geosite-cn</td><td>direct-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">国内 IP 直连</td><td><span class="tag r">分流</span></td><td class="mono">rule_set: geoip-cn</td><td>direct-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">广告域名阻断</td><td><span class="tag r">分流</span></td><td class="mono">rule_set: geosite-ads</td><td>block-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">Telegram 走代理</td><td><span class="tag r">分流</span></td><td class="mono">ip_cidr 91.108.0.0/16</td><td>main-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">局域网直连</td><td><span class="tag r">分流</span></td><td class="mono">ip_cidr 192.168.0.0/16</td><td>direct-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">特定进程走代理</td><td><span class="tag r">分流</span></td><td class="mono">process_name: clash</td><td>main-out</td></tr>
+            <tr data-k="routing"><td><span class="toggle on"></span></td><td class="nm">DNS 查询劫持</td><td><span class="tag r">分流</span></td><td class="mono">port: 53</td><td>hijack-dns</td></tr>
+            <tr data-k="routing off"><td><span class="toggle"></span></td><td class="nm">备用规则</td><td><span class="tag r">分流</span></td><td class="mono">domain_keyword: test</td><td>direct-out</td></tr>
+            <tr data-k="dns"><td><span class="toggle on"></span></td><td class="nm">国内域名用国内 DNS</td><td><span class="tag d">DNS</span></td><td class="mono">rule_set: geosite-cn</td><td>china-dns</td></tr>
+            <tr data-k="dns"><td><span class="toggle on"></span></td><td class="nm">代理域名用远端 DNS</td><td><span class="tag d">DNS</span></td><td class="mono">rule_set: geosite-!cn</td><td>default-dns</td></tr>
+            <tr data-k="dns"><td><span class="toggle on"></span></td><td class="nm">私有 IP 反查</td><td><span class="tag d">DNS</span></td><td class="mono">ip_is_private: 是</td><td>system-dns</td></tr>
+          </tbody>
+        </table>
+        <div class="note m" style="margin-top:14px"><span>◆</span>
+          <div>两类规则字段同构（匹配条件 + 动作），代码里本来就是同一个构建器
+          （<span class="mono">renderRuleSection(s, kind)</span>）。所以这张总表只是<b>换一个视角看同一份数据</b>，
+          不改 UCI 结构；各页仍保留自己的规则列表，日常改动不用来回切页。</div></div>
+      </div>
+    </section>
+
+    <!-- ============ 客户端设置 / 资源管理（从服务状态搬来） ============ -->
+    <section class="pane" id="p-client-resources">
+      <div class="card" style="border-color:color-mix(in srgb,var(--mov) 40%,var(--line))">
+        <h3>资源管理<span class="sp"></span><span class="tag" style="background:var(--mov-soft);color:var(--mov)">从「服务状态」移入</span></h3>
+        <table><thead><tr><th>资源</th><th>来源</th><th>版本</th><th style="width:200px"></th></tr></thead><tbody>
+          <tr><td class="nm">直连域名库</td><td class="mono">Loyalsoldier/v2ray-rules-dat</td><td><span class="tag">2026-09-15</span></td>
+              <td><a class="a">检查更新</a><span class="sep">·</span><a class="a">立即更新</a></td></tr>
+          <tr><td class="nm">代理域名库</td><td class="mono">Loyalsoldier/v2ray-rules-dat</td><td><span class="tag">2026-09-15</span></td>
+              <td><a class="a">检查更新</a><span class="sep">·</span><a class="a">立即更新</a></td></tr>
+          <tr><td class="nm">中国大陆 IPv4</td><td class="mono">17mon/china_ip_list</td><td><span class="tag">2026-09-15</span></td>
+              <td><a class="a">检查更新</a><span class="sep">·</span><a class="a">立即更新</a></td></tr>
+          <tr><td class="nm">中国大陆 IPv6</td><td class="mono">17mon/china_ip_list</td><td><span class="tag">2026-09-15</span></td>
+              <td><a class="a">检查更新</a><span class="sep">·</span><a class="a">立即更新</a></td></tr>
+        </tbody></table>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="btn primary">全部更新</button>
+          <span class="spacer"></span>
+          <span style="align-self:center;font-size:12px;color:var(--ink-3)">最近更新：今天 22:51 · 成功</span>
+        </div>
+        <div class="note w" style="margin-top:14px"><span>⚠</span>
+          <div>更新资源会让 <b>sing-box 重新加载分流</b>；升级内核后建议更新一次，否则 geosite/geoip 可能不匹配新版本。</div></div>
+      </div>
+
+      <div class="card">
+        <h3>为什么放在这里</h3>
+        <div style="font-size:13px;color:var(--ink-2)">
+          资源管理产出的是 <b>geosite / geoip / 域名清单 / IP 清单</b>，它们是客户端分流与 DNS 规则的<b>原料</b>，
+          和服务运行状态没有关系。放在「服务状态」里，等于把配置项藏在了诊断页。
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 节点设置 ============ -->
+    <section class="pane" id="p-node">
+      <div class="card">
+        <h3>粘贴分享链接</h3>
+        <div style="display:flex;gap:10px"><input type="text" placeholder="vless://… / ss://… / vmess://… / hysteria2://…">
+          <button class="btn primary" style="white-space:nowrap">解析并添加</button></div>
+        <div class="note" style="margin-top:14px"><span>ℹ</span><div>解析失败会指出<b>哪一段</b>不合法（协议头 / 参数 / base64），不是笼统报错。</div></div>
+      </div>
+      <div class="card">
+        <h3>节点列表（4）<span class="sp"></span><button class="btn sm">测全部延迟</button></h3>
+        <table><thead><tr><th style="width:30px"></th><th>名称</th><th>协议</th><th>地址</th><th>延迟</th><th>来源</th><th style="width:90px"></th></tr></thead><tbody>
+          <tr><td><input type="radio" name="mn" checked></td><td class="nm">anytls-bwg<div class="mono" style="font-size:11px">主节点</div></td><td><span class="tag">AnyTLS</span></td><td class="mono">bwg.wjp-family.top:4433</td><td style="color:var(--ok);font-weight:700">38 ms</td><td><span class="tag">订阅</span></td><td><a class="a">编辑</a></td></tr>
+          <tr><td><input type="radio" name="mn"></td><td class="nm">hy2-bwg</td><td><span class="tag">Hysteria2</span></td><td class="mono">bwg.wjp-family.top:38201</td><td style="color:var(--ok);font-weight:700">41 ms</td><td><span class="tag">订阅</span></td><td><a class="a">编辑</a></td></tr>
+          <tr><td><input type="radio" name="mn"></td><td class="nm">ss-2022-bwg</td><td><span class="tag">Shadowsocks</span></td><td class="mono">bwg.wjp-family.top:8388</td><td style="color:var(--warn);font-weight:700">76 ms</td><td><span class="tag">订阅</span></td><td><a class="a">编辑</a></td></tr>
+          <tr><td><input type="radio" name="mn"></td><td class="nm">vless-reality</td><td><span class="tag">VLESS</span></td><td class="mono">bwg.wjp-family.top:56976</td><td style="color:var(--bad);font-weight:700">超时</td><td><span class="tag">手工</span></td><td><a class="a">编辑</a></td></tr>
+        </tbody></table>
+      </div>
+      <div class="card">
+        <h3>订阅</h3>
+        <div class="row"><div class="lbl">订阅地址</div><div class="fld"><input type="text" value="https://bwg.wjp-family.top:2345/••••••" ></div></div>
+        <div class="row"><div class="lbl">过滤模式</div><div class="fld"><select><option>黑名单</option><option>白名单</option></select></div></div>
+        <div class="row"><div class="lbl">自动更新</div><div class="fld"><span class="toggle"></span></div></div>
+      </div>
+    </section>
+
+    <!-- ============ 服务器设置 ============ -->
+    <section class="pane" id="p-server">
+      <div class="card"><h3>服务端</h3>
+        <div class="row"><div class="lbl">启用服务端<small>让本机成为节点供其它设备使用</small></div><div class="fld"><span class="toggle"></span></div></div>
+        <div class="row"><div class="lbl">入站</div><div class="fld"><span style="color:var(--ink-3)">未添加。<a class="a">添加第一个入站</a></span></div></div>
+      </div>
+      <div class="card"><h3>证书</h3>
+        <table><thead><tr><th>用途</th><th>文件</th><th>状态</th><th style="width:90px"></th></tr></thead><tbody>
+          <tr><td class="nm">服务端</td><td class="mono">server_publickey.pem</td><td><span class="tag">未上传</span></td><td><a class="a">上传</a></td></tr>
+          <tr><td class="nm">服务端</td><td class="mono">server_privatekey.pem</td><td><span class="tag">未上传</span></td><td><a class="a">上传</a></td></tr>
+          <tr><td class="nm">客户端</td><td class="mono">client_ca.pem</td><td><span class="tag">未上传</span></td><td><a class="a">上传</a></td></tr>
+          <tr><td class="nm">客户端</td><td class="mono">client_ech_conf.pem</td><td><span class="tag">未上传</span></td><td><a class="a">上传</a></td></tr>
+        </tbody></table>
+      </div>
+    </section>
+
+    <!-- ============ 访问控制（新的一级 tab，5 个二级子页原样搬来） ============ -->
+    <section class="pane" id="p-acl-iface">
+      <div class="card" style="border-color:color-mix(in srgb,var(--mov) 40%,var(--line))">
+        <h3>访问控制<span class="sp"></span><span class="tag" style="background:var(--mov-soft);color:var(--mov)">原「客户端设置 → 访问控制」</span></h3>
+        <div class="note m"><span>◆</span><div>它回答的是「<b>谁</b>走代理、哪些域名/IP 例外」，
+        与「<b>怎么</b>走」（分流 / DNS / 规则集）不是同一层，所以提到一级。
+        下面的 5 个子页<b>原样搬过来</b>，内容不变。</div></div>
+      </div>
+      <div class="card"><h3>接口控制</h3>
+        <div class="row"><div class="lbl">监听接口</div><div class="fld"><select><option>br-lan</option><option>eth0</option></select></div></div>
+        <div class="row"><div class="lbl">代理 TCP</div><div class="fld"><span class="toggle on"></span></div></div>
+        <div class="row"><div class="lbl">代理 UDP</div><div class="fld"><span class="toggle on"></span></div></div>
+      </div>
+    </section>
+
+    <section class="pane" id="p-acl-lan">
+      <div class="card"><h3>局域网 IP 策略</h3>
+        <div class="row"><div class="lbl">模式<small>决定哪些局域网设备走代理</small></div>
+          <div class="fld"><select><option>仅排除列表</option><option>仅包含列表</option><option>禁用</option></select></div></div>
+        <div class="row"><div class="lbl">排除的 IP</div><div class="fld"><input type="text" value="192.168.1.10, 192.168.1.254"></div></div>
+        <div class="row"><div class="lbl">排除的 MAC</div><div class="fld"><input type="text" value="AA:BB:CC:DD:EE:01, AA:BB:CC:DD:EE:02"></div></div>
+      </div>
+    </section>
+
+    <section class="pane" id="p-acl-wan">
+      <div class="card"><h3>WAN IP 策略</h3>
+        <div class="row"><div class="lbl">模式</div>
+          <div class="fld"><select><option>禁用</option><option>仅排除列表</option><option>仅包含列表</option></select></div></div>
+        <div class="row"><div class="lbl">排除的 IP</div><div class="fld"><input type="text" placeholder="留空表示不限制"></div></div>
+      </div>
+    </section>
+
+    <section class="pane" id="p-acl-proxy">
+      <div class="card"><h3>代理域名清单<span class="sp"></span><button class="btn sm">从资源导入</button></h3>
+        <table><thead><tr><th>条目</th><th>类型</th><th>来源</th><th style="width:80px"></th></tr></thead><tbody>
+          <tr><td class="mono">google.com</td><td><span class="tag">域名</span></td><td><span class="tag">手工</span></td><td><a class="a d">删除</a></td></tr>
+          <tr><td class="mono">10 条 IPv4 / 3 条 IPv6</td><td><span class="tag">IP</span></td><td><span class="tag">资源</span></td><td><a class="a d">删除</a></td></tr>
+        </tbody></table></div>
+    </section>
+
+    <section class="pane" id="p-acl-direct">
+      <div class="card"><h3>直连域名清单<span class="sp"></span><button class="btn sm">从资源导入</button></h3>
+        <table><thead><tr><th>条目</th><th>类型</th><th>来源</th><th style="width:80px"></th></tr></thead><tbody>
+          <tr><td class="mono">baidu.com</td><td><span class="tag">域名</span></td><td><span class="tag">手工</span></td><td><a class="a d">删除</a></td></tr>
+          <tr><td class="mono">19 条 IPv4 / 5 条 IPv6</td><td><span class="tag">IP</span></td><td><span class="tag">资源</span></td><td><a class="a d">删除</a></td></tr>
+        </tbody></table></div>
+    </section>
+
+    <!-- ============ 服务状态（资源管理已移出） ============ -->
+    <section class="pane" id="p-status">
+      <div class="statusbar">
+        <span class="pill" id="stpill"><span class="dot"></span>运行中</span>
+        <span style="color:var(--ink-3);font-size:12.5px">sing-box 1.14.1 · 运行 2 小时 14 分</span>
+        <span class="spacer"></span>
+        <button class="btn" id="cycle">切换状态（演示三态）</button>
+        <button class="btn">重载</button>
+        <button class="btn">停止</button>
+      </div>
+      <div class="card" style="margin-top:16px"><h3>连接检查</h3>
+        <table><thead><tr><th>站点</th><th>结果</th><th style="width:80px"></th></tr></thead><tbody>
+          <tr><td class="nm">BaiDu</td><td><span class="tag" style="color:var(--ok)">passed</span></td><td><a class="a">检查</a></td></tr>
+          <tr><td class="nm">Google</td><td><span class="tag" style="color:var(--ok)">passed</span></td><td><a class="a">检查</a></td></tr>
+        </tbody></table>
+      </div>
+      <div class="card"><h3>日志<span class="sp"></span>
+        <select style="min-width:120px"><option>warn</option><option>info</option><option>debug</option></select>
+        <button class="btn sm">清空日志</button></h3>
+        <pre style="margin:0;background:var(--line-2);border-radius:var(--radius-s);padding:12px;font:12px/1.6 ui-monospace,monospace;color:var(--ink-2);max-height:180px;overflow:auto">22:52:37 [DAEMON] Reload completed.
+22:51:13 [DAEMON] sing-box 1.14.1 started.
+22:51:00 [SUBSCRIBE] 4 nodes added, 0 removed.</pre>
+      </div>
+      <div class="card" style="border-color:color-mix(in srgb,var(--mov) 40%,var(--line))">
+        <h3>已移出<span class="sp"></span></h3>
+        <div style="font-size:13px;color:var(--ink-2)">
+          「<b>资源管理</b>」不在这里了 → 已移到 <a class="a m" data-jump="client" data-sub="resources">客户端设置 → 资源管理</a>。
+          本页只保留<b>诊断</b>相关：连接检查、日志。
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 迁移对照 ============ -->
+    <section class="pane" id="p-migration">
+      <h1 style="margin:0 0 6px;font-size:22px">迁移对照</h1>
+      <p style="margin:0 0 18px;color:var(--ink-2)">现有每一项都有去处，没有功能被丢掉。</p>
+      <div class="card">
+        <table>
+          <thead><tr><th>现有位置</th><th>改版后</th><th style="width:150px">变化</th></tr></thead>
+          <tbody>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由设置</td><td class="nm">客户端设置 → 分流设置</td><td>合并</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由节点</td><td class="nm">客户端设置 → 分流设置 → 路由节点</td><td>合并</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 路由规则</td><td class="nm">客户端设置 → 分流设置 → 分流规则<div style="font-weight:400;font-size:12px;color:var(--ink-3)">并在「规则集设置 → 统一规则视图」可见</div></td><td>保留 + 总表</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → DNS 设置</td><td class="nm" rowspan="3">客户端设置 → DNS 设置</td><td rowspan="3" style="color:var(--mov);font-weight:700">合并 3 → 1</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → DNS 服务器</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → DNS 缓存 (1.14)</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 规则集</td><td class="nm">客户端设置 → 规则集设置</td><td>保留</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">服务状态 → 资源管理</td><td class="nm">客户端设置 → 资源管理</td><td style="color:var(--mov);font-weight:700">跨一级搬迁</td></tr>
+            <tr><td class="mono" style="text-decoration:line-through">客户端设置 → 访问控制</td><td class="nm">访问控制（<b>一级 tab</b>）</td><td style="color:var(--mov);font-weight:700">升到一级</td></tr>
+            <tr><td class="mono">节点设置</td><td>节点设置</td><td>不变</td></tr>
+            <tr><td class="mono">服务器设置</td><td>服务器设置</td><td>不变</td></tr>
+            <tr><td class="mono">服务状态（连接检查 / 日志）</td><td>服务状态</td><td>去掉资源管理</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card">
+        <h3>落地要动的地方（代码）</h3>
+        <table>
+          <thead><tr><th>动作</th><th>文件</th><th>说明</th></tr></thead>
+          <tbody>
+            <tr><td class="nm">新增一级 tab</td><td class="mono">root/usr/share/luci/menu.d/luci-app-homeproxy.json</td><td>加一条 <span class="mono">…/homeproxy/acl</span>，<span class="mono">order</span> 排在 server(20) 与 status(30) 之间</td></tr>
+            <tr><td class="nm">新增 view</td><td class="mono">htdocs/…/view/homeproxy/acl.js</td><td>把 <span class="mono">client.js</span> 里 <span class="mono">s.tab('control')</span> 起的 5 个子 tab 整体搬过去</td></tr>
+            <tr><td class="nm">二级 tab 收敛</td><td class="mono">client.js</td><td><span class="mono">routing/routing_node</span> → <span class="mono">分流设置</span>；<span class="mono">dns/dns_server/dns_cache</span> → <span class="mono">DNS 设置</span>；<span class="mono">ruleset</span> → <span class="mono">规则集设置</span>；<span class="mono">control</span> 移出</td></tr>
+            <tr><td class="nm">资源管理搬家</td><td class="mono">status.js → client.js</td><td><span class="mono">status.js:218</span> 的 <span class="mono">NamedSection _('Resources management')</span> 移到 client 的 <span class="mono">resources</span> tab</td></tr>
+            <tr><td class="nm">ACL 权限</td><td class="mono">root/usr/share/rpcd/acl.d/luci-app-homeproxy.json</td><td>新 view 需要 <span class="mono">read/write</span> 声明，否则菜单项不显示</td></tr>
+          </tbody>
+        </table>
+        <div class="note w" style="margin-top:14px"><span>⚠</span>
+          <div><b>迁移风险</b>：菜单项与 ACL 不匹配时，新 tab <b>不会报错，只会不出现</b>——
+          必须在真机上确认真有 5 个一级 tab。另外 <span class="mono">client.js</span> 的二级 tab 名会变，
+          现有 i18n 条目要跟着改（<span class="mono">po/</span> 与 <span class="mono">.lmo</span> 都得重新生成）。</div></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="legend">Demo <b>D</b> · 现有模式改版 · 设计稿（非可用界面）</div>
+
+<script>
+/* ---------- 结构定义：一级 tab → 二级 tab ---------- */
+const NAV = {
+  client: { tabs: [
+    { id:'split',     label:'分流设置' },
+    { id:'dns',       label:'DNS 设置' },
+    { id:'ruleset',   label:'规则集设置' },
+    { id:'resources', label:'资源管理', moved:true }
+  ]},
+  node:   { tabs: [] },
+  server: { tabs: [] },
+  acl:    { tabs: [
+    { id:'iface',  label:'接口控制' },
+    { id:'lan',    label:'局域网 IP 策略' },
+    { id:'wan',    label:'WAN IP 策略' },
+    { id:'proxy',  label:'代理域名清单' },
+    { id:'direct', label:'直连域名清单' }
+  ], moved:true },
+  status: { tabs: [] }
+};
+
+let cur1 = 'client', cur2 = 'split';
+
+const lvl1 = document.getElementById('lvl1');
+const lvl2 = document.getElementById('lvl2');
+
+function paintTabs(){
+  lvl2.innerHTML = '';
+  const def = NAV[cur1];
+  if (def.tabs.length) {
+    lvl2.style.display = '';
+    def.tabs.forEach(t => {
+      const b = document.createElement('button');
+      b.textContent = t.label;
+      b.dataset.sub = t.id;
+      if (t.id === cur2) b.classList.add('on');
+      b.onclick = () => { cur2 = t.id; paintTabs(); paintPane(); };
+      lvl2.appendChild(b);
+    });
+  } else {
+    lvl2.style.display = 'none';
+  }
+}
+
+function paintPane(){
+  const id = NAV[cur1].tabs.length ? ('p-' + cur1 + '-' + cur2) : ('p-' + cur1);
+  const target = document.getElementById(id) || document.getElementById('p-' + cur1);
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p === target));
+  if (!target) {  // 一级 tab 没有内容页时给出提示
+    const fb = document.getElementById('p-summary');
+    if (fb) fb.classList.add('on');
+  }
+  window.scrollTo(0,0);
+}
+
+function go1(p, sub){
+  const def = NAV[p];
+  cur1 = p;
+  [...lvl1.children].forEach(b => b.classList.toggle('on', b.dataset.p === p));
+  if (!def) {                        // 说明页（改动摘要 / 迁移对照）：不属于任何一级 tab
+    cur2 = null;
+    lvl2.style.display = 'none';
+    document.querySelectorAll('.pane').forEach(x => x.classList.toggle('on', x.id === 'p-' + p));
+    window.scrollTo(0,0);
+    return;
+  }
+  cur2 = sub && def.tabs.some(t => t.id === sub) ? sub : (def.tabs[0] || {}).id;
+  paintTabs(); paintPane();
+}
+
+[...lvl1.children].forEach(b => b.onclick = () => go1(b.dataset.p));
+
+/* 摘要页里的跳转 */
+document.querySelectorAll('[data-jump]').forEach(el => el.onclick = () => go1(el.dataset.jump, el.dataset.sub));
+
+/* 从分流/DNS 页跳到统一规则视图 */
+document.querySelectorAll('[data-jump-rules]').forEach(el => el.onclick = () => {
+  go1('client', 'ruleset');
+  const f = el.dataset.jumpRules, chip = document.querySelector('.chip[data-f="'+f+'"]');
+  if (chip) chip.click();
+});
+
+/* 规则总表筛选 */
+document.querySelectorAll('.chip').forEach(ch => ch.onclick = () => {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('on'));
+  ch.classList.add('on');
+  const f = ch.dataset.f;
+  document.querySelectorAll('#rt tbody tr').forEach(tr => {
+    const k = tr.dataset.k || '';
+    const ok = f === 'all' ? true
+             : f === 'off'  ? k.includes('off')
+             : (k.includes(f) && !k.includes('off'));
+    tr.style.display = ok ? '' : 'none';
+  });
+});
+
+/* 三态演示 */
+const ST = [{c:'', t:'运行中'}, {c:'bad', t:'未运行'}, {c:'warn', t:'状态未知'}];
+let si = 0;
+const cy = document.getElementById('cycle');
+if (cy) cy.onclick = () => {
+  si = (si + 1) % 3;
+  const s = ST[si];
+  const p = document.getElementById('stpill');
+  p.className = 'pill ' + s.c;
+  p.innerHTML = '<span class="dot"></span>' + s.t;
+  const r = document.getElementById('runline');
+  r.className = 'run ' + s.c;
+  r.textContent = 'HomeProxy (sing-box v1.14.1) ' + s.t;
+};
+
+/* 初始：停在摘要页，但一级 tab 高亮「客户端设置」——先渲染 tab 结构 */
+paintTabs();
+document.getElementById('p-summary').classList.add('on');
+document.querySelectorAll('.pane').forEach(p => { if (p.id !== 'p-summary') p.classList.remove('on'); });
+</script>
+</body>
+</html>
