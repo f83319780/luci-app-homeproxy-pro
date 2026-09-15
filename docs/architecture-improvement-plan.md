@@ -45,6 +45,7 @@
 | PR-05 之后 | 100 | 95 | 90 | 95 | 95 | 95 | 65 | **80** | 45 | 95 | **85.5%** |
 | P0 修复之后 | 100 | 95 | 90 | 95 | 95 | 95 | **90** | 80 | 45 | 95 | **88.0%** |
 | PHASE 8 第一批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **70** | 95 | **90.5%** |
+| PHASE 8 第二批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **75** | 95 | **91.0%** |
 
 > PHASE 6 在 PR-05 之后一度下调到 **65**：§2.14 的 P0 说明「回滚安全网」在运行时这一段
 > 并不可靠（该缺陷早于 PR-05）。§2.14.6 修好并真机验证之后回到 **90**。
@@ -52,7 +53,7 @@
 > **口径修正**：本文件此前写"约 95%"，与它自己的 PHASE 表对不上。按表计算 PR-05 之前是
 > **81.5%**，落在指导建议"整体架构成熟度 80–85%"的区间内 —— 两份文档本来就没有分歧，
 > 是这里的叙述数字写飘了。PR-05 之后 **85.5%**，P0 修复之后 **88.0%**，
-> PHASE 8 第一批之后 **90.5%**。
+> PHASE 8 第一批之后 **90.5%**，第二批之后 **91.0%**。
 
 已落地的部分（PHASE 1/2/3/4/5 收尾、§4 安全 8/9、PHASE 9 收尾 5/6、PHASE 7 抽离）：
 
@@ -93,7 +94,7 @@
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
 | 6 | Candidate Config | 🟢 ~90% | 生成期失败链成立；运行期的 P0（§2.14）**已修复并真机验证**（commit `bb4e216`）：门改为 procd 视角 + 监听归属 + 连续稳定采样，known-good 只在门通过后写入，回滚被真实触发并成功。剩余 = 回滚路径尚无自动化 on-target job |
 | 7 | Runtime | ✅ ~80% | **PR-05 已落地**：`init.d/homeproxy` 517 → 253 行，dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 实例注册 / 生成事务全部搬到 `scripts/runtime/{service,dns,firewall,net}.sh`（+ 既有 `config.sh`/`health.sh`）。剩余 = 观点 18 的健康分级（listener / functional）与观点 21 的显式状态机，见 §2.10.3 与 §2.10.5 |
-| 8 | LuCI | 🟢 ~70% | **PR-06 第一批已落地**（commits `767a46d` `c3603f6` `6aa0408` `5aa378e`）：前端协议收敛为**一张有序表**（`homeproxy.js` 的 `protocols`，两侧按 `sides` 过滤且顺序可复现）；`snell` 重新可选（此前后端全链路支持但 UI 选不到，表单块是死代码）；`chacha20` 从列表移除（sing-box 1.14 实测拒绝）；mux 块抽成 `renderMuxOptions` 并**顺带修掉 TCP-Brutal 门控分歧**；删掉无人调用的 `decodeBase64Str`；**快照覆盖率修复**（见 §2.11.2，node 13→117、client 29→206 个选项）。剩余 = 观点 22/23 的其余重复（hysteria / TUIC / password 校验 / 状态三件套 ≈ 200 行）与 `shared/rpc.js` |
+| 8 | LuCI | 🟢 ~75% | **PR-06 第一批 + 第二批已落地**（commits `767a46d` `c3603f6` `6aa0408` `5aa378e` `de436df`，见 §2.11.8）：① 前端协议收敛为**一张有序表**且 `snell` 重新可选、`chacha20` 移除；② **快照覆盖率修复**（node 13→117、client 29→206 个选项，此前 node/client 两个表单的快照形同虚设）；③ mux 抽成 `renderMuxOptions` 并修掉 TCP-Brutal 门控分歧；④ **RPC 单一入口 `rpcCall()`** —— 12 处 declare 收敛为 1 处，9 处"看着像错误处理其实不是"的 `L.resolveDefault(call(), {})` 全部改掉；⑤ 删死代码 `decodeBase64Str`。剩余 = 观点 22 的其余重复（hysteria / TUIC / password 校验 / TLS 证书块 / client.js 规则段落 ≈ 300 行）与状态三件套 |
 | 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 
 **关键判断（已修正）**：文档"最终成功标准"里那条链
@@ -118,7 +119,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 |---|---|---|---|---|
 | ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
 | ~~J~~ | ~~§2.14 的 P0：健康门判据（稳定存活 + listener 健康 + known-good 刷新时机）~~ | ~~中~~ | ~~高~~ | ~~3 – 6~~ ✅ 已落地（commit `bb4e216`，见 §2.14.6–§2.14.8）：离机故障注入回归 + 真机 192.168.1.102 完整闭环 |
-| B | PHASE 8 LuCI 模块化（~~协议 registry 单一真源~~ ✅ + `components/`+`shared/` + 去重） | 中 | 高（浏览器流程无法自动化验证） | ~~9 – 15~~ **4 – 7**（协议真源已落地；剩 hysteria/TUIC/password 校验/状态三件套去重 + `shared/rpc.js`） |
+| B | PHASE 8 LuCI 模块化（~~协议真源~~ ✅ ~~RPC 单一入口~~ ✅ + `components/`+`shared/` + 其余去重） | 中 | 高（浏览器流程无法自动化验证） | ~~9 – 15~~ **3 – 6**（剩 hysteria/TUIC/password 校验/TLS 证书块/client.js 规则段落 ≈ 300 行 + 状态三件套） |
 | ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
 | ~~D~~ | ~~PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码）~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit `ca01141`，PR-01 §A + §B）；server inbound 领域化留在 H（PR-04） |
 | ~~E~~ | ~~PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit 33994fa，PR-02）；Repository 切换到 canonical Node 写留在 H（PR-03）；validator 扩展（missing_credential / invalid_tls）留作后续 PR |
@@ -192,7 +193,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | 20 | 已有 `procd respawn`，不重复实现 supervision | ✅ | `procd_set_param respawn` ×3（`init.d:263,313,320`）；全文件无 `while true`/`sleep` 守护循环 | — |
 | 21 | Known-Good 成为正式 Runtime 状态 | 🟡 | known-good 副本 + 回滚**机制**已在（§2.6）并在真机验证轮跑通刷新；但**没有**显式 `KNOWN_GOOD→CANDIDATE→VALIDATING→ACTIVATING→HEALTHY` 状态机 | PR-05 续（§2.10.5） |
 | 22 | 前端最大问题是模块重复而非功能不足 | ✅ | §2.8 重复表；本轮复核见 §2.11 | PR-06 |
-| 23 | 前端协议定义与 Backend Domain Model 对齐 | 🟡 | **协议表已收敛为一张**（`homeproxy.js` 的 `protocols`），并有 `tests/frontend-protocol-inventory.js`（83 项，已做反向验证）与后端 `PROTOCOL_TO_UCI`/`INBOUND_CREDENTIALS` 对齐。`snell` 版本看起来是分叉、实测是**两侧能力不同**（出站 {4,6}、入站 {5,6}），已就地记录理由。剩余 = 前端其余重复与 `shared/rpc.js` | PR-06 续 |
+| 23 | 前端协议定义与 Backend Domain Model 对齐 | 🟡 | **协议表已收敛为一张**（`homeproxy.js` 的 `protocols`），并有 `tests/frontend-protocol-inventory.js`（83 项，已做反向验证）与后端 `PROTOCOL_TO_UCI`/`INBOUND_CREDENTIALS` 对齐。`snell` 版本看起来是分叉、实测是**两侧能力不同**（出站 {4,6}、入站 {5,6}），已就地记录理由。剩余 = 前端其余重复（hysteria / TUIC / 校验体 / 规则段落）。RPC 单一入口已落地（`de436df`） | PR-06 续 |
 | 24 | 不做无证据支持的 frontend 大规模 rewrite | ✅ | §4 只做有实证 sink 的定向加固（`renderStatus` allow-list + poll 守卫），未做 DOM 全面替换 | 政策 |
 | 25 | 从功能测试升级到架构不变量测试 | 🟡 | `test_protocol_inventory.sh` 已是跨层不变量（122 项）；**边界类检查为零** | PR-07 |
 | 26 | Golden / Snapshot 继续作为重构安全网 | ✅ | `snapshots/{node,client,server}.json` + `generator/{outbounds,inbounds}.json`（§2.9） | — |
@@ -1315,7 +1316,7 @@ direct 域名列表(1748-1784) 36 行里 32 行相同（只差 `'proxy_list'` / 
    **先做"能失败的测试"再抽象**——因为今天已经有 6 类分歧，测试本身就能立刻抓到。
 2. **抽 `components/` 与 `shared/`**：把 `node.js`↔`server.js` 的 322 行重复收进共享 builder，
    把跨文件状态三件套收进一个 `shared/status.js`。
-3. **`shared/rpc.js`**：现在 12 处 `rpc.declare`，其中 **9 处把失败吞成 `L.resolveDefault(…, {})`**
+3. ~~**`shared/rpc.js`**：现在 12 处 `rpc.declare`，其中 **9 处把失败吞成 `L.resolveDefault(…, {})`**~~ ✅ **已落地（commit `de436df`）**：`homeproxy.js` 的 `rpcCall()` 成为唯一声明与调用入口，12 处 declare → 1 处；失败改为 resolve 到显式 fallback 并**按方法只提示一次**（5s 轮询不会刷屏），后端"正常返回一个 error"仍算成功、由调用方处理（所以"链接无效"不会弹警告）。新增 `tests/frontend-rpc-inventory.js`（21 项，已反向验证）；它必须在匹配前**剥掉块注释** —— 第一版就被 `homeproxy.js` 里引用旧写法的那段文档注释误报，正是 §2.12 记的守卫陷阱。原文如下（保留作为记录）：
    （`homeproxy.js:415/433`、`client.js:20`、`server.js:18/83`、`status.js:35/64/71/164`）。
    统一封装 + 统一错误上报是 §4 "前端 RPC 无统一封装"那一条的落点。
 4. **删死代码**：`decodeBase64Str`、UI 里选不到的协议分支。
@@ -1849,8 +1850,13 @@ P2（结构）
 43. ✅ refactor(luci): drop the unused base64 helper; record why snell differs  # §2.11.8 (`5aa378e`)
       删 decodeBase64Str；记录 snell 版本实测结论（出站 {4,6}、入站 {5,6}，不是分叉）
 
-**PHASE 8 续（PR-06 剩余）**：其余去重（hysteria / TUIC / password 校验 / 状态三件套 /
-client.js 规则段落）+ `shared/rpc.js` 统一 9 处被吞掉的 RPC 失败。清单见 §2.11.8(f)。
+44. ✅ refactor(luci): one RPC boundary that reports failures                   # §2.11.8 (`de436df`)
+      homeproxy.js 的 rpcCall()：12 处 declare → 1 处；9 处 L.resolveDefault(call(), {}) 全部改掉
+      （它不捕获 rejection，rpcd 不可达时 then 永不执行且无人告知）；新增
+      tests/frontend-rpc-inventory.js（21 项，反向验证，匹配前剥块注释）
+
+**PHASE 8 续（PR-06 剩余）**：其余去重（hysteria / TUIC / password 校验 / TLS 证书块 /
+client.js 规则段落 ≈ 300 行）+ 状态三件套。清单见 §2.11.8(f)。
 
 **下一步（PR-07 → PR-06 续 → PR-05 剩余半场）**：
 先做 **PR-07 Architecture Guard**（§2.12）——边界今天已经是干净的（§2.12.2 实测），
