@@ -41,7 +41,7 @@
 | P1-8 | 真机 CI 作业（台账 §5 项 14） | P1 | 中 | P0-3 之后更有意义 |
 | P1-9 | 版本对齐 / "只 stage 不安装" 策略落地 | P1 | 小 | 无 |
 | P1-10 | crontab `sed -i` 不对称修复 | P1 | 极小 | 无 |
-| P2-1 | 真空检查修复（含我本会话那条正则） | P2 | 小 | 无 |
+| P2-1 | 真空检查修复（含我本会话那条正则） | P2 | 小 | 无 · 已完成✅ |
 | P2-2 | fw4 渲染层（改为在目标机上强制，而非 stub） | P2 | 中 | 无 · 已完成✅ |
 | P2-3 | 低危安全项 + 后端复核遗留（#3-#6 已完成✅，余 #7-#12） | P2 | 小 | 无 |
 | P2-4 | 测试确定性（固定 `/tmp`→`mktemp`、`rm -rf` 引号、ssh `BatchMode`） | P2 | 小 | 无 |
@@ -423,7 +423,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ## 16. P2 剩余项
 
-### P2-1 真空检查修复（**含我本会话写的那条**）
+### P2-1 真空检查修复 —— 已完成✅（**含我本会话写的那条**）
 1. `frontend-rpc-inventory.js:72` 正则放宽为 `L\.resolveDefault\s*\(`，
    **并同时删掉** `client.js:665`、`server.js:147` 那两处冗余的
    `L.resolveDefault(getServiceStatus())`（无害空操作，但会让严格正则误报）。
@@ -431,8 +431,17 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 2. `test_protocol_inventory.sh:169-176` 加 `check('parser produced types', length(parser_types) > 0)`。
 3. `test_parser_flatten.uc:58-61` 的 `if (!flat) return;` 改为**报错**。
 
-**注意教训**（审计 §8.1）：我当初的反向验证用的是正则硬编码的那个写法，
-**是循环论证**。反向验证必须用**真实的回归形态**（`hp.rpcCall(...)`）。
+**已完成，三条都反向验证过**：
+1. 正则放宽为 `L\.resolveDefault\s*\(`，并**自测**两种写法都能匹配（防止守卫本身失效）；
+   同时删掉两处冗余包装（`getServiceStatus()` 从不 reject，而 `resolveDefault` 会把它
+   有意义的 `null` 变回 `undefined`）。
+   **反向验证用的是真实形态 `L.resolveDefault(hp.rpcCall(...))`**，并**断言旧正则匹配不到它**——
+   这正是当初循环论证的那一步。
+2. 加 `check('the parser produced at least one type to cross-check', length(parser_types) > 0)`；
+   反向：把 parser-types.json 置空 → 92 checks / 1 failure。
+3. `if (!flat) return;` 改为记失败；反向：放一个解析不了的样本 →
+   "FAIL socks5: parse_uri() rejected a sample this test is meant to cover"，
+   164 checks / 1 failure（原来是 173 checks / 0，安静地少检了几个）。
 
 ### P2-2 fw4 渲染层 —— 已完成✅（采用了与复核建议不同的方案）
 
@@ -557,7 +566,7 @@ P1-2 发布测试门 ✅ → P1-3 mock 同步 ✅ → P1-4 i18n 源扫描 ✅ �
   ▼
 P1-7 回退假状态（先补可失败的测试）  ✅ 已完成
   ▼
-P2-1 真空检查 → P2-5 JSON 校验
+P2-1 真空检查 ✅ → P2-5 JSON 校验
   ▼
 P1-10 crontab → P2-3 低危安全 → P2-4 确定性
   ▼
