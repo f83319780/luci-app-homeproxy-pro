@@ -47,6 +47,11 @@ echo "== frontend protocol inventory =="
 # with the backend tables that decide what the generators can build.
 node "$ROOT/tests/frontend-protocol-inventory.js" "$ROOT" || FAILED=1
 
+echo "== frontend rpc boundary =="
+# One declaration site, and no call site that looks like error handling but is
+# not. Source-level because the behaviour needs a browser.
+node "$ROOT/tests/frontend-rpc-inventory.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init

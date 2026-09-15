@@ -83,6 +83,12 @@ jobs:
         # value set, and the node form's picker is not in the dump at all.
         run: node tests/frontend-protocol-inventory.js .
 
+      - name: Check the frontend RPC boundary
+        # One rpc.declare site (homeproxy.js's rpcCall) and no view wrapping an
+        # RPC call in L.resolveDefault, which reads like error handling and is
+        # not: it does not catch a rejection.
+        run: node tests/frontend-rpc-inventory.js .
+
       - name: Check zh_Hans translation coverage
         # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
         # coverage fails here even when i18n.yml is still queued.

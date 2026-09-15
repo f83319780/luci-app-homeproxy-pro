@@ -28,6 +28,10 @@ const HTTP_PING_HEALTH_CHECK_HINT = _('Specifies the timeout duration (in second
 	'If a response to the PING frame is not received within the specified timeout duration, the connection will be closed.');
 const HTTP_PING_KEEPALIVE_HINT = _('The timeout (in seconds) that after performing a keepalive check, the client will wait for activity. If no activity is detected, the connection will be closed.');
 
+/* Methods whose failure has already been reported, so that a polled call
+   cannot repeat the same notification every few seconds. */
+const rpc_warned = new Set();
+
 return baseclass.extend({
 	dns_strategy: {
 		'': _('Default'),
@@ -522,14 +526,44 @@ return baseclass.extend({
 		return (p(a) + p(b) + p(c) + p(d)).toLowerCase();
 	},
 
-	getBuiltinFeatures() {
-		const callGetSingBoxFeatures = rpc.declare({
-			object: 'luci.homeproxy',
-			method: 'singbox_get_features',
-			expect: { '': {} }
+	/* The single place that declares and calls a backend RPC.
+	 *
+	 * Most call sites used `L.resolveDefault(call(), {})`, which does NOT
+	 * catch a rejection - it only substitutes for a null/undefined *result*.
+	 * So when rpcd was unreachable or the method was missing, the caller's
+	 * `.then()` simply never ran: the status bar stopped updating, the
+	 * capability list quietly became empty and the browser console collected
+	 * an unhandled rejection, with nothing said to the user.  Here a failure
+	 * resolves to `options.fallback` (default `{}`) and is reported once per
+	 * method, so a 5s poll cannot spam the same message.  A backend that
+	 * *answers* with an error is a success here and is the caller's business -
+	 * this only covers "the call did not come back". */
+	rpcCall(method, args, options) {
+		options = options || {};
+		const object = options.object || 'luci.homeproxy';
+
+		const call = rpc.declare({
+			object: object,
+			method: method,
+			params: options.params || [],
+			expect: options.expect
 		});
 
-		return L.resolveDefault(callGetSingBoxFeatures(), {});
+		return Promise.resolve(call.apply(null, args || [])).catch((err) => {
+			const key = object + '.' + method;
+
+			if (!rpc_warned.has(key)) {
+				rpc_warned.add(key);
+				ui.addNotification(null, E('p', _('The request %s failed: %s.').format(
+					key, (err && err.message) || String(err))));
+			}
+
+			return options.fallback !== undefined ? options.fallback : {};
+		});
+	},
+
+	getBuiltinFeatures() {
+		return this.rpcCall('singbox_get_features', [], { expect: { '': {} } });
 	},
 
 	/* Parse one share link through the backend parser (parser/uri.uc), the
@@ -541,14 +575,10 @@ return baseclass.extend({
 	 * that had already drifted (its vmess branch lost vmess_global_padding)
 	 * and that validated nothing before writing the node into UCI. */
 	parseShareLink(uri) {
-		const callParseShareLink = rpc.declare({
-			object: 'luci.homeproxy',
-			method: 'node_parse',
-			params: ['uri'],
-			expect: { config: null }
-		});
-
-		return L.resolveDefault(callParseShareLink(uri), {})
+		/* fallback null: a failed call and a rejected link both mean "no node",
+		   and the caller already tells the user which links were dropped. */
+		return this.rpcCall('node_parse', [uri],
+				{ params: ['uri'], expect: { config: null }, fallback: null })
 			.then((res) => (res && res.config) ? res.config : null);
 	},
 
@@ -612,13 +642,6 @@ return baseclass.extend({
 	},
 
 	uploadCertificate(_option, type, filename, ev) {
-		const callWriteCertificate = rpc.declare({
-			object: 'luci.homeproxy',
-			method: 'certificate_write',
-			params: ['filename'],
-			expect: { '': {} }
-		});
-
 		/* Per-type staging file: the four buttons (server public key /
 		 * server private key / client CA / client ECH config) all
 		 * shared /tmp/homeproxy_certificate.tmp before, so two uploads
@@ -631,7 +654,8 @@ return baseclass.extend({
 
 		return ui.uploadFile(tmpPath, ev.target)
 		.then(L.bind((_btn, res) => {
-			return L.resolveDefault(callWriteCertificate(filename), {}).then((ret) => {
+			return this.rpcCall('certificate_write', [filename],
+					{ params: ['filename'], expect: { '': {} } }).then((ret) => {
 				if (ret && ret.result === true)
 					ui.addNotification(null, E('p', _('Your %s was successfully uploaded. Size: %sB.').format(type, res.size)));
 				else

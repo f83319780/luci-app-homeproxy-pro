@@ -9,10 +9,11 @@
 'require form';
 'require fs';
 'require poll';
-'require rpc';
 'require uci';
 'require ui';
 'require view';
+
+'require homeproxy as hp';
 
 /* Thanks to luci-app-aria2 */
 const css = '				\
@@ -32,18 +33,12 @@ const css = '				\
 const hp_dir = '/var/run/homeproxy';
 
 function getConnStat(o, site) {
-	const callConnStat = rpc.declare({
-		object: 'luci.homeproxy',
-		method: 'connection_check',
-		params: ['site'],
-		expect: { '': {} }
-	});
-
 	o.default = E('div', { 'style': 'cbi-value-field' }, [
 		E('button', {
 			'class': 'btn cbi-button cbi-button-action',
 			'click': ui.createHandlerFn(this, () => {
-				return L.resolveDefault(callConnStat(site), {}).then((ret) => {
+				return hp.rpcCall('connection_check', [site],
+						{ params: ['site'], expect: { '': {} } }).then((ret) => {
                                         let ele = o.default.firstElementChild.nextElementSibling;
 					if (ret.result) {
 						ele.style.setProperty('color', 'green');
@@ -61,26 +56,14 @@ function getConnStat(o, site) {
 }
 
 function getResVersion(o, type) {
-	const callResVersion = rpc.declare({
-		object: 'luci.homeproxy',
-		method: 'resources_get_version',
-		params: ['type'],
-		expect: { '': {} }
-	});
-
-	const callResUpdate = rpc.declare({
-		object: 'luci.homeproxy',
-		method: 'resources_update',
-		params: ['type'],
-		expect: { '': {} }
-	});
-
-	return L.resolveDefault(callResVersion(type), {}).then((res) => {
+	return hp.rpcCall('resources_get_version', [type],
+			{ params: ['type'], expect: { '': {} } }).then((res) => {
 		let spanTemp = E('div', { 'style': 'cbi-value-field' }, [
 			E('button', {
 				'class': 'btn cbi-button cbi-button-action',
 				'click': ui.createHandlerFn(this, () => {
-					return L.resolveDefault(callResUpdate(type), {}).then((res) => {
+					return hp.rpcCall('resources_update', [type],
+							{ params: ['type'], expect: { '': {} } }).then((res) => {
 						switch (res.status) {
 						case 0:
 							o.description = _('Successfully updated.');
@@ -161,13 +144,6 @@ function getRuntimeLog(o, name, _option_index, section_id, _in_table) {
 		});
 	}
 
-	const callLogClean = rpc.declare({
-		object: 'luci.homeproxy',
-		method: 'log_clean',
-		params: ['type'],
-		expect: { '': {} }
-	});
-
 	const log_textarea = E('div', { 'id': 'log_textarea' },
 		E('img', {
 			'src': L.resource('icons/loading.svg'),
@@ -209,7 +185,8 @@ function getRuntimeLog(o, name, _option_index, section_id, _in_table) {
 					'class': 'btn cbi-button cbi-button-action',
 					'style': 'margin-left: 4px;',
 					'click': ui.createHandlerFn(this, () => {
-						return L.resolveDefault(callLogClean(filename), {});
+						return hp.rpcCall('log_clean', [filename],
+								{ params: ['type'], expect: { '': {} } });
 					})
 				}, [ _('Clean log') ])
 			]),
