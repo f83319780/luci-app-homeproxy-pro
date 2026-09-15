@@ -118,6 +118,49 @@ return baseclass.extend({
 		{ type: 'vmess',       label: 'VMess',         sides: ['client', 'server'] }
 	],
 
+	/* Multiplexing is configured the same way on both sides: the flag and its
+	   dependency set, padding, and the TCP Brutal group.  The client form adds
+	   its dialling knobs (protocol, connection/stream limits) separately - the
+	   adapter's inbound multiplex deliberately has no such fields.
+	   The Brutal group is gated on the capability for BOTH sides; the node form
+	   used to build it unconditionally, so a sing-box without TCP Brutal still
+	   showed the option.  `features` therefore has to be passed in. */
+	renderMuxOptions(section, options) {
+		const features = options.features || {};
+		let o;
+
+		o = section.option(form.Flag, 'multiplex', _('Multiplex'));
+		o.depends('type', 'shadowsocks');
+		o.depends('type', 'trojan');
+		o.depends('type', 'vless');
+		o.depends('type', 'vmess');
+		o.modalonly = true;
+
+		o = section.option(form.Flag, 'multiplex_padding', _('Enable padding'));
+		o.depends('multiplex', '1');
+		o.modalonly = true;
+
+		if (!features.hp_has_tcp_brutal)
+			return;
+
+		o = section.option(form.Flag, 'multiplex_brutal', _('Enable TCP Brutal'),
+			_('Enable TCP Brutal congestion control algorithm'));
+		o.depends('multiplex', '1');
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'multiplex_brutal_down', _('Download bandwidth'),
+			_('Download bandwidth in Mbps.'));
+		o.datatype = 'uinteger';
+		o.depends('multiplex_brutal', '1');
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'multiplex_brutal_up', _('Upload bandwidth'),
+			_('Upload bandwidth in Mbps.'));
+		o.datatype = 'uinteger';
+		o.depends('multiplex_brutal', '1');
+		o.modalonly = true;
+	},
+
 	/* Render the protocol picker from `protocols`.  This is what keeps the
 	   two forms from drifting: they used to carry a hand-written value list
 	   each, which is how `snell` ended up with a complete form block (and a

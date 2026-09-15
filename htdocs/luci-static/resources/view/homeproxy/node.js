@@ -445,12 +445,9 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	/* Wireguard config end */
 
 	/* Mux config start */
-	o = s.option(form.Flag, 'multiplex', _('Multiplex'));
-	o.depends('type', 'shadowsocks');
-	o.depends('type', 'trojan');
-	o.depends('type', 'vless');
-	o.depends('type', 'vmess');
-	o.modalonly = true;
+	/* The flag, padding and the TCP Brutal group are shared with the server
+	   form; only the dialling knobs below are client-specific. */
+	hp.renderMuxOptions(s, { features: features });
 
 	o = s.option(form.ListValue, 'multiplex_protocol', _('Protocol'),
 		_('Multiplex protocol.'));
@@ -481,26 +478,6 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.depends({'multiplex': '1', 'multiplex_max_connections': '', 'multiplex_min_streams': ''});
 	o.modalonly = true;
 
-	o = s.option(form.Flag, 'multiplex_padding', _('Enable padding'));
-	o.depends('multiplex', '1');
-	o.modalonly = true;
-
-	o = s.option(form.Flag, 'multiplex_brutal', _('Enable TCP Brutal'),
-		_('Enable TCP Brutal congestion control algorithm'));
-	o.depends('multiplex', '1');
-	o.modalonly = true;
-
-	o = s.option(form.Value, 'multiplex_brutal_down', _('Download bandwidth'),
-		_('Download bandwidth in Mbps.'));
-	o.datatype = 'uinteger';
-	o.depends('multiplex_brutal', '1');
-	o.modalonly = true;
-
-	o = s.option(form.Value, 'multiplex_brutal_up', _('Upload bandwidth'),
-		_('Upload bandwidth in Mbps.'));
-	o.datatype = 'uinteger';
-	o.depends('multiplex_brutal', '1');
-	o.modalonly = true;
 	/* Mux config end */
 
 	/* Snell config start */
