@@ -127,6 +127,12 @@ done
 echo "== runtime configuration transaction =="
 sh "$ROOT/tests/runtime/test_config_transaction.sh" "$ROOT" || FAILED=1
 
+echo "== runtime extraction equivalence (PR-05) =="
+# Drives the init script through a stubbed environment and compares the
+# resulting command/file trace against the pre-PR-05 trace.  It needs no
+# ucode, but it belongs in this suite so CI runs it on every PR.
+sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" || FAILED=1
+
 echo "== firewall template rendering =="
 # utpl ships with ucode (it is a symlink to the same binary), so this check
 # runs off-target too.  A toolchain without it is incomplete, not a reason to
