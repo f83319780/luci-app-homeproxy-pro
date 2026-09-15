@@ -39,7 +39,7 @@ import { isEmpty, strToInt, strToBool, strToTime } from 'homeproxy';
 import { ConfigQuery } from '../config/model.uc';
 import { OutboundFactory, EndpointFactory } from '../config/adapter.uc';
 
-import { get_outbound } from './common.uc';
+import { get_outbound, get_resolver } from './common.uc';
 
 /* --- single-endpoint / single-outbound builders ------------------------ */
 

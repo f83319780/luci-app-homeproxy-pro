@@ -51,8 +51,12 @@ function canonical_node(opts) {
 		transport: { type: null },
 		multiplex: { enabled: null, brutal: {} },
 		protocol_options: {},
-		grouphash: opts.grouphash,
-		label: opts.label
+		grouphash: opts.grouphash
+		/* No `label`: normalize() sets `name` and the orchestrator adds
+		 * `label` only when carrying it over. This helper used to set
+		 * `label` too, which is exactly why the section-name collision
+		 * below went unnoticed - it made the fixture agree with the
+		 * repository instead of with the model. */
 	};
 }
 
