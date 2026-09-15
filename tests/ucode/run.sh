@@ -269,8 +269,18 @@ sh "$ROOT/tests/ucode/test_migrate_config.sh" "$ROOT" "$WORK/migrate" || FAILED=
 echo "== executeCommand() failure-path test =="
 rm -rf "$WORK/homeproxy_inject"
 mkdir -p "$WORK/homeproxy_inject"
-sed 's|const exitcode = system(.*);|die("injected failure");|' \
+sed 's|^\t\texitcode = system(.*);|\t\tdie("injected failure");|' \
 	"$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/homeproxy_inject/homeproxy.uc"
+
+# Hard guard: if the anchor stops matching, the sed no-ops and the test
+# passes without ever exercising the exceptional path - the same trap the
+# other staged rewrites guard against. Refuse to run instead.
+if ! grep -q 'die("injected failure")' "$WORK/homeproxy_inject/homeproxy.uc"; then
+	echo "FAIL: executeCommand() failure path: could not inject the failure"
+	echo "      (the 'exitcode = system(...)' anchor no longer matches)"
+	exit 1
+fi
+
 cp "$ROOT/tests/ucode/test_homeproxy_utils_inject.uc" "$WORK/homeproxy_inject/"
 if ( cd "$WORK/homeproxy_inject" && ucode test_homeproxy_utils_inject.uc 2>"/dev/null" ); then
 	echo "PASS: executeCommand() failure path"

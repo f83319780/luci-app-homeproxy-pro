@@ -4,7 +4,7 @@
  * Copyright (C) 2023 ImmortalWrt.org
  */
 
-import { mkstemp } from 'fs';
+import { access, mkdtemp, open, rmdir, unlink } from 'fs';
 import { urldecode_params } from 'luci.http';
 
 /* Global variables start */
@@ -24,19 +24,6 @@ export function isBinary(str) {
 			return true;
 
 	return false;
-};
-
-/* Close a file descriptor, swallowing secondary errors (e.g. an already
-   closed fd). ucode has no `finally` clause, so both the normal and the
-   exceptional path of executeCommand() have to close explicitly. */
-function closeFD(fd) {
-	if (fd) {
-		try {
-			fd.close();
-		} catch (e) {
-			/* already closed */
-		}
-	}
 };
 
 /* Whitelist absolute paths the generators are allowed to put into
@@ -71,42 +58,75 @@ export function validateHomeProxyPath(p) {
 	return false;
 };
 
+/* Read at most `limit` bytes from a file, or '' when it does not exist.
+ * The cap is deliberate: a command's output is not trustworthy input. */
+function read_capped(path, limit) {
+	const f = open(path);
+
+	if (!f)
+		return '';
+
+	const data = f.read(limit) ?? '';
+	f.close();
+	return data;
+};
+
+/* Remove the scratch files and the directory created for one run. Best
+ * effort: a command the shell could not even parse leaves no files behind,
+ * and a failed cleanup must never mask the command's own result. */
+function cleanup_exec_dir(dir, outpath, errpath) {
+	try {
+		if (access(outpath))
+			unlink(outpath);
+		if (access(errpath))
+			unlink(errpath);
+		rmdir(dir);
+	} catch (e) {
+		/* nothing useful to do - the results are already captured */
+	}
+};
+
 export function executeCommand(...args) {
-	let outfd = null, errfd = null;
+	const command = join(' ', args);
+	const dir = mkdtemp();
+	const outpath = dir + '/stdout';
+	const errpath = dir + '/stderr';
+
+	let exitcode = null, stdout = '', stderr = '';
 
 	try {
-		outfd = mkstemp();
-		errfd = mkstemp();
+		/* Redirect to real paths, not to the descriptors of two mkstemp()
+		 * files. The old form appended `>&N 2>&N`, which only works when
+		 * the child shell can see those descriptors; /bin/sh reports
+		 * "Bad file descriptor" (bash) / "Bad fd number" (dash) when it
+		 * cannot, so the command was never executed and every caller got
+		 * an empty result with exit status 2. That is what happened in
+		 * CI, where /bin/sh is dash. Redirecting to paths is plain POSIX
+		 * and behaves identically under busybox ash, dash and bash. */
+		exitcode = system(sprintf('%s >%s 2>%s', command, outpath, errpath));
 
-		const exitcode = system(`${join(' ', args)} >&${outfd.fileno()} 2>&${errfd.fileno()}`);
-
-		outfd.seek(0);
-		errfd.seek(0);
-
-		const stdout = outfd.read(1024 * 512) ?? '';
-		const stderr = errfd.read(1024 * 512) ?? '';
-
-		const binary = isBinary(stdout);
-
-		/* mkstemp() returns delete-on-close files, so closing is enough */
-		closeFD(outfd);
-		closeFD(errfd);
-
-		return {
-			command: join(' ', args),
-			stdout: binary ? null : stdout,
-			stderr,
-			exitcode,
-			binary
-		};
+		stdout = read_capped(outpath, 1024 * 512);
+		stderr = read_capped(errpath, 1024 * 512);
 	} catch (e) {
-		/* Never leak the temporary descriptors on a failing run. ucode has
-		   no `finally` clause, so the exception is re-raised by hand. */
-		closeFD(outfd);
-		closeFD(errfd);
+		/* Never leave the scratch directory behind on a failing run.
+		 * ucode has no `finally` clause, so the exception is re-raised
+		 * by hand. */
+		cleanup_exec_dir(dir, outpath, errpath);
 
 		die(e);
 	}
+
+	const binary = isBinary(stdout);
+
+	cleanup_exec_dir(dir, outpath, errpath);
+
+	return {
+		command,
+		stdout: binary ? null : stdout,
+		stderr,
+		exitcode,
+		binary
+	};
 };
 
 export function getTime(epoch) {
