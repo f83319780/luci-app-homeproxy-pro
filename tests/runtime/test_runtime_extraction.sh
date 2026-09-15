@@ -1,37 +1,46 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-2.0-only
 #
-# PR-05 extraction equivalence test.
+# Runtime orchestration trace test.
 #
-# PHASE 7 moved the dnsmasq / fw4 / tproxy-TUN / service plumbing out of
-# root/etc/init.d/homeproxy into root/etc/homeproxy/scripts/runtime/*.sh.
-# That refactor is only defensible if the observable behaviour is unchanged,
-# and "observable" on a router means: which commands run, in what order, with
-# which arguments, and which files end up where.
+# Drives root/etc/init.d/homeproxy through a stubbed environment and records
+# exactly what the orchestration does: which commands run, in what order, with
+# which arguments, and which files end up where.  The trace is compared against
+# tests/fixtures/runtime/trace.golden.txt.
 #
-# This test drives the init script through a stubbed environment and records
-# exactly that.  The trace is compared against
-# tests/fixtures/runtime/trace.pre-pr05.txt, captured from the init script as
-# it stood *before* the extraction (commit 7e561e0, 517 lines).  A diff means
-# the refactor changed behaviour.
+# Two baselines live in tests/fixtures/runtime/:
 #
-# It is also the only test that exercises the start/stop orchestration as a
-# whole: procd cannot run off-target, but the ordering a refactor can
-# plausibly break (generate before teardown, known-good before firewall, cron
-# before config_load, early return before mkdir) is all visible here.
+#   trace.pre-pr05.txt  captured from the 517-line init script before PHASE 7
+#                       moved the dnsmasq/fw4/net/service plumbing out of it.
+#                       It is the record that the extraction itself was
+#                       behaviour-preserving (360 identical lines across three
+#                       scenarios, commit c2aeac5).
+#   trace.golden.txt    the baseline after the health-gate fix
+#                       (docs/architecture-improvement-plan.md 2.14).  The
+#                       difference between the two files IS the intentional
+#                       change: start_service now waits for hp_wait_service
+#                       before logging "started", records known-good only
+#                       after that gate passed, and reload_service rolls back
+#                       through start instead of duplicating the gate.
+#                       `diff trace.pre-pr05.txt trace.golden.txt` is the
+#                       review artifact.
+#
+# Scenario D is the regression test for the P0: a candidate configuration whose
+# mixed_port is already taken must NOT be recorded as known-good, and a reload
+# must roll back to the previous configuration.
 #
 # Usage: sh tests/runtime/test_runtime_extraction.sh <repo-root> [work-dir]
 #
-#   HP_INITD=<path>     drive another init script (used to regenerate the
-#                       golden trace from the pre-PR-05 revision)
-#   HP_UPDATE_GOLDEN=1  rewrite the golden fixture instead of comparing
+#   HP_INITD=<path>       drive another init script
+#   HP_GOLDEN=<path>      compare against another baseline
+#   HP_UPDATE_GOLDEN=1    rewrite the baseline instead of comparing
 
 ROOT="${1:-.}"
-WORK="${2:-/tmp/hp-runtime-extraction}"
+WORK="${2:-/tmp/hp-runtime-trace}"
 
 ROOT="$(cd "$ROOT" && pwd)"
 SCRIPTS="$ROOT/root/etc/homeproxy/scripts"
-GOLDEN="$ROOT/tests/fixtures/runtime/trace.pre-pr05.txt"
+GOLDEN="${HP_GOLDEN:-$ROOT/tests/fixtures/runtime/trace.golden.txt}"
 INITD="${HP_INITD:-$ROOT/root/etc/init.d/homeproxy}"
 
 TRACE="$WORK/trace.txt"
@@ -74,7 +83,7 @@ EOF
 	chmod +x "$BIN/$1"
 }
 
-for cmd in nft fw4 utpl pgrep ubus jsonfilter chown; do
+for cmd in nft fw4 utpl pgrep chown; do
 	stub "$cmd"
 done
 
@@ -92,25 +101,6 @@ exit 0
 EOF
 chmod +x "$BIN/ip"
 
-# The WAN wait polls `ip route show default`, `ip -6 route show default` and
-# `ifstatus wan`; the first two produce no output through the generic stub, so
-# ifstatus has to report the interface up or every scenario would spin for a
-# minute.  `sleep` is neutralised for the same reason.
-cat > "$BIN/ifstatus" <<'EOF'
-#!/bin/sh
-printf '%s %s\n' ifstatus "$*" >> "$TRACE"
-echo '{ "up": true }'
-exit 0
-EOF
-chmod +x "$BIN/ifstatus"
-
-cat > "$BIN/sleep" <<'EOF'
-#!/bin/sh
-printf '%s %s\n' sleep "$*" >> "$TRACE"
-exit 0
-EOF
-chmod +x "$BIN/sleep"
-
 # The conf-dir resolver derives the dnsmasq section name from `uci show`.
 cat > "$BIN/uci" <<'EOF'
 #!/bin/sh
@@ -122,7 +112,7 @@ exit 0
 EOF
 chmod +x "$BIN/uci"
 
-# `uname -r` decides the GSO workaround; pin it so both traces agree.
+# `uname -r` decides the GSO workaround; pin it so traces agree.
 cat > "$BIN/uname" <<'EOF'
 #!/bin/sh
 printf '%s %s\n' uname "$*" >> "$TRACE"
@@ -140,20 +130,124 @@ EOF
 chmod +x "$BIN/sing-box"
 
 # `ucode -S generate_*.uc` is where the live configuration comes from.  The
-# stub writes a configuration that passes the jail gate (no wireguard/tun
-# outbound), so the ujail branch is exercised at all.
+# stub writes whichever mixed_port the fixture currently declares; whether that
+# configuration can actually run is decided from its content by
+# `hp_test_broken` below, so the answer follows the live file rather than a
+# sticky marker (the rollback copies the old file over the live one without
+# regenerating, and the gate has to see that as healthy).
 cat > "$BIN/ucode" <<'EOF'
 #!/bin/sh
-printf '%s %s\n' ucode "$*" >> "$TRACE"
+printf 'ucode %s\n' "$*" >> "$TRACE"
 for arg in "$@"; do
 	case "$arg" in
-	*generate_client.uc) printf '{"log":{},"outbounds":[]}\n' > "$HP_TEST_RUN_DIR/sing-box-c.json" ;;
-	*generate_server.uc) printf '{"log":{},"inbounds":[]}\n' > "$HP_TEST_RUN_DIR/sing-box-s.json" ;;
+	*generate_client.uc)
+		printf '{"log":{},"inbounds":[{"tag":"dns-in","listen_port":%s},{"tag":"mixed-in","listen_port":%s}],"outbounds":[]}\n' \
+			"${HP_CFG_dns_port:-5333}" "${HP_CFG_mixed_port:-5330}" > "$HP_TEST_RUN_DIR/sing-box-c.json"
+		;;
+	*generate_server.uc)
+		printf '{"log":{},"inbounds":[],"outbounds":[]}\n' > "$HP_TEST_RUN_DIR/sing-box-s.json"
+		;;
 	esac
 done
 exit 0
 EOF
 chmod +x "$BIN/ucode"
+
+# The fault model: a configuration that declares the port the fixture pretends
+# is already taken cannot come up.  Keyed on the live file's content, so it
+# stays correct when the rollback replaces that file without regenerating.
+cat > "$BIN/hp_test_broken" <<'EOF'
+#!/bin/sh
+side="$1"
+[ -n "${HP_TEST_OCCUPIED_PORT:-}" ] || exit 1
+[ -f "$HP_TEST_RUN_DIR/sing-box-$side.json" ] || exit 1
+grep -q "\"listen_port\":$HP_TEST_OCCUPIED_PORT" "$HP_TEST_RUN_DIR/sing-box-$side.json" || exit 1
+exit 0
+EOF
+chmod +x "$BIN/hp_test_broken"
+
+# `ubus call service list` output is not parsed; `jsonfilter` answers from the
+# fixture state instead, which keeps the stub independent of jsonfilter's real
+# expression language.  ubus does not write to the trace itself: its output
+# always goes through a pipe, so a second writer would race the trace order.
+cat > "$BIN/ubus" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$BIN/ubus"
+
+# procd's view of the instance.  Down + exit_code 1 whenever the live
+# configuration for that side cannot bind - which is what procd reports while
+# it restarts a crashing instance.
+cat > "$BIN/jsonfilter" <<'EOF'
+#!/bin/sh
+printf 'jsonfilter %s\n' "$*" >> "$TRACE"
+side="c"
+case "$*" in
+*"sing-box-s"*) side="s" ;;
+esac
+down=no
+hp_test_broken "$side" && down=yes
+case "$*" in
+*".instances["*)
+	if [ "$down" = "yes" ]; then
+		printf '{"running":false,"exit_code":1}\n'
+	else
+		printf '{"running":true}\n'
+	fi
+	;;
+*"@.running"*)
+	[ "$down" = "yes" ] && echo "false" || echo "true"
+	;;
+*"@.exit_code"*)
+	[ "$down" = "yes" ] && echo "1"
+	;;
+esac
+exit 0
+EOF
+chmod +x "$BIN/jsonfilter"
+
+# The listen table.  The ports are taken from the LIVE configuration, the way
+# the real gate derives them, and the occupied port is held by the process that
+# took it - the case that makes a naive "is the port in the table?" check
+# useless.
+cat > "$BIN/netstat" <<'EOF'
+#!/bin/sh
+printf 'netstat %s\n' "$*" >> "$TRACE"
+echo "Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name"
+live="$HP_TEST_RUN_DIR/sing-box-c.json"
+ports=$(grep -o '"listen_port"[^0-9]*[0-9]*' "$live" 2>/dev/null | grep -o '[0-9]*$' | tr '\n' ' ')
+[ -n "$ports" ] || ports="${HP_CFG_mixed_port:-5330} ${HP_CFG_dns_port:-5333}"
+for p in $ports; do
+	if [ -n "${HP_TEST_OCCUPIED_PORT:-}" ] && [ "$p" = "$HP_TEST_OCCUPIED_PORT" ]; then
+		printf 'tcp        0      0 :::%s                 :::*                    LISTEN      77/socat\n' "$p"
+	else
+		printf 'tcp        0      0 :::%s                 :::*                    LISTEN      4242/sing-box\n' "$p"
+	fi
+done
+exit 0
+EOF
+chmod +x "$BIN/netstat"
+
+# The WAN wait polls `ip route show default`, `ip -6 route show default` and
+# `ifstatus wan`; the first two produce no output through the generic stub, so
+# ifstatus has to report the interface up or every scenario would spin for a
+# minute.  `sleep` is neutralised for the same reason: the 15-sample health
+# budget must not cost 15 real seconds.
+cat > "$BIN/ifstatus" <<'EOF'
+#!/bin/sh
+printf 'ifstatus %s\n' "$*" >> "$TRACE"
+echo '{ "up": true }'
+exit 0
+EOF
+chmod +x "$BIN/ifstatus"
+
+cat > "$BIN/sleep" <<'EOF'
+#!/bin/sh
+printf 'sleep %s\n' "$*" >> "$TRACE"
+exit 0
+EOF
+chmod +x "$BIN/sleep"
 
 # --- harness: UCI + procd + the log sink ---------------------------------
 # Sourced *into* the same shell as the init script, exactly like rc.common
@@ -175,6 +269,7 @@ HP_CFG_tproxy_mark="101"
 HP_CFG_tun_mark="102"
 HP_CFG_tun_name="singtun0"
 HP_CFG_dns_port="5333"
+HP_CFG_mixed_port="5330"
 
 config_load() { printf 'config_load %s\n' "$*" >> "$TRACE"; }
 
@@ -204,27 +299,46 @@ procd_add_jail_mount_rw() { printf 'procd_add_jail_mount_rw %s\n' "$*" >> "$TRAC
 procd_add_reload_trigger() { printf 'procd_add_reload_trigger %s\n' "$*" >> "$TRACE"; }
 procd_add_interface_trigger() { printf 'procd_add_interface_trigger %s\n' "$*" >> "$TRACE"; }
 
+# rc.common's lifecycle, modelled faithfully:
+#
+#   start() { rc_procd start_service "$@"; service_started; }
+#   stop()  { stop_service "$@"; procd_kill ...; service_stopped; }
+#
+# start_service only *registers* the procd instances; procd runs them when the
+# service is closed.  That is why the health gate lives in service_started()
+# and why this harness has to call it - a harness that reported the instances
+# healthy as soon as they were registered hid exactly that bug once.
+start() { start_service; service_started; }
+stop() { stop_service; service_stopped; }
+
 # The real log() stamps a timestamp and appends to a file, which would make
 # the trace nondeterministic.
 hp_trace_log() { printf 'log %s\n' "$*" >> "$TRACE"; }
 EOF
 
 # --- run one scenario ----------------------------------------------------
-# $1 scenario name, then the HP_CFG_* overrides for it.
+# $1 scenario name, $2 the action (start|reload), then the HP_CFG_* overrides.
 run_scenario() {
 	scenario="$1"; shift
+	action="$1"; shift
 
 	rm -rf "$SANDBOX/var/run/homeproxy" "$SANDBOX/dnsmasq/dnsmasq-homeproxy.d" \
 	       "$SANDBOX/dnsmasq/dnsmasq-homeproxy.conf" "$SANDBOX/etc/homeproxy/cache.db" \
 	       "$SANDBOX/etc/homeproxy/ruleset" "$SANDBOX/etc/homeproxy/certs"
 	mkdir -p "$SANDBOX/var/run/homeproxy" "$SANDBOX/dnsmasq"
 
-	printf '\n===== scenario: %s =====\n' "$scenario" >> "$TRACE"
+	printf '\n===== scenario: %s (%s) =====\n' "$scenario" "$action" >> "$TRACE"
 
 	(
 		PATH="$BIN:$PATH"; export PATH
 		TRACE="$TRACE"; export TRACE
 		HP_TEST_RUN_DIR="$SANDBOX/var/run/homeproxy"; export HP_TEST_RUN_DIR
+
+		# harness.sh assigns the fixture defaults, so it has to be sourced
+		# BEFORE the per-scenario overrides - the other order silently
+		# resets every override and makes all scenarios run the same
+		# configuration.
+		. "$WORK/harness.sh"
 
 		for kv in "$@"; do
 			eval "HP_CFG_${kv%%=*}=\"${kv#*=}\""
@@ -234,20 +348,33 @@ run_scenario() {
 			HP_CFG_main_udp_node HP_CFG_default_outbound HP_CFG_ipv6_support \
 			HP_CFG_auto_update HP_CFG_auto_update_time HP_CFG_server_enabled \
 			HP_CFG_table_mark HP_CFG_tproxy_mark HP_CFG_tun_mark \
-			HP_CFG_tun_name HP_CFG_dns_port
+			HP_CFG_tun_name HP_CFG_dns_port HP_CFG_mixed_port \
+			HP_TEST_OCCUPIED_PORT HP_TEST_DOWN
 
-		. "$WORK/harness.sh"
 		. "$WORK/initd.sh"
 
 		# Override the log sink the init script just defined.
 		log() { hp_trace_log "$*"; }
 
-		start_service
-		printf 'start_service rc=%d\n' "$?" >> "$TRACE"
-		stop_service
-		printf 'stop_service rc=%d\n' "$?" >> "$TRACE"
-		service_stopped
-		printf 'service_stopped rc=%d\n' "$?" >> "$TRACE"
+		# Scenario D needs a good configuration in place first, so that the
+		# rollback has a real target to restore.  The candidate is switched
+		# to the already-taken port only for the reload.
+		if [ "$action" = "reload" ]; then
+			unset HP_TEST_OCCUPIED_PORT
+			start
+			printf 'prime start rc=%d\n' "$?" >> "$TRACE"
+			HP_CFG_mixed_port="${HP_TEST_OCCUPIED_AFTER:-5399}"
+			HP_TEST_OCCUPIED_PORT="${HP_TEST_OCCUPIED_AFTER:-5399}"
+			export HP_CFG_mixed_port HP_TEST_OCCUPIED_PORT
+			reload_service
+			printf 'reload_service rc=%d\n' "$?" >> "$TRACE"
+		else
+			start
+			printf 'start rc=%d\n' "$?" >> "$TRACE"
+		fi
+
+		stop
+		printf 'stop rc=%d\n' "$?" >> "$TRACE"
 	) >/dev/null 2>&1
 
 	# Record the files that ended up in the output directories, with
@@ -301,21 +428,30 @@ if ! grep -qF "$SANDBOX/sbin/ujail" "$WORK/initd.sh" "$SANDBOX/etc/homeproxy/scr
 fi
 
 # Scenario A: TUN client, bypass_mainland_china, no server, no ipv6.
-run_scenario "A-tun-bypass-client-only" \
+run_scenario "A-tun-bypass-client-only" start \
 	proxy_mode=tun routing_mode=bypass_mainland_china \
 	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0
 
 # Scenario B: tproxy client with a UDP node + ipv6, gfwlist, server enabled,
 # auto-update cron on.
-run_scenario "B-tproxy-gfwlist-ipv6-with-server" \
+run_scenario "B-tproxy-gfwlist-ipv6-with-server" start \
 	proxy_mode=redirect_tproxy routing_mode=gfwlist \
 	main_node=n1 main_udp_node=u1 server_enabled=1 ipv6_support=1 \
 	auto_update=1 auto_update_time=3
 
 # Scenario C: neither side configured -> the early return must stay early.
-run_scenario "C-nothing-configured" \
+run_scenario "C-nothing-configured" start \
 	proxy_mode=tun routing_mode=bypass_mainland_china \
 	main_node=nil main_udp_node=nil server_enabled=0 ipv6_support=0
+
+# Scenario D: the P0 regression.  A healthy configuration is started and
+# recorded, then a candidate whose mixed_port is already taken is reloaded.
+# The gate must reject it, the previous known-good must survive, and the
+# rollback must bring the service back on the old configuration.
+run_scenario "D-health-gate-rollback" reload \
+	proxy_mode=tun routing_mode=bypass_mainland_china \
+	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
+	HP_TEST_OCCUPIED_AFTER=5399
 
 rm -f "$DNSMASQ_CONF"
 
@@ -335,10 +471,10 @@ if [ ! -f "$GOLDEN" ]; then
 fi
 
 if diff -u "$GOLDEN" "$TRACE.norm" > "$WORK/trace.diff"; then
-	echo "PASS: runtime extraction is behaviour-identical to the pre-PR-05 init script"
-	echo "      ($(wc -l < "$GOLDEN") trace lines across 3 scenarios)"
+	echo "PASS: runtime orchestration matches $(basename "$GOLDEN")"
+	echo "      ($(wc -l < "$GOLDEN") trace lines across 4 scenarios)"
 else
-	echo "FAIL: the extracted runtime changed behaviour:"
+	echo "FAIL: the orchestration changed:"
 	head -80 "$WORK/trace.diff"
 	exit 1
 fi
