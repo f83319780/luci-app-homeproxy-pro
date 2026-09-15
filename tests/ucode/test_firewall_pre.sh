@@ -86,7 +86,7 @@ seed() {
 		printf "\toption proxy_mode '%s'\n" "$PROXY_MODE"
 		printf "\toption main_node '%s'\n" "$MAIN_NODE"
 		printf "config homeproxy 'infra'\n"
-		printf "\toption tun_name 'singtun0'\n"
+		printf "\toption tun_name '%s'\n" "${TUN_NAME:-singtun0}"
 		printf "config homeproxy 'server'\n"
 		printf "\toption enabled '%s'\n" "$SERVER_ENABLED"
 		for line in "$@"; do
@@ -119,6 +119,31 @@ run_scenario tun
 ROUTING_MODE='bypass_mainland_china' PROXY_MODE='tun' MAIN_NODE='nil' SERVER_ENABLED='0'
 seed no-tun
 run_scenario no-tun
+
+# --- scenario: a hostile tun_name is refused, not interpolated --------
+# It reaches the nft file fw4 loads as root, and the file's own threat model
+# already validates the server port and network for the same reason.
+ROUTING_MODE='bypass_mainland_china' PROXY_MODE='tun' MAIN_NODE='urltest' SERVER_ENABLED='0'
+TUN_NAME='singtun0 } ; chain evil { type filter hook prerouting priority 0; policy accept; }'
+seed bad-tun
+run_scenario bad-tun
+if ! grep -q 'WARN: ignoring invalid tun_name' "$WORK/bad-tun/out.txt"; then
+	echo "FAIL: firewall_pre: the invalid tun_name was refused without a warning"
+	FAILED=1
+fi
+# Whether a rule was emitted is asserted in the driver (bad-tun expects no
+# forward and no input fragment). Grepping out.txt for the payload would be a
+# false positive: the warning quotes the rejected value.
+unset TUN_NAME
+
+# --- a valid tun_name still reaches the ruleset ------------------------
+# The driver asserts the exact rules; this only confirms the guard did not
+# disable the feature wholesale.
+ROUTING_MODE='bypass_mainland_china' PROXY_MODE='tun' MAIN_NODE='urltest' SERVER_ENABLED='0'
+TUN_NAME='singtun9'
+seed good-tun
+run_scenario good-tun
+unset TUN_NAME
 
 # --- scenario: an enabled server with a valid port --------------------
 ROUTING_MODE='bypass_mainland_china' PROXY_MODE='redirect_tproxy' MAIN_NODE='urltest' SERVER_ENABLED='1'
