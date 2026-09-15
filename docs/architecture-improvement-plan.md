@@ -10,8 +10,10 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **70% ~ 75%**（PHASE 6 已接近完成，PHASE 9 到 75%，
-PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4）。
+按文档的 9 个 PHASE 取平均，目前约 **75% ~ 80%**（PHASE 6 已接近完成，PHASE 9 到 75%，
+PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
+§4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
+防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格）。
 剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
@@ -41,14 +43,14 @@ PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed
 |---|---|---|---|---|
 | ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
 | B | PHASE 8 LuCI 模块化（协议 registry 单一真源 + `components/`+`shared/` + 去重） | 大 | 高（浏览器流程无法自动化验证） | 9 – 15 |
-| C | §4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态） | 中 | 中（路径白名单可能影响既有配置） | 5 – 9 |
+| ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
 | D | PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码） | 中 | 中 | 4 – 7 |
 | E | PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射 | 中 | 中 | 4 – 7 |
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
 | G | PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐） | 中 | 低–中（on-target 部分需要设备/硬件） | 5 – 9 |
 | H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
 | I | 文档与注释债务（`architecture-review.md` 部分结论已失效、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计** | | | **43 – 75** |
+| | **合计（含已完成的 A、C 部分）** | | | **31 – 56** |
 
 **最小可用集合**（只求"稳、能跑、可维护"，跳过 PHASE 1/2/3/4/5/8 的结构重构）：
 **A + C + G ≈ 16 – 28 工时**。
@@ -626,17 +628,17 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 
 ## 4. 安全
 
-| 项 | 现状 | 建议 |
+| 项 | 现状 | 建议 / 落地 |
 |---|---|---|
-| RPC ACL | `acl.d/luci-app-homeproxy.json:13` 仍是 `"luci.homeproxy": ["*"]`，且挂在 `read` 下，覆盖 5 个**写**方法（`acllist_write`、`certificate_write`、`log_clean`、`resources_update`、`singbox_generator`），并自动授权未来新增方法 | 拆成显式 read 方法列表 + write 方法列表 |
-| 路径字段无后端校验 | `tls_cert_path`（`loader.uc:88`）、`tls_key_path`（`homeproxy.uc:392-393`）、ruleset `path`/`initial_path`（`client.js:1508,1558`，`datatype='file'`）只在浏览器里用 `validateCertificatePath`（`homeproxy.js:512-518`）检查，后端直接喂给以 root 运行的 sing-box | 在 Loader/Adapter 侧加白名单（允许 `/etc/homeproxy/...`），UI 校验只当 UX |
-| 订阅响应大小 | `wGETVerbose`（`homeproxy.uc:107`）无 `--max-filesize`/无上限，只靠 `--timeout=10`；整个 body 经 `executeCommand` 落盘再读（上限 512KB 截断，但下载已完成），随后整份 `decodeBase64Str` + `split(\n)` | 加 `--max-filesize`，并在 decode 前做长度上限 |
-| 订阅凭据泄漏 | `update_subscriptions.uc:97-140` 把完整 URL（可能含 token）写入 `/var/run/homeproxy/homeproxy.log` | 记录时脱敏（去掉 query/userinfo） |
-| `innerHTML` | 无"订阅节点名/URL 进 innerHTML"的路径（已确认 label 都走 `o.value()`）。唯一活 sink 是 `client.js:109` / `server.js:137` 的 `renderStatus(res, features.version)`，把后端解析的 `sing-box version` 字符串直接拼进 HTML | 改用 `E()`/`textContent`；`status.js:246-258` 的 `rawhtml` 也建议复查 |
-| 错误被静默吞掉 | `acllist_write` 返回 `{result:false,error}`（`luci.homeproxy:55-60`）但 `client.js:1680-1682,1712-1714` 完全忽略；`acllist_read` 的 error 同样被忽略 | 按 `homeproxy.js:494-498` 的模式上报 |
-| 前端 RPC 无统一封装 | 11 处 `rpc.declare`，`L.resolveDefault(p,{})` 吞掉所有失败 | 抽 `shared/rpc.js` |
-| 轮询泄漏 | `poll.add` 在 section render 内注册（`client.js:106-111`、`server.js:134-139`），`map.reset()` 会累积；`document.getElementById('service_status')` 未判空 | 移到 view 级注册一次 |
-| 证书上传竞态 | 固定 `/tmp/homeproxy_certificate.tmp`（`homeproxy.js:491`）被 4 个上传按钮共享 | 用唯一临时名 |
+| ~~RPC ACL~~ | ~~`acl.d/luci-app-homeproxy.json:13` 仍是 `"luci.homeproxy": ["*"]`，且挂在 `read` 下，覆盖 5 个**写**方法（`acllist_write`、`certificate_write`、`log_clean`、`resources_update`、`singbox_generator`），并自动授权未来新增方法~~ | ~~拆成显式 read 方法列表 + write 方法列表~~ ✅ 已落地（commit `d9a4dac`）—— `read`/`write` 各自枚举 5 个方法；文件路径按读/写分别列出。 |
+| ~~路径字段无后端校验~~ | ~~`tls_cert_path`（`loader.uc:88`）、`tls_key_path`（`homeproxy.uc:392-393`）、ruleset `path`/`initial_path`（`client.js:1508,1558`，`datatype='file'`）只在浏览器里用 `validateCertificatePath`（`homeproxy.js:512-518`）检查，后端直接喂给以 root 运行的 sing-box~~ | ~~在 Loader/Adapter 侧加白名单（允许 `/etc/homeproxy/...`），UI 校验只当 UX~~ ✅ 已落地（commit `d9a4dac`）—— 新增 `homeproxyuc:validateHomeProxyPath()` 接受 `/etc/homeproxy/...` 与 `/tmp/homeproxy_*`，buildTLSObject 与 build_user_rulesets 调用它；非法路径 → null → sing-box 拒绝（known-good 路径生效）。 |
+| ~~订阅响应大小~~ | ~~`wGETVerbose`（`homeproxy.uc:107`）无 `--max-filesize`/无上限，只靠 `--timeout=10`；整个 body 经 `executeCommand` 落盘再读（上限 512KB 截断，但下载已完成），随后整份 `decodeBase64Str` + `split(\n)`~~ | ~~加 `--max-filesize`，并在 decode 前做长度上限~~ ✅ 已落地（commit `d9a4dac`）—— `wGETVerbose` 加 `--max-filesize=5m`；5 MiB 覆盖 10000 节点订阅（3 KB/node + base64 膨胀），更大几乎肯定是攻击或配错。 |
+| ~~订阅凭据泄漏~~ | ~~`update_subscriptions.uc:97-140` 把完整 URL（可能含 token）写入 `/var/run/homeproxy/homeproxy.log`~~ | ~~记录时脱敏（去掉 query/userinfo）~~ ✅ 已落地（commit `d9a4dac`）—— 新增 `homeproxyuc:redactUrl()`，把 userinfo 替成 `***`、query 替成 `?***`；update_subscriptions.uc 与 subscription/fetcher.uc 走它；原 URL 仍喂给 wGET（只脱敏日志）。 |
+| ~~`innerHTML`~~ | ~~无"订阅节点名/URL 进 innerHTML"的路径（已确认 label 都走 `o.value()`）。唯一活 sink 是 `client.js:109` / `server.js:137` 的 `renderStatus(res, features.version)`，把后端解析的 `sing-box version` 字符串直接拼进 HTML~~ | ~~改用 `E()`/`textContent`；`status.js:246-258` 的 `rawhtml` 也建议复查~~ ✅ 已落地（commit `0bd1b65`）—— `renderStatus()` 在 client.js/server.js 都加 `^[\w.\-+]+$` allow-list regex，不匹配回退 `'unknown'`。 |
+| ~~错误被静默吞掉~~ | ~~`acllist_write` 返回 `{result:false,error}`（`luci.homeproxy:55-60`）但 `client.js:1680-1682,1712-1714` 完全忽略；`acllist_read` 的 error 同样被忽略~~ | ~~按 `homeproxy.js:494-498` 的模式上报~~ ✅ 已落地（commit `0bd1b65`）—— `load` 取出 `res.error` 走 `ui.addNotification`；`write`/`remove` 取出 `ret.error` 走 `throw` 让表单 save-error 流接住。 |
+| 前端 RPC 无统一封装 | 11 处 `rpc.declare`，`L.resolveDefault(p,{})` 吞掉所有失败 | 抽 `shared/rpc.js`（后续 PR） |
+| ~~轮询泄漏~~ | ~~`poll.add` 在 section render 内注册（`client.js:106-111`、`server.js:134-139`），`map.reset()` 会累积；`document.getElementById('service_status')` 未判空~~ | ~~移到 view 级注册一次~~ ✅ 已落地（commit `0bd1b65`）—— client.js/server.js 各自加 `let *_status_poll_registered = false` 模块级守卫；poll.add 移到 view 级，`getElementById` 加 null check。 |
+| ~~证书上传竞态~~ | ~~固定 `/tmp/homeproxy_certificate.tmp`（`homeproxy.js:491`）被 4 个上传按钮共享~~ | ~~用唯一临时名~~ ✅ 已落地（commit `0bd1b65`）—— 前端 `homeproxy.js:uploadCertificate` 按 `filename` 派生 `/tmp/homeproxy_cert_<filenameUci>.tmp`；后端 `luci.homeproxy:certificate_write` 也按 `filename` 读对应路径；ACL 写列表枚举 4 条路径（与 `d9a4dac` 配套）。 |
 
 ---
 
