@@ -62,7 +62,7 @@ import { get_outbound } from './common.uc';
  * import the adapter directly. */
 export function generate_endpoint(node, ctx) {
 	return EndpointFactory.create(node, ctx);
-}
+};
 
 /* Build one outbound from a Node via the Adapter layer. A direct node
  * with override_address / override_port also gets recorded into the
@@ -88,7 +88,7 @@ export function generate_outbound(node, mark, direct_overrides) {
 		};
 
 	return OutboundFactory.create(node, mark);
-}
+};
 
 /* Keep only the candidate ids the Adapter can actually build.
  *
@@ -303,4 +303,4 @@ export function build_outbounds(config, dm, ctx, direct_overrides) {
 		buildCustomOutbounds(dm, config, ctx, direct_overrides);
 
 	return config;
-}
+};

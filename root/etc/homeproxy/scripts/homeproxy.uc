@@ -69,7 +69,7 @@ export function validateHomeProxyPath(p) {
 		return true;
 
 	return false;
-}
+};
 
 export function executeCommand(...args) {
 	let outfd = null, errfd = null;
@@ -193,7 +193,7 @@ export function redactUrl(url) {
 		u = substr(u, 0, q) + '?***';
 
 	return u;
-}
+};
 /* Utilities end */
 
 /* String helper start */

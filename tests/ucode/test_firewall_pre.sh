@@ -42,17 +42,36 @@ mkdir -p "$STAGE"
 cp "$ROOT/tests/ucode/mocks/homeproxy_firewall.uc" "$STAGE/homeproxy.uc"
 cp "$ROOT/tests/ucode/test_firewall_pre.uc" "$STAGE/"
 
-# Stage a cursor-redirected copy of firewall_pre.uc.
-sed 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
+# Stage a cursor-redirected copy of firewall_pre.uc, with the shebang
+# dropped.
+#
+# The cursor redirect is the usual no-test-seam-in-production staging: the
+# test layer rewrites the one line that would otherwise open the live
+# /etc/config.
+#
+# The shebang is dropped because the target ucode rejects a `#!` line when
+# the file is loaded as a *module* ("Unexpected character"), and this test
+# imports firewall_pre.uc. Production runs it as a program
+# (`ucode "$HP_DIR/scripts/firewall_pre.uc"`), where the shebang is both
+# allowed and meaningful, so this is a staging concern and not something to
+# change in the source.
+sed -e '1{/^#!\/usr\/bin\/ucode$/d;}' \
+	-e 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
 	"$ROOT/root/etc/homeproxy/scripts/firewall_pre.uc" > "$STAGE/firewall_pre.uc"
 
-# Hard guard: if the anchor stops matching the sed no-ops and the
-# script would then read the *real* /etc/config and write real nft
-# fragments into /var/run. Refuse to run instead of silently
+# Hard guard: if an anchor stops matching, the sed no-ops. Losing the
+# cursor redirect means the test would read the *real* /etc/config and write
+# real nft fragments into /var/run; losing the shebang strip means the
+# module cannot be imported at all. Refuse to run rather than silently
 # testing the live configuration.
 if ! grep -q 'cursor(ARGV\[0\])' "$STAGE/firewall_pre.uc"; then
 	echo "FAIL: firewall_pre: could not redirect the UCI cursor"
 	echo "      (the 'const uci = cursor();' anchor no longer matches)"
+	exit 1
+fi
+if head -1 "$STAGE/firewall_pre.uc" | grep -q '^#!'; then
+	echo "FAIL: firewall_pre: the shebang was not stripped"
+	echo "      (the '#!/usr/bin/ucode' anchor no longer matches)"
 	exit 1
 fi
 

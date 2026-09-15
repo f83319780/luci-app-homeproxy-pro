@@ -27,7 +27,7 @@ export function wGETVerbose(url, _ua) {
 	const content = global.HP_TEST_WGET_CONTENT;
 	const error = global.HP_TEST_WGET_ERROR;
 	return { content: content, error: error };
-}
+};
 
 export function isEmpty(res) {
 	return !res || res === 'nil' || (type(res) in ['array', 'object'] && length(res) === 0);
@@ -47,4 +47,4 @@ export function redactUrl(url) {
 	if (q !== -1)
 		u = substr(u, 0, q) + '?***';
 	return u;
-}
+};

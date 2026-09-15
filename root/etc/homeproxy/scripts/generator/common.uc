@@ -65,7 +65,7 @@ export function get_outbound(cfg, dm) {
 		else
 			return 'cfg-' + rn.node + '-out';
 	}
-}
+};
 
 /* Resolve a UCI resolver reference (a dns_server section name or one of
  * the sentinels) into a sing-box resolver tag. */
@@ -80,7 +80,7 @@ export function get_resolver(cfg) {
 	default:
 		return 'cfg-' + cfg + '-dns';
 	}
-}
+};
 
 /* Resolve a UCI ruleset reference list (array of ruleset section names)
  * into the corresponding sing-box rule_set tag list. */
@@ -92,7 +92,7 @@ export function get_ruleset(cfg) {
 	for (let i in cfg)
 		push(rules, isEmpty(i) ? null : 'cfg-' + i + '-rule');
 	return rules;
-}
+};
 
 /* Resolve the direct-node destination override that the route builder
  * needs for a `direct` routing_node target. The override is recorded
@@ -113,7 +113,7 @@ export function get_direct_override(outbound_selector, dm, direct_overrides) {
 		const node = rn && rn.node;
 		return (!isEmpty(node) && node !== 'urltest') ? (direct_overrides[node] || null) : null;
 	}
-}
+};
 
 /* True when `tag` (the sing-box outbound tag) belongs to a direct outbound.
  * Used by the http_clients builder to drop the detour field on a pure-TUN
@@ -129,7 +129,7 @@ export function isDirectOutboundTag(tag, dm) {
 	const node_name = (rn && rn.node) || tag;
 	const node = ConfigQuery.node_by_id(dm, node_name);
 	return !!(node && node.type === 'direct');
-}
+};
 
 /* Append the sing-box JSON $schema field. Kept here because the value is
  * fixed and the two generators used to spell it the same way; if it ever
@@ -137,7 +137,7 @@ export function isDirectOutboundTag(tag, dm) {
 export function attachSchema(config) {
 	config['$schema'] = 'https://sing-box.sagernet.org/schema.json';
 	return config;
-}
+};
 
 /* Attach the experimental cache_file block when one of the routing modes
  * that needs it is active. Routing-mode gating stays here because the
@@ -153,4 +153,4 @@ export function attachExperimental(config, routing_mode, dns_store_dns) {
 		};
 	}
 	return config;
-}
+};

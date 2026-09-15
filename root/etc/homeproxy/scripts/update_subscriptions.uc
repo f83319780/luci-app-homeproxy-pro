@@ -38,10 +38,8 @@ import { open, readfile, writefile } from 'fs';
 import { connect } from 'ubus';
 import { cursor } from 'uci';
 
-import { init_action } from 'luci.sys';
-
 import {
-	wGETVerbose, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl
+	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl
 } from 'homeproxy';
 
 import { parse_uri } from './parser/uri.uc';
@@ -225,7 +223,21 @@ function main() {
 	 * only ever restarted onto a config that passed `sing-box
 	 * check`. */
 	log('Reloading service...');
-	init_action('homeproxy', 'reload');
+
+	/* Run the init script directly. The previous code called
+	 * `init_action('homeproxy', 'reload')` imported from luci.sys, but
+	 * neither openwrt/luci nor immortalwrt/luci exports an `init_action`
+	 * from that module (it has process_list / conntrack_list /
+	 * init_list / init_index / init_enabled), so the import failed to
+	 * resolve and this script could not load on a router at all.
+	 *
+	 * executeCommand() is the package's own runner (homeproxy.uc); unlike
+	 * a bare system() call it returns the exit status and the captured
+	 * stderr, so a failed reload is recorded instead of disappearing. */
+	const reload = executeCommand('/etc/init.d/homeproxy', 'reload');
+	if (reload.exitcode !== 0)
+		log(sprintf('Warning: reload exited with status %d: %s',
+			reload.exitcode, trim(reload.stderr || '')));
 
 	log(sprintf('%s nodes added, %s removed.', added, removed));
 	log('Successfully updated subscriptions.');

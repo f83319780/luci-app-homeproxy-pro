@@ -297,4 +297,4 @@ export function generate(dm) {
 	attachSchema(config);
 
 	return config;
-}
+};

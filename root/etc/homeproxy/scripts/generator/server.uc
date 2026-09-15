@@ -64,4 +64,4 @@ export function generate_server(dm) {
 	config['$schema'] = 'https://sing-box.sagernet.org/schema.json';
 
 	return config;
-}
+};
