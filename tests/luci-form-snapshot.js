@@ -10,7 +10,7 @@
  * snapshots diffed, so that a pure refactor can be proven not to change any
  * option name, dependency, default or label.
  *
- * Usage: node tests/luci-form-snapshot.js <repo-root> [node|server]
+ * Usage: node tests/luci-form-snapshot.js <repo-root> [node|client|server]
  */
 
 'use strict';
@@ -175,7 +175,25 @@ const deps = {
 	baseclass, form, fs: fsMock, rpc, uci, ui, view, poll,
 	'luci.http': { urldecode: (s) => s, urlencode: (s) => s, urldecode_params: () => ({}) },
 	'luci.sys': { init_action: () => {} },
-	'tools.widgets': widgets
+	'tools.widgets': widgets,
+	/* tools.firewall exports two helpers - addIPOption / addMACOption -
+	 * that wire a TextValue into the firewall zone matcher UI. The
+	 * real implementation reads UCI host sections and renders a
+	 * multi-select with validation. The snapshot only needs the
+	 * shape of the returned option object so we stub them out:
+	 * each one returns a TaggedValue-like object with the same
+	 * `.value`/`.datatype`/`.depends`/`.validate` interface that
+	 * the form framework traverses during rendering. The snapshots
+	 * are pure structural diffs; this mock only has to keep the
+	 * form render from throwing. */
+	'tools.firewall': {
+		addIPOption(section, _optName, _title, _description, _family, _hosts, _noHostCheck) {
+			return section.option(form.Value, _optName, _title, _description);
+		},
+		addMACOption(section, _optName, _title, _description, _hosts) {
+			return section.option(form.Value, _optName, _title, _description);
+		}
+	}
 };
 
 /* --- LuCI runtime mock end --------------------------------------------- */
@@ -195,7 +213,9 @@ function main() {
 	const root = process.argv[2];
 	const target = process.argv[3] || 'node';
 	if (!root)
-		throw new Error('usage: luci-form-snapshot.js <repo-root> [node|server]');
+		throw new Error('usage: luci-form-snapshot.js <repo-root> [node|client|server]');
+	if (!['node', 'client', 'server'].includes(target))
+		throw new Error(`unknown snapshot target: ${target} (expected node|client|server)`);
 
 	const viewDir = path.join(root, 'htdocs/luci-static/resources');
 	const homeproxy = loadLuciModule(path.join(viewDir, 'homeproxy.js'), {});
@@ -204,7 +224,8 @@ function main() {
 	const features = {
 		version: '1.14.0',
 		with_acme: true, with_grpc: true, with_gvisor: true, with_quic: true,
-		with_utls: true, with_wireguard: true, hp_has_tcp_brutal: true
+		with_utls: true, with_wireguard: true, hp_has_tcp_brutal: true,
+		hp_has_tproxy: true, hp_has_tun: true, hp_has_ip_full: true
 	};
 
 	const rendered = mod.render([ undefined, features ]);
