@@ -17,7 +17,7 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **92% ~ 95%**（PHASE 6 已接近完成，PHASE 9 到 95%，
+按文档的 9 个 PHASE 取平均，目前约 **95%**（PHASE 6 已接近完成，PHASE 9 到 95%，
 PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
 §4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
 防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
@@ -33,7 +33,11 @@ validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 
 **PHASE 5 Subscription Pipeline 收尾已落地** —— `parser/flatten.uc` 补 canonical ↔ flat
 闭环；`Repository = { apply_nodes, apply_main_node_refs, scrub_stale_urltest_refs }`
 接收 canonical Node，把 6 处 `uci.set/commit` 收敛；`update_subscriptions.uc` 改用
-`Loader.load()` 读 subscription，自己零 UCI 写入，详见 §2.5）。
+`Loader.load()` 读 subscription，自己零 UCI 写入，详见 §2.5；
+**PHASE 3 Protocol Adapter 收尾已落地** —— `Inbound` 领域模型 + `InboundFactory`，
+WireGuard 走 `EndpointFactory`，`generator/server.uc` 只剩编排；
+同时修掉 PR-01～03 引入的 12 处缺陷（详见 §2.3.1 —— 它们此前从未被 CI 跑到，
+因为 CI 的 toolchain 构建步骤一直失败，本次一并修好）。
 剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
@@ -41,7 +45,7 @@ validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 
 | 0 | Baseline | ✅ 完成 | 文档化充分 |
 | 1 | Domain Model | ✅ ~95% | PR-01 已落地（commit `ca01141`）：`load_sections()` 走 `normalize_section()`，所有 list-section 形状统一（`.name`/`.index`/`.type` 已 drop、`name` 暴露、`enabled` 强制 boolean）；`Node.raw` / `Config.endpoints` / `ConfigQuery.{node_ids,main_node_id,endpoints}` 全删；剩余 = server inbound 领域化（PR-04） |
 | 2 | Parser | ✅ ~90% | PR-02 已落地（commit 33994fa）：`scripts/parser/{uri,protocols,validator,normalize,mapping}.uc` 建好；`loader.uc` 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc` 导入；剩余 = Repository 切到 canonical Node 写（PR-03）+ validator 扩展（missing_credential / invalid_tls，后续 PR） |
-| 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`generate_endpoint` 仍是独立函数，`direct_overrides` 已随 PHASE 4 改成显式参数 |
+| 3 | Protocol Adapter | ✅ ~95% | PR-04 已落地（commit f657063）：`Inbound` 领域模型 + `INBOUND_CREDENTIALS`/`INBOUND_OPTIONS`/`INBOUND_COMMON`/`INBOUND_TLS_SERVER` 四张表；`InboundFactory` 与 `OutboundFactory` 同形；WireGuard endpoint 也搬进 `EndpointFactory`，Generator 不再持有协议构建逻辑；`generator/server.uc` 165 → 60 行；顺带修掉 fixture 的 `listen_port` 缺陷并新增 inbound golden 快照 |
 | 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
 | 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
@@ -55,8 +59,7 @@ validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 
 PHASE 1 Domain Model 收尾（PR-01）、PHASE 2 Parser 目录化 + 归一化 + 校验分离（PR-02）、
 PHASE 5 Subscription Pipeline 收尾（PR-03）也已落地**（commits `ca01141` + 33994fa +
 e88f7c7），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，而是纯粹的结构性债务：
-**可维护性**（PHASE 8 LuCI 模块化）与**server inbound 领域化**（PHASE 3，
-PR-04 / H2）。
+**可维护性**（PHASE 8 LuCI 模块化）与**运行时抽离**（PHASE 7）。
 
 ### 0.3 剩余大项与工时估算
 
@@ -73,16 +76,16 @@ PR-04 / H2）。
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
 | ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 | ~~H1~~ | ~~PHASE 5 收尾（normalizer/validator、6 处 `uci.set/commit` 收敛、Repository canonical Node 写）~~ | ~~中~~ | ~~低–中~~ | ~~5 – 8~~ ✅ 已落地（commit e88f7c7，PR-03） |
-| H2 | PHASE 3 server inbound 领域化（`generator/server.uc` 走 Domain Model / Adapter） | 中 | 中 | 3 – 5 |
+| ~~H2~~ | ~~PHASE 3 server inbound 领域化（`generator/server.uc` 走 Domain Model / Adapter）~~ | ~~中~~ | ~~中~~ | ~~3 – 5~~ ✅ 已落地（commit f657063，PR-04） |
 | I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（A / C / D / E / G / H1 已完成）** | | | **15 – 28** |
+| | **合计（A / C / D / E / G / H1 / H2 已完成）** | | | **12 – 23** |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
 ~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
 `db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`），**D 也已完成**（`ca01141`），
-**E 也已完成**（33994fa）。原定的三步顺序已走完：A → C → G → D → E → H1。
-**下一批从 H2 开始**（PHASE 3 server inbound 领域化），再 F（等有 on-target CI
-再做），最后 B（LuCI 模块化，必须配人工回归）。
+**E 也已完成**（33994fa）。原定的三步顺序已走完：A → C → G → D → E → H1 → H2。
+**下一批从 F 开始**（PHASE 7 Runtime 抽离，等有 on-target CI 再做），最后 B
+（LuCI 模块化，必须配人工回归）。
 
 **无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
 - 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
@@ -481,25 +484,123 @@ Generator golden 字节级一致（client / custom / wireguard / partial_invalid
 本机 `python3 tests/i18n-coverage.py` 724/724 PASS；
 `tests/luci-form-snapshot.js` node / client / server 三份快照一致。
 
-### 2.3 PHASE 3 — Adapter 收尾
+### 2.3 PHASE 3 — Adapter 收尾 ~~（PR-04）~~ ✅ 已落地（commit f657063）
 
-现状：`adapter.uc` 用 `COMMON_FIELDS` + `CLAIM_FIELDS` + `OPTION_FIELDS` + `REQUIRED_CREDENTIALS`
-四张表替代了 110 行三元表达式，这是本次重构最成功的部分，值得保留。
+> ~~现状：`adapter.uc` 用 `COMMON_FIELDS` + `CLAIM_FIELDS` + `OPTION_FIELDS` + `REQUIRED_CREDENTIALS`
+> 四张表替代了 110 行三元表达式，这是本次重构最成功的部分，值得保留。~~
+>
+> ~~遗留：~~
+> ~~1. **WireGuard endpoint 未 Adapter 化**（§1.2）。~~
+> ~~2. `direct_overrides` 仍是模块级全局副作用……~~ ✅ 已在 PHASE 4 中落地（`0c67d77`）：
+> `generate_outbound(node, mark, direct_overrides)` 把 override 写进 caller 持有的 map，
+> route builder 从同一个 map 读出 route-options action，不再有模块级状态。
+> ~~3. `CLAIM_FIELDS` 与 `OPTION_FIELDS.hysteria/hysteria2` 里 `auth`/`auth_str` 重复出现……~~
+> ~~4. `generate_server.uc` **完全没有走 Domain Model / Adapter**……建议增加
+> `EndpointFactory`/`InboundFactory` 与 `Node` 对称的 server 模型。~~
 
-遗留：
-1. **WireGuard endpoint 未 Adapter 化**（§1.2）。
-2. ~~`direct_overrides` 仍是模块级全局副作用（`generate_client.uc:202,292-296`，route builder 在
-   `:912,924,1014` 读它）。文档建议的 `Node.raw.direct_overrides` / 数据化没有落地。
-   建议改成 `generate_outbound()` 返回 `{outbound, override}`，或在 route 层直接查
-   `node.protocol_options.override_address`（数据已经在 Node 里了，`loader.uc:254-257`）。~~ ✅
-   已在 PHASE 4 中落地（commit `0c67d77`）—— `generate_outbound(node, mark, direct_overrides)`
-   把 override 写进 caller 持有的 map，route builder 从同一个 map 读出 route-options action，
-   不再有模块级状态。
-3. `CLAIM_FIELDS` 与 `OPTION_FIELDS.hysteria/hysteria2` 里 `auth`/`auth_str` 重复出现
-   （`adapter.uc:150-154` 与 `:227-237`），`CLAIM_FIELDS` 的那两份是死代码（会被 OPTION_FIELDS 覆盖）。
-4. `generate_server.uc` **完全没有走 Domain Model / Adapter**：它从 `dm.server.inbounds` 拿到的是
-   扁平 UCI dict，然后逐字段 `cfg.snell_version` / `cfg.shadowsocks_encrypt_method`（`:61-158`）。
-   server 端等于没重构。建议增加 `EndpointFactory`/`InboundFactory` 与 `Node` 对称的 server 模型。
+**落地形态**（commit f657063）：
+
+§A — `Inbound` 领域模型（`config/model.uc`）。与 `Node` 对称，同样不知道 sing-box JSON：
+
+* `Inbound.create()`：`id` / `name` / `type` / `enabled` / `address` / `port` / `firewall`
+  + 6 个子对象 `common` / `credentials` / `tls` / `tls_server` / `transport` / `multiplex`
+  / `protocol_options`。
+* `Inbound.validate()`：协议无关的 port 校验（listen address 缺省是合法的，sing-box 默认全接口）。
+* `Inbound.tag()`：`'cfg-' + id + '-in'`（用 UCI section name 而不是 label，改 label 不改 tag）。
+* 四张表：`INBOUND_CREDENTIALS`（canonical → UCI，服务端版本：无 ssh 材料、无 snell userkey）、
+  `INBOUND_OPTIONS`（每协议选项，注意**不是** client `PROTOCOL_TO_UCI` 的超集：服务端多
+  `anytls_padding_scheme` / `hysteria_masquerade` / `hysteria_obfs_min|max_packet_size` /
+  `hysteria_ignore_client_bandwidth` / `tuic_auth_timeout`，少 port-hopping 系列）、
+  `INBOUND_COMMON`（监听层共享字段）、`INBOUND_TLS_SERVER`（服务端专属 TLS 尾巴：key material、
+  ACME 全套、REALITY 服务端握手、ECH key —— 共 25 个键）。
+
+§B — `InboundFactory` + `EndpointFactory`（`config/adapter.uc`）：
+
+* `InboundFactory` = `{ problems, buildable, tryCreate, create }`，与 `OutboundFactory` 同形。
+  四张 sing-box 侧表：`INBOUND_COMMON_FIELDS` / `INBOUND_COMMON_OMIT`（snell 不得拿到
+  `udp_fragment` / `udp_timeout` / `network`）/ `INBOUND_NO_USERS`（snell、shadowsocks 不得有
+  `users[]`）/ `INBOUND_OPTION_FIELDS`。最后统一走 `removeBlankAttrs()`，所以返回的就是最终产物，
+  可以直接进 golden 快照。
+* `INBOUND_TLS_SERVER` 的反向重命名只在 `build_tls_server_extras()` 一处发生 —— 共享的
+  `buildTLSObject()`（被 `test_tls_transport.uc` 直接锁定）签名不动。
+* `EndpointFactory` = WireGuard endpoint 的构建，从 `generator/outbound.uc` 搬过来。
+  `generator/outbound.uc` 的 `generate_endpoint()` 现在只是一层委托，Generator 不再持有
+  任何协议的构建逻辑。
+* 顺带把 `parse_port()` 从 `generator/common.uc` 搬到 `homeproxy.uc`：Adapter 需要它，
+  而 adapter 不能反向 import generator。
+
+§C — `loader.uc::load_server()` 现在产 `Inbound` 对象（`load_inbound()` + 通用的
+`load_table()`），不再是 `load_sections()` 的裸 section dict。
+
+§D — `generator/server.uc` 从 165 行缩到 60 行：只做 `enabled` 过滤、log 块、`InboundFactory.create()`，
+以及"没有 inbound 就返回 null（= 服务端禁用）"这条编排决策。
+
+§E — 修掉一个**潜藏的 fixture 缺陷**：`tests/fixtures/generators/server.uci` 一直写
+`option listen_port`，而表单（`server.js:216,221`）和生成器（`cfg.port`）用的都是
+`address` / `port`。于是生成的 server 配置**根本没有 listen_port**，`sing-box check` 也接受了，
+没有任何测试发现。fixture 改成 `address` + `port`（并让 `s_snell` 不带 address，
+覆盖 `listen` 默认 `::` 的路径），同时新增
+`tests/ucode/test_golden_inbounds.sh` + `tests/snapshots/generator/inbounds.json`
+把 7 个协议的 inbound 输出钉住 —— 这一类"字段名写错但 schema 不报错"的问题以前没有任何防线。
+
+§F — 防回归：
+* `tests/ucode/test_inbound_adapter.uc`（82 项）：snell / shadowsocks 不得有 `users[]`；
+  vless / vmess 的 `flow` / `alterId` 只能在 `users[]` 里；snell 的监听层字段集合；
+  服务端 TLS 尾巴（含 REALITY 服务端 private_key + handshake，且**不能**出现客户端侧
+  `insecure` / `utls` / `public_key`）；hysteria v1 `obfs` 是字符串而 v2 是对象；
+  每协议 credential 必填校验；multiplex 服务端形状（无 `protocol` / `max_connections` 等拨号侧字段）。
+* `tests/ucode/test_protocol_inventory.sh` 增加第 4 项不变量：`INBOUND_OPTIONS` 的每个协议
+  都必须有 `INBOUND_CREDENTIALS` 行（反方向不成立：trojan / shadowtls / http / mixed / naive /
+  socks 有 credential 没有 per-protocol option）。
+* `tests/ucode/run.sh` 通过 `tests/ucode/test_generators.sh` 复用同一个 fixture，
+  `server` case 现在真的会带 `listen_port`。
+
+**字节级一致性**（对比基线 `19eb77c` 的 server 输出）：7 个 inbound 逐个 diff，
+除 (a) fixture 修正带来的 `listen` / `listen_port` 新增、(b) ACME `data_directory` 的
+路径差异（work dir 不同，属于允许的 path-only 差异）以外**完全相同**，
+包括 snell 的 `psk` / `version` / `obfs_mode`、shadowsocks 的 `method` / `password`、
+hysteria2 的 obfs 对象、tuic 的 4 个字段、所有 `users[]`、`tls`、`transport`、`multiplex`。
+
+**不在本 PR 范围**：
+* `CLAIM_FIELDS` 里 hysteria 的 `auth` / `auth_str` 与 `OPTION_FIELDS` 重复这件事（本 PR
+  未动 client outbound 侧；server 侧的 `INBOUND_CLAIM_FIELDS` 与 `INBOUND_OPTION_FIELDS`
+  是分开的，不存在这个重复）。
+* 服务端 inbound 的 `sing-box check` 之外的语义正确性（例如某个字段的取值是否被 sing-box
+  在运行时接受）仍只能在真机验证。
+
+### 2.3.1 PR-04 顺带修复：本机测试套件暴露的既有缺陷
+
+PR-04 推进过程中第一次在装有 ucode testbed 的机器上完整跑 `tests/ucode/run.sh`，
+暴露出 PR-01 / PR-02 / PR-03 引入的、**CI 从未跑到**的缺陷（CI 的
+"Build ucode toolchain" 步骤一直失败，见 §2.9）。逐条修复：
+
+| 缺陷 | 引入于 | 症状 | 修复 |
+|---|---|---|---|
+| `loader.uc::normalize_section()` 用 `k[0]` 取字符串首字符 | PR-01 `ca01141` | 目标 ucode 报 "left-hand side expression is not an array or object"。`normalize_section()` 在 `load_sections()` 里，**每次客户端生成都会走到** —— 等于 PR-01 之后所有生成都直接失败 | 改用 `substr(k, 0, 1)`（`repository.uc` 一直是这个写法） |
+| `parser/uri.uc` 漏 import `isEmpty` | PR-02 `33994fa` | 分享链接解析路径直接 Reference error | import 补上 |
+| `parser/validator.uc` 用 `errors.push({...})` | PR-02 `33994fa` | ucode 没有数组方法，报 "left-hand side is not a function"；只在真有校验失败时触发 | 改成 `errors = [...errors, {...}]`（ucode 惯用法） |
+| `parser/uri.uc` 写 `validate(config, log) \|\| config` | PR-02 `33994fa` | 校验返回 `null` 时 `\|\| config` 又把**非法 config** 交回去了，validator 完全失效 | 改成先判 `null` 再取 label |
+| `anytls` / `http` 两个 parser 凭记忆重写而非搬运 | PR-02 `33994fa` | `anytls` 丢 `tls_insecure`、错加 `tls_sni`/`tls_alpn`；`http` 多出 `tls_sni`/`tls_alpn` | 从 `19eb77c` 逐字恢复；并用脚本比对全部 11 个 `parse_*` 函数体与原文一致 |
+| `repository.uc` 用对象解构 `const { … } = ctx` | PR-03 `e88f7c7` | 目标 ucode 明确拒绝（grammar canary 就是测这个），订阅更新路径在真机上会直接失败 | 逐字段取值 |
+| `repository.uc` 漏 import `isEmpty` | PR-03 `e88f7c7` | `apply_main_node_refs()` Reference error | import 补上 |
+| `parser/flatten.uc` 用 `undefined` | PR-03 `e88f7c7` | ucode 无 `undefined` 全局，直接 Reference error | 只判 `null` |
+| `flatten_transport()` 一律写 `http_path` | PR-03 `e88f7c7` | ws 传输的 path 会变成 `http_path`，与 parser 的 `ws_path` 不一致 —— 下一轮订阅更新会把该节点的 `ws_path` 删掉 | 按 transport 类型分别写 `ws_path` / `http_path` |
+| `PROTOCOL_TO_UCI.hysteria` 缺 `protocol` | PR-03 `e88f7c7` | `hysteria_protocol`（节点表单 `node.js:182` 会写）在 canonical 映射里没有位置，同样会在下一轮订阅更新时被删掉 | 补 `protocol: 'hysteria_protocol'` |
+| `test_generators.sh` / `test_golden_outbounds.sh` 未 stage `parser/` | PR-02 `33994fa` | Loader 的 `'../parser/mapping.uc'` 解析失败，5 个 generator case 全红 | stage `parser/` 为 `config/` 的兄弟目录 |
+| `test_protocol_inventory.sh` 仍从 `loader.uc` import `PROTOCOL_OPTIONS` | PR-02 `33994fa` | 同名导出已搬到 `parser/mapping.uc` | 改 import 来源 |
+| `test_parser_normalize.uc` 断言 `transport.host` 对 ws 成立 | PR-02 | 断言写错（ws 的 host 在 `headers.Host`） | 修正断言并写明原因 |
+| `test_domain_model_skeleton.uc` 用 `type(x) !== 'boolean'` | PR-01 `ca01141` | ucode 的 `type(true)` 返回 `'bool'` | 改成 `'bool'` |
+| `test_subscription_repository.uc` 用 `match(s, 'plain string')` | PR-03 `e88f7c7` | ucode 的 `match()` 只接受正则，字符串直接返回 `null`；断言恒假 | 改用正则字面量 |
+| sandbox 里没有 `config homeproxy 'config'` section | — | libuci 对不存在的 named section 会建匿名 section，`main_node` 断言读不回来 | seed 补上该 section |
+
+结果：`tests/ucode/run.sh` 的失败集合与基线 `19eb77c` **完全一致**（仅剩 4 项
+本机环境限制：grammar canary 用的是较宽松的 ucode 构建、`luci.sys` 在主机上不导出
+`init_action`、`firewall_post.ut` 渲染需要真机上下文），62 项 PASS，零回归。
+
+同时修掉了让 CI 长期失效的根因：`tests/toolchain/build-ucode-linux.sh` 构建
+liblucihttp 时没传 `-I$PREFIX/include`（ucode/module.h）和 `-L$PREFIX/lib`（bare `-lucode`），
+所以 "Build ucode toolchain" 一直在第一步就失败，`run.sh` 从未在 CI 里跑过。
+macOS 版本的脚本一直有这两个 flag。**这是 PR-01～03 的缺陷能一路推到 main 的直接原因。**
 
 ### 2.4 PHASE 4 — Generator 拆分 ~~（当前 0%，但收益最直接）~~ ✅ 已落地（commit `0c67d77`）
 
@@ -922,9 +1023,17 @@ P2（结构）
       读 subscription，自己零 UCI 写入；新增 test_parser_flatten.uc 锁 round-trip
       等式，test_subscription_repository.uc 加 12 项 main_node / scrub 断言
 
-**下一步（PR-04 / F / B）**：18 → 19 → 20，按指导文档 §七的 PR 路线，做
-PR-04 Server Inbound 走 Domain Model（修 PR-01 §B 留给 §2.3 的 server inbound 领域化），
-再 F（等有 on-target CI 再做），最后 B（LuCI 模块化，必须配人工回归）。
+31. ✅ refactor(adapter): PR-04 Protocol Adapter Completion                    # §2.3   (`f657063`)
+      Inbound 领域模型 + INBOUND_{CREDENTIALS,OPTIONS,COMMON,TLS_SERVER} 四张表；
+      InboundFactory 与 OutboundFactory 同形；WireGuard endpoint 搬进 EndpointFactory；
+      generator/server.uc 165 → 60 行；修 fixture 的 listen_port 缺陷 + 新增
+      inbound golden 快照；并修掉 PR-01～03 的 12 处未被 CI 覆盖的缺陷（§2.3.1）
+32. ✅ ci(toolchain): fix the Linux ucode build (lucihttp include/link paths)   # §2.9   (`0dae4e6`)
+      "Build ucode toolchain" 一直在第一步失败，run.sh 从未在 CI 执行过
+
+**下一步（F / B）**：19 → 20，按指导文档 §七的 PR 路线，做 F（PHASE 7 Runtime
+抽离：`service` / `dns` / `firewall` 从 init.d 抽出，等有 on-target CI 再做），
+最后 B（LuCI 模块化，必须配人工回归）。
 ```
 
 ---
