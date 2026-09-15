@@ -96,7 +96,7 @@
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
 | 6 | Candidate Config | 🟢 ~90% | 生成期失败链成立；运行期的 P0（§2.14）**已修复并真机验证**（commit `bb4e216`）：门改为 procd 视角 + 监听归属 + 连续稳定采样，known-good 只在门通过后写入，回滚被真实触发并成功。剩余 = 回滚路径尚无自动化 on-target job |
 | 7 | Runtime | ✅ ~80% | **PR-05 已落地**：`init.d/homeproxy` 517 → 253 行，dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 实例注册 / 生成事务全部搬到 `scripts/runtime/{service,dns,firewall,net}.sh`（+ 既有 `config.sh`/`health.sh`）。剩余 = 观点 18 的健康分级（listener / functional）与观点 21 的显式状态机，见 §2.10.3 与 §2.10.5 |
-| 8 | LuCI | 🟢 ~85% | **PR-06 三批已落地**（9 个 commit，见 §2.11.8）：① 协议收敛为**一张有序表**，`snell` 重新可选、`chacha20` 移除；② **快照覆盖率修复**（node 13→117、client 29→206，此前两个表单的快照形同虚设）；③ mux / TUIC / hysteria / password 校验体抽成共享渲染器，其中 **TUIC 顺带统一了拥塞控制标签、password 校验体顺带补上了 node 表单缺失的 2022-blake3 密钥长度校验**；④ **RPC 单一入口 `rpcCall()`**，12 处 declare → 1 处；⑤ 删死代码 `decodeBase64Str`；⑥ 三条前端不变量测试（协议 83 项 / RPC 21 项 / 校验器 29 项，均反向验证过）+ 共享模块加载器。⑦ **client.js 的 `routing_rule`↔`dns_rule` 合并成一个 builder**（两块共 674 行、其中 184 行逐字节相同 → 1671 行，净减 121，client 快照逐字节未变）。剩余 = GridSection 脚手架 ×5 与动态 load ×13 的样板、`proxy_list`↔`direct_list` 表单块（≈32 行）、跨文件状态三件套（`getServiceStatus`/`renderStatus`/poll 守卫）。**浏览器人工回归始终未做**，这是唯一 agent 做不到的部分 |
+| 8 | LuCI | 🟢 ~85% | **PR-06 三批已落地**（9 个 commit，见 §2.11.8）：① 协议收敛为**一张有序表**，`snell` 重新可选、`chacha20` 移除；② **快照覆盖率修复**（node 13→117、client 29→206，此前两个表单的快照形同虚设）；③ mux / TUIC / hysteria / password 校验体抽成共享渲染器，其中 **TUIC 顺带统一了拥塞控制标签、password 校验体顺带补上了 node 表单缺失的 2022-blake3 密钥长度校验**；④ **RPC 单一入口 `rpcCall()`**，12 处 declare → 1 处；⑤ 删死代码 `decodeBase64Str`；⑥ 三条前端不变量测试（协议 83 项 / RPC 21 项 / 校验器 29 项，均反向验证过）+ 共享模块加载器。⑦ **client.js 的 `routing_rule`↔`dns_rule` 合并成一个 builder**（两块共 674 行、其中 184 行逐字节相同 → 1671 行，净减 121，client 快照逐字节未变）。**刻意不做**（理由见 §2.11.8(f)）：GridSection 脚手架与动态 load 样板、TLS 证书块（两侧 depends 本就不同）、跨文件状态三件套（**快照对它零覆盖**，要先补守卫）。**浏览器人工回归始终未做** —— 这是唯一 agent 做不到的部分，也是 (f) 里那处 `null` vs 省略 description 唯一没被验证的地方 |
 | 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI）。**2026-09 手工 on-target 实测已全绿**：`tests/ucode/run.sh` 在 192.168.1.102 上 `rc=0`、`FAIL` 0 行、`NOT RUN` 0 行（含 `firewall_post.ut` 的真实 fw4 渲染——该项在离机环境永远是 NOT RUN），见 §2.10.4 |
 
 **关键判断（已修正）**：文档"最终成功标准"里那条链
@@ -1414,12 +1414,18 @@ padding/Brutal 因此排在拨号旋钮之前），**选项集合与总数不变
 
 ##### (f) 仍然剩下的（PR-06 续）
 
-1. **其余去重**：hysteria（node 191-232 ↔ server 297-338，42 行）、TUIC（369-396 ↔ 398-425，28 行）、
-   password 校验体（108-117 ↔ 242-251，两侧 `required_type` 集合**不同**，需要按 side 参数化）、
-   TLS 证书路径与上传按钮（582-589 ↔ 663-670）、client.js 内部 `routing_rule`↔`dns_rule`（交集 184 行）、
-   GridSection 脚手架 ×5、动态 load 覆盖 ×13；
-2. **跨文件状态三件套**：`getServiceStatus` / `renderStatus` / 状态栏+poll 守卫
-   （`client.js` 与 `server.js`，只差实例名与 label）；
+1. ~~**其余去重**：hysteria~~ ✅ ~~TUIC~~ ✅ ~~password 校验体~~ ✅ ~~client.js 的
+   `routing_rule`↔`dns_rule`~~ ✅（见 (d) 与 (f) 上文各条）。
+   **刻意不做的两处**：① TLS 证书路径块与 "extra settings" 块 —— 逐个比对后确认两侧的
+   description / depends / 默认值**本来就不同**（客户端是全局开关，服务端是监听器级、带
+   `network` 依赖），抽出来只剩一层带 5 个参数的薄包装，属于"为了少几行而加间接层"；
+   ② GridSection 脚手架 ×5 与动态 load 覆盖 ×13 —— 纯样板，抽走会把"这个表单长什么样"
+   从视图里挪走，收益是行数、代价是局部可读性。按观点 24 的口径，没有证据支持的重写不做；
+2. **跨文件状态三件套**（`getServiceStatus` / `renderStatus` / 状态栏+poll 守卫，
+   `client.js` 与 `server.js` 只差实例名与 label）：**刻意不做**。实测三份快照里
+   `service_status` 与 `renderStatus` **命中数都是 0** —— 状态栏不是表单选项，没有任何守卫。
+   在给它加一条能失败的测试（用 `E()` 桩把状态 DOM 序列化后钉住）之前动它，就是本项目
+   一路在拒绝的那种"改完无法验证"的改动。工作量小（≈40 行），但前置条件是先有守卫；
 3. **`shared/rpc.js`**：12 处 `rpc.declare`，其中 9 处把失败吞成 `L.resolveDefault(…, {})`
    （`homeproxy.js:415/433`、`client.js:20`、`server.js:18/83`、`status.js:35/64/71/164`）；
 4. **`snell` 版本**：~~分叉~~ 实测是**两侧能力不同** —— 出站接受 {4, 6}（版本 5 报
