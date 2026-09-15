@@ -165,6 +165,75 @@ return baseclass.extend({
 		o.modalonly = true;
 	},
 
+	/* Hysteria's bandwidth caps.  A separate renderer because the two forms
+	   place the pair at different points in the section; calling it where each
+	   form used to declare them preserves both option orders exactly. */
+	renderHysteriaBandwidth(section) {
+		let o;
+
+		o = section.option(form.Value, 'hysteria_down_mbps', _('Max download speed'),
+			_('Max download speed in Mbps.'));
+		o.datatype = 'uinteger';
+		o.depends('type', 'hysteria');
+		o.depends('type', 'hysteria2');
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'hysteria_up_mbps', _('Max upload speed'),
+			_('Max upload speed in Mbps.'));
+		o.datatype = 'uinteger';
+		o.depends('type', 'hysteria');
+		o.depends('type', 'hysteria2');
+		o.modalonly = true;
+	},
+
+	/* Hysteria's authentication and obfuscation options, contiguous in both
+	   forms.  The obfuscate-password widget is the one asymmetry - the server
+	   can generate one - so it is passed in, exactly like the TUIC UUID. */
+	renderHysteriaAuthObfs(section, options) {
+		const obfsPasswordWidget = options.obfsPasswordWidget || form.Value;
+		let o;
+
+		o = section.option(form.ListValue, 'hysteria_auth_type', _('Authentication type'));
+		o.value('', _('Disable'));
+		o.value('base64', _('Base64'));
+		o.value('string', _('String'));
+		o.depends('type', 'hysteria');
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'hysteria_auth_payload', _('Authentication payload'));
+		o.password = true;
+		o.depends({'type': 'hysteria', 'hysteria_auth_type': /[\s\S]/});
+		o.rmempty = false;
+		o.modalonly = true;
+
+		o = section.option(form.ListValue, 'hysteria_obfs_type', _('Obfuscate type'));
+		o.value('', _('Disable'));
+		o.value('salamander', _('Salamander'));
+		o.value('gecko', _('Gecko (1.14)'));
+		o.depends('type', 'hysteria2');
+		o.modalonly = true;
+
+		o = section.option(obfsPasswordWidget, 'hysteria_obfs_password', _('Obfuscate password'));
+		o.password = true;
+		o.depends('type', 'hysteria');
+		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': /[\s\S]/});
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'hysteria_obfs_min_packet_size', _('Min obfs packet size (1.14)'),
+			_('Minimum on-wire packet size in bytes. Gecko only.'));
+		o.datatype = 'uinteger';
+		o.placeholder = '512';
+		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
+		o.modalonly = true;
+
+		o = section.option(form.Value, 'hysteria_obfs_max_packet_size', _('Max obfs packet size (1.14)'),
+			_('Maximum on-wire packet size in bytes. Gecko only.'));
+		o.datatype = 'uinteger';
+		o.placeholder = '1200';
+		o.depends({'type': 'hysteria2', 'hysteria_obfs_type': 'gecko'});
+		o.modalonly = true;
+	},
+
 	/* TUIC.  Both sides share the congestion control, the 0-RTT flag and the
 	   heartbeat; the client adds its dialling knobs (UDP relay mode, UDP over
 	   stream) and the server its auth timeout.  The UUID widget is the one real
