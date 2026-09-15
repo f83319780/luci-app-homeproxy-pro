@@ -31,22 +31,22 @@ import { validation } from 'homeproxy';
  *     message: sprintf('%s requires %s', type, field) }
  */
 export function validate(config, log) {
-	const errors = [];
+	let errors = [];
 
 	if (!validation('host', config.address)) {
-		errors.push({
+		errors = [...errors, {
 			kind: 'invalid_host',
 			message: sprintf('Skipping invalid %s node: %s.',
 				config.type, config.label || 'NULL')
-		});
+		}];
 	}
 
 	if (!validation('port', config.port)) {
-		errors.push({
+		errors = [...errors, {
 			kind: 'invalid_port',
 			message: sprintf('Skipping invalid %s node: %s.',
 				config.type, config.label || 'NULL')
-		});
+		}];
 	}
 
 	if (length(errors)) {
@@ -67,13 +67,13 @@ export function validate(config, log) {
  * error descriptors that `validate()` would log, but does not log
  * anything itself. */
 export function check(config) {
-	const errors = [];
+	let errors = [];
 
 	if (!validation('host', config.address))
-		errors.push({ kind: 'invalid_host', type: config.type, address: config.address });
+		errors = [...errors, { kind: 'invalid_host', type: config.type, address: config.address }];
 
 	if (!validation('port', config.port))
-		errors.push({ kind: 'invalid_port', type: config.type, port: config.port });
+		errors = [...errors, { kind: 'invalid_port', type: config.type, port: config.port }];
 
 	return errors;
 };

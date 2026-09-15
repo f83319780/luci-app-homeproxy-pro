@@ -123,14 +123,14 @@ checks++;
  * `enabled` is absent rather than coerced - the check is "no
  * string-shaped `enabled` value sneaked through". */
 for (let s in (config.dns?.servers || [])) {
-	if ('enabled' in s && type(s.enabled) !== 'boolean') {
+	if ('enabled' in s && type(s.enabled) !== 'bool') {
 		printf('FAIL dns.servers.enabled: not coerced to boolean, got %J\n', s.enabled);
 		failures++;
 	}
 }
 checks++;
 for (let r in (config.dns?.rules || [])) {
-	if ('enabled' in r && type(r.enabled) !== 'boolean') {
+	if ('enabled' in r && type(r.enabled) !== 'bool') {
 		printf('FAIL dns.rules.enabled: not coerced to boolean, got %J\n', r.enabled);
 		failures++;
 	}
@@ -209,9 +209,16 @@ expect('server.settings.log_level', config.server?.settings?.log_level, 'warn');
 expect('server.inbounds.length', length(config.server?.inbounds), 1);
 expect('server.inbounds[0].type', config.server?.inbounds?.[0]?.type, 'vless');
 expect('server.inbounds[0].port', config.server?.inbounds?.[0]?.port, '443');
-expect('server.inbounds[0].name', config.server?.inbounds?.[0]?.name, 's_vless');
+/* PR-04: server inbounds are Inbound domain objects now, so `id` is the
+ * UCI section name and `name` is the user-facing label (falling back to
+ * the section name). Before PR-04 they were bare normalised sections and
+ * `name` held the section name. */
+expect('server.inbounds[0].id', config.server?.inbounds?.[0]?.id, 's_vless');
+expect('server.inbounds[0].name', config.server?.inbounds?.[0]?.name, 'server-vless');
+expect('server.inbounds[0].enabled', config.server?.inbounds?.[0]?.enabled, true);
 
-/* PR-01: server inbounds must be normalised too. */
+/* PR-01: server inbounds must be normalised too - no UCI pseudo-field
+ * may leak into the Inbound shape. */
 for (let ib in (config.server?.inbounds || [])) {
 	if ('.name' in ib || '.index' in ib || '.type' in ib) {
 		printf('FAIL server.inbounds normalisation: pseudo-field leaked %J\n', ib);
@@ -219,6 +226,20 @@ for (let ib in (config.server?.inbounds || [])) {
 	}
 }
 checks++;
+
+/* PR-04: the Inbound sub-objects must be present so the Adapter can
+ * shape sing-box JSON without falling back to flat UCI reads. */
+expect('server.inbounds[0].credentials.uuid', config.server?.inbounds?.[0]?.credentials?.uuid,
+	'3af88561-9c69-4b19-8f7e-f08d580bc339');
+expect('server.inbounds[0].tls.enabled', config.server?.inbounds?.[0]?.tls?.enabled, '1');
+expect('server.inbounds[0].tls.server_name', config.server?.inbounds?.[0]?.tls?.server_name,
+	'server.example.com');
+expect('server.inbounds[0].protocol_options.flow', config.server?.inbounds?.[0]?.protocol_options?.flow,
+	null);
+expect('server.inbounds[0].common keys are the listener set',
+	sort(keys(config.server?.inbounds?.[0]?.common || {})),
+	sort(['bind_interface', 'reuse_addr', 'tcp_fast_open', 'tcp_multi_path',
+		'udp_fragment', 'udp_timeout', 'network']));
 
 /* --- PR-01 removed the Config.endpoints placeholder and the dead
  *     ConfigQuery.endpoints / node_ids / main_node_id helpers; the

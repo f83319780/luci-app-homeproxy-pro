@@ -37,8 +37,8 @@
 import { isEmpty, strToInt, strToBool, strToTime } from 'homeproxy';
 
 import { ConfigQuery } from '../config/model.uc';
-import { OutboundFactory } from '../config/adapter.uc';
-import { parse_port } from './common.uc';
+import { OutboundFactory, EndpointFactory } from '../config/adapter.uc';
+
 import { get_outbound } from './common.uc';
 
 /* --- single-endpoint / single-outbound builders ------------------------ */
@@ -53,44 +53,15 @@ import { get_outbound } from './common.uc';
  * pre-refactor call sites passed; once A2/A3 made every call site pass
  * a Node they were simply null, so every WireGuard main / UDP /
  * urltest node emitted an endpoint with no private key and a peer with
- * no public key.  tests/fixtures/generators/wireguard.uci guards it. */
+ * no public key.  tests/fixtures/generators/wireguard.uci guards it.
+ *
+ * PR-04: the endpoint *shaping* moved to EndpointFactory in
+ * config/adapter.uc, so the generator no longer holds protocol business
+ * logic for WireGuard. This stays as the call sites' entry point, which
+ * keeps the module's endpoint vocabulary without making every caller
+ * import the adapter directly. */
 export function generate_endpoint(node, ctx) {
-	if (type(node) !== 'object' || isEmpty(node))
-		return null;
-
-	const opts = node.protocol_options || {};
-	const common = node.common || {};
-
-	const endpoint = {
-		type: node.type,
-		tag: 'cfg-' + node.id + '-out',
-		address: opts.local_address,
-		mtu: strToInt(opts.mtu),
-		private_key: opts.private_key,
-		peers: (node.type === 'wireguard') ? [
-			{
-				address: node.address,
-				port: strToInt(node.port),
-				allowed_ips: [
-					'0.0.0.0/0',
-					'::/0'
-				],
-				persistent_keepalive_interval: strToInt(opts.persistent_keepalive_interval),
-				public_key: opts.peer_public_key,
-				pre_shared_key: opts.pre_shared_key,
-				reserved: parse_port(opts.reserved),
-			}
-		] : null,
-		system: (node.type === 'wireguard') ? false : null,
-		tcp_fast_open: strToBool(common.tcp_fast_open),
-		tcp_multi_path: strToBool(common.tcp_multi_path),
-		udp_fragment: strToBool(common.udp_fragment),
-		udp_mapping: !isEmpty(ctx.udp_mapping) ? ctx.udp_mapping : null,
-		udp_filtering: !isEmpty(ctx.udp_filtering) ? ctx.udp_filtering : null,
-		udp_nat_max: ctx.udp_nat_max
-	};
-
-	return endpoint;
+	return EndpointFactory.create(node, ctx);
 }
 
 /* Build one outbound from a Node via the Adapter layer. A direct node

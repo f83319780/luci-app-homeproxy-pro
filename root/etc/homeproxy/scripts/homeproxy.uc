@@ -217,6 +217,25 @@ export function strToTime(str) {
 	return match(str, /[a-zA-Z]$/) ? str : (str + 's');
 };
 
+/* Turn a UCI list of port strings into the int array sing-box wants
+ * (e.g. the WireGuard `reserved` list, a routing rule's `port` /
+ * `source_port`). Returns null for anything that is not a non-empty
+ * array, so a caller can let removeBlankAttrs() drop the field.
+ *
+ * Lives here rather than in generator/common.uc because the Adapter
+ * layer needs it too (EndpointFactory builds the WireGuard endpoint)
+ * and an adapter must not import from generator/. */
+export function parse_port(strport) {
+	if (type(strport) !== 'array' || isEmpty(strport))
+		return null;
+
+	let ports = [];
+	for (let i in strport)
+		push(ports, int(i));
+
+	return ports;
+};
+
 export function removeBlankAttrs(res) {
 	let content;
 

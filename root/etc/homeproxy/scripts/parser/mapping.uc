@@ -75,6 +75,7 @@ export const PROTOCOL_TO_UCI = {
 		version: 'shadowtls_version'
 	},
 	hysteria: {
+		protocol: 'hysteria_protocol',
 		auth_type: 'hysteria_auth_type',
 		auth_payload: 'hysteria_auth_payload',
 		up_mbps: 'hysteria_up_mbps',

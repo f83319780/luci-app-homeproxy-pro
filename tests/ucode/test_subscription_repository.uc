@@ -32,7 +32,7 @@
 import { cursor } from 'uci';
 import { md5 } from 'digest';
 
-import { Repository } from 'repository';
+import { Repository } from './subscription/repository.uc';
 
 /* PR-03: helper for building canonical Node fixtures. The
  * orchestrator gets canonical Nodes from normalize(parse_uri(...));
@@ -59,7 +59,11 @@ function canonical_node(opts) {
 const CFG = 'homeproxy';
 const TYPE = 'node';
 
-const LOG = (..._args) => {};
+/* apply_main_node_refs() reports the urltest prune through the log()
+ * callback and the main_node switches through the returned result.log,
+ * so the test needs to see both. */
+const seen = [];
+const LOG = (...args) => push(seen, join(' ', args));
 
 let failures = 0;
 let checks = 0;
@@ -194,35 +198,32 @@ uci.load(CFG);
 
 /* --- PR-03: apply_main_node_refs ------------------------------------ */
 
-/* Use a fresh sandbox cursor so the apply_nodes state above does
- * not pollute the urltest-list assertions below. */
+/* Use a fresh cursor so the apply_nodes state above does not pollute the
+ * urltest-list assertions below. */
 const uci2 = cursor(ARGV[0]);
 uci2.load(CFG);
 
-/* Pre-populate a main_node = 'urltest' and a main_urltest_nodes
- * list that includes one alive node and one dead reference. After
- * the apply pass, the dead reference should be pruned; the alive
- * one should remain. */
+/* The sandbox's first `node` section (file order) is cfgUSER0001, which
+ * is what apply_main_node_refs() falls back to when a main_node target is
+ * gone. Assert against it explicitly rather than hard-coding a value that
+ * only holds for one sandbox layout. */
+const FIRST_NODE = 'cfgUSER0001';
+
 const groupB = 'groupB';
 const n_alive = 'cfgALIVE0001';
-const n_dead  = 'cfgDEAD00001';
+/* Deliberately never created: the point of the prune case is an
+ * urltest_nodes entry whose section no longer exists. */
+const n_gone = 'cfgGONE00001';
 
 uci2.set(CFG, n_alive, TYPE);
 uci2.set(CFG, n_alive, 'label',     'alive-node');
 uci2.set(CFG, n_alive, 'grouphash', groupB);
 uci2.set(CFG, n_alive, 'type',      'vless');
 uci2.set(CFG, n_alive, 'address',   'alive.example.com');
-uci2.set(CFG, n_dead, TYPE);
-uci2.set(CFG, n_dead, 'label',     'dead-node');
-uci2.set(CFG, n_dead, 'grouphash', groupB);
-uci2.set(CFG, n_dead, 'type',      'vless');
-uci2.set(CFG, n_dead, 'address',   'dead.example.com');
 
 uci2.set(CFG, 'config', 'main_node', 'urltest');
-uci2.set(CFG, 'config', 'main_urltest_nodes', [n_alive, n_dead]);
+uci2.set(CFG, 'config', 'main_urltest_nodes', [n_alive, n_gone]);
 uci2.commit(CFG);
-
-/* Re-load so the cursor picks up the new sections. */
 uci2.load(CFG);
 
 const main_refs = Repository.apply_main_node_refs(
@@ -233,17 +234,14 @@ const main_refs = Repository.apply_main_node_refs(
 expect('main_node_refs: main_node kept as urltest',
 	main_refs.main_node, 'urltest');
 uci2.load(CFG);
-const main_urltest_nodes_after = uci2.get(CFG, 'config', 'main_urltest_nodes') || [];
 expect('main_node_refs: dead reference pruned',
-	sort(main_urltest_nodes_after), [n_alive]);
+	sort(uci2.get(CFG, 'config', 'main_urltest_nodes') || []), [n_alive]);
 expect('main_node_refs: log line emitted for the prune',
-	length(filter(main_refs.log, (l) => match(l, 'removing from urltest'))),
+	length(filter(seen, (l) => match(l, /removing from urltest/))),
 	1);
 
-/* Now exercise the "main_node target is gone" path: point
- * main_node at a specific section that does not exist in UCI.
- * Repository should switch to the first surviving subscription
- * node. */
+/* "main_node target is gone": point main_node at a section that does not
+ * exist. The Repository must switch to the first node in the file. */
 uci2.set(CFG, 'config', 'main_node', 'cfgNOPEEEEEE');
 uci2.commit(CFG);
 uci2.load(CFG);
@@ -254,19 +252,24 @@ const main_refs2 = Repository.apply_main_node_refs(
 	LOG
 );
 expect('main_node_refs: missing target switched to first_server',
-	main_refs2.main_node, n_alive);
+	main_refs2.main_node, FIRST_NODE);
 expect('main_node_refs: switch logged',
-	length(filter(main_refs2.log, (l) => match(l, 'switching to'))),
+	length(filter(main_refs2.log, (l) => match(l, /switching to/))),
 	1);
-
-/* And the "no nodes at all" reset path. has_nodes=false with
- * main_node set should write 'nil' for both main_node and
- * main_udp_node. */
 uci2.load(CFG);
-uci2.set(CFG, 'config', 'main_node', 'urltest');
-uci2.set(CFG, 'config', 'main_udp_node', 'urltest');
+expect('main_node_refs: switch persisted to UCI',
+	uci2.get(CFG, 'config', 'main_node'), FIRST_NODE);
+
+/* The "no nodes at all" reset path needs a node-free config: delete every
+ * node section, then run the reconcile with main_node set. */
+for (let s in (uci2.get(CFG, 'config') ? [] : []))
+	;
+uci2.foreach(CFG, TYPE, (section) => uci2.delete(CFG, section['.name']));
 uci2.commit(CFG);
 uci2.load(CFG);
+
+expect('main_node_refs: no node sections left',
+	uci2.get_first(CFG, TYPE), null);
 
 const main_refs3 = Repository.apply_main_node_refs(
 	uci2, CFG, 'config', TYPE,
@@ -282,24 +285,35 @@ expect('main_node_refs: no-nodes path wrote nil to UCI',
 	uci2.get(CFG, 'config', 'main_node'), 'nil');
 expect('main_node_refs: no-nodes path wrote nil to UCI for udp',
 	uci2.get(CFG, 'config', 'main_udp_node'), 'nil');
+expect('main_node_refs: no-nodes path logged the disable',
+	length(filter(main_refs3.log, (l) => match(l, /disable tproxy/))),
+	1);
 
 /* --- PR-03: scrub_stale_urltest_refs ------------------------------- */
 
-/* Re-use the same sandbox: add a routing_node with an urltest_nodes
- * list that mixes a live and a dead node, then run the scrub. */
-uci2.load(CFG);
+/* A routing_node whose urltest_nodes mixes a live and a missing node. */
 const rn_x = 'rn_test';
+const n_other = 'cfgOTHER0001';
+uci2.set(CFG, n_other, TYPE);
+uci2.set(CFG, n_other, 'label',   'other-node');
+uci2.set(CFG, n_other, 'type',    'vless');
+uci2.set(CFG, n_other, 'address', 'other.example.com');
+
 uci2.set(CFG, rn_x, 'routing_node');
 uci2.set(CFG, rn_x, 'node', 'urltest');
-uci2.set(CFG, rn_x, 'urltest_nodes', [n_alive, n_dead]);
+uci2.set(CFG, rn_x, 'urltest_nodes', [n_other, n_gone]);
 uci2.commit(CFG);
 uci2.load(CFG);
 
 const scrub = Repository.scrub_stale_urltest_refs(uci2, CFG, LOG);
-expect('scrub: at least one commit', scrub.commits >= 1, true);
+expect('scrub: one commit for the scrubbed routing_node', scrub.commits, 1);
 uci2.load(CFG);
-const cleaned = uci2.get(CFG, rn_x, 'urltest_nodes') || [];
-expect('scrub: live ref preserved', sort(cleaned), [n_alive]);
+expect('scrub: live ref preserved',
+	sort(uci2.get(CFG, rn_x, 'urltest_nodes') || []), [n_other]);
+
+/* An already-clean routing_node must not produce a commit. */
+const scrub2 = Repository.scrub_stale_urltest_refs(uci2, CFG, LOG);
+expect('scrub: clean state produces no commit', scrub2.commits, 0);
 
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);

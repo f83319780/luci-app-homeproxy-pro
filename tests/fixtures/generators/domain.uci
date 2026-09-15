@@ -135,6 +135,7 @@ config homeproxy 'server'
 	option log_level 'warn'
 
 config server 's_vless'
+	option enabled '1'
 	option label 'server-vless'
 	option type 'vless'
 	option address '::'

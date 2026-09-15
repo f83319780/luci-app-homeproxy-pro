@@ -28,9 +28,9 @@
 
 'use strict';
 
-import { isEmpty, strToBool, strToInt, strToTime, parseURL, validation } from 'homeproxy';
+import { isEmpty, strToBool, strToInt, strToTime, parseURL, validation, parse_port } from 'homeproxy';
 
-import { parse_port } from './common.uc';
+
 import { get_outbound, get_resolver, get_ruleset } from './common.uc';
 
 /* Build a DNS server spec from a UCI address string. sing-box wants the

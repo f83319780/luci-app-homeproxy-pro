@@ -25,20 +25,10 @@ import { isEmpty } from 'homeproxy';
 
 import { ConfigQuery } from '../config/model.uc';
 
-/* Parse the comma-separated port list UCI emits for source_port / port
- * rule fields. A single value comes through as a string, a list as an
- * array of strings; both forms are normalised into an array of integers
- * (or null when the field is empty). */
-export function parse_port(strport) {
-	if (type(strport) !== 'array' || isEmpty(strport))
-		return null;
-
-	let ports = [];
-	for (let i in strport)
-		push(ports, int(i));
-
-	return ports;
-}
+/* PR-04: parse_port() moved to homeproxy.uc. The Adapter layer needs it
+ * too (EndpointFactory builds the WireGuard endpoint) and an adapter must
+ * not import from generator/, so the util moved to the module both layers
+ * already share. Callers import it from 'homeproxy' now. */
 
 /* Resolve a UCI outbound-style reference (string or array of strings)
  * into the sing-box tag the generator should emit. The arrays carry

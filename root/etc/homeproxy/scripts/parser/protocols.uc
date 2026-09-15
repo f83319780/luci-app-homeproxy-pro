@@ -53,11 +53,9 @@ export function parse_anytls_uri(uri) {
 		address: url.hostname,
 		port: url.port,
 		password: urldecode(url.username),
-		/* anytls always uses ALPN h2 / h3 if the user did not set it;
-		 * the form defaults are the same shape. */
 		tls: '1',
-		tls_sni: params.sni || params.peer,
-		tls_alpn: params.alpn ? split(urldecode(params.alpn), ',') : null,
+		tls_sni: params.sni,
+		tls_insecure: (params.insecure === '1') ? '1' : '0'
 	};
 };
 
@@ -73,12 +71,7 @@ export function parse_http_uri(uri, features, log) {
 		port: url.port,
 		username: url.username ? urldecode(url.username) : null,
 		password: url.password ? urldecode(url.password) : null,
-		tls: (uri[0] === 'https') ? '1' : '0',
-		tls_sni: url.hostname,
-		/* HTTP/HTTPS does not carry transport; the generator still
-		 * works without one.  Setting tls_alpn to null lets the
-		 * shared TLS builder skip the field entirely. */
-		tls_alpn: null
+		tls: (uri[0] === 'https') ? '1' : '0'
 	};
 };
 

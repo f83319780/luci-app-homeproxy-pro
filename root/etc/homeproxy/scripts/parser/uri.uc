@@ -16,7 +16,7 @@
 
 'use strict';
 
-import { validation } from 'homeproxy';
+import { isEmpty, validation } from 'homeproxy';
 
 import {
 	parse_sip008_uri, parse_anytls_uri, parse_http_uri,
@@ -88,15 +88,23 @@ export function parse_uri(uri, features, log) {
 	if (config.address)
 		config.address = replace(config.address, /\[|\]/g, '');
 
-	/* Default label: ip6addr uses brackets for readability, otherwise
-	 * `address:port`. Kept here, not in protocols.uc, because every
-	 * scheme benefits and the inline check used to live in parse_uri. */
-	return validate(config, log) || config;
+	/* validate() returns null (and logs) when the host or port is not
+	 * usable, so the result has to be tested rather than merged with
+	 * `|| config` - that fallback would hand the invalid config back. */
+	const checked = validate(config, log);
+	if (!checked)
+		return null;
+
+	if (!checked.label)
+		checked.label = derive_label(checked);
+
+	return checked;
 };
 
-/* Label fallback kept exported so the Repository can run it after it
- * mutates a parsed config (filter/apply_policy change the address and
- * may need to re-derive). */
+/* Default label: ip6addr uses brackets for readability, otherwise
+ * `address:port`. Exported because every scheme benefits and because a
+ * caller that mutates a parsed config's address (subscription
+ * apply_policy does not, but a future one could) can re-derive it. */
 export function derive_label(config) {
 	if (config.label)
 		return config.label;
@@ -104,11 +112,4 @@ export function derive_label(config) {
 		return null;
 	return (validation('ip6addr', config.address) ?
 		`[${config.address}]` : config.address) + ':' + config.port;
-};
-
-/* Shared `features` factory for callers that do not run ubus (dev
- * hosts, test fixtures): same default-empty shape the orchestrator
- * treats as "use the protocol's defaults". */
-export function default_features() {
-	return {};
 };

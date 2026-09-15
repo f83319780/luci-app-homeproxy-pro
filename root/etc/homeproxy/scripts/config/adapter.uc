@@ -29,11 +29,11 @@
 'use strict';
 
 import {
-	strToBool, strToInt, strToTime, removeBlankAttrs,
-	buildTLSObject, buildTransportObject
+	isEmpty, strToBool, strToInt, strToTime, removeBlankAttrs,
+	buildTLSObject, buildTransportObject, parse_port
 } from 'homeproxy';
 
-import { Node } from './model.uc';
+import { Node, Inbound, INBOUND_TLS_SERVER } from './model.uc';
 
 /* Per-protocol required credential fields. Node.validate() covers the
  * cross-protocol rules (type/address/port/TLS); this table is the
@@ -99,10 +99,11 @@ function protocol_problems(node) {
 
 /* --- field transforms --------------------------------------------------- */
 
-/* A table value is either a function of the Node, a literal, or a string
- * naming a transform (in which case the value is null - the spec is
- * present so the key still gets emitted, but the value will be stripped
- * by removeBlankAttrs()). */
+/* A table value is either a function of the domain object (a Node for the
+ * outbound tables, an Inbound for the server tables), a literal, or a
+ * string naming a transform (in which case the value is null - the spec
+ * is present so the key still gets emitted, but the value will be
+ * stripped by removeBlankAttrs()). */
 const TRANSFORMS = {
 	raw: (value) => value,
 	bool: (value) => strToBool(value),
@@ -110,9 +111,12 @@ const TRANSFORMS = {
 	time: (value) => strToTime(value)
 };
 
-function resolve(spec, node) {
+/* Shared by the outbound and the inbound field tables: the spec is a
+ * plain function in every table except the outbound one, which carries a
+ * few TRANSFORMS markers for keys that exist but are runtime-owned. */
+function resolve(spec, subject) {
 	if (type(spec) === 'function')
-		return spec(node);
+		return spec(subject);
 
 	if (type(spec) === 'string' && spec in TRANSFORMS)
 		return null;
@@ -411,5 +415,341 @@ export const OutboundFactory = {
 			die(`node '${node.id}': ${join(', ', problems)}\n`);
 
 		return build_outbound(node, mark);
+	}
+};
+
+/* --- WireGuard endpoint ------------------------------------------------- */
+
+/* PR-04 (Protocol Adapter Completion): WireGuard is emitted as a
+ * sing-box *endpoint*, not an outbound, so it needs its own builder.
+ * That builder used to live in generator/outbound.uc, which meant the
+ * generator still held protocol business logic for one protocol. It
+ * now lives here, next to the outbound factory, and the generator only
+ * decides *when* an endpoint is needed (routing-mode split, urltest
+ * resolution).
+ *
+ * `ctx` carries the process-wide UDP tuning the runtime owns
+ * (udp_mapping / udp_filtering / udp_nat_max) - same shape
+ * build_outbounds() already passes around, so callers do not change. */
+function build_endpoint(node, ctx) {
+	const opts = node.protocol_options || {};
+	const common = node.common || {};
+
+	return {
+		type: node.type,
+		tag: 'cfg-' + node.id + '-out',
+		address: opts.local_address,
+		mtu: strToInt(opts.mtu),
+		private_key: opts.private_key,
+		peers: (node.type === 'wireguard') ? [
+			{
+				address: node.address,
+				port: strToInt(node.port),
+				allowed_ips: [
+					'0.0.0.0/0',
+					'::/0'
+				],
+				persistent_keepalive_interval: strToInt(opts.persistent_keepalive_interval),
+				public_key: opts.peer_public_key,
+				pre_shared_key: opts.pre_shared_key,
+				reserved: parse_port(opts.reserved),
+			}
+		] : null,
+		system: (node.type === 'wireguard') ? false : null,
+		tcp_fast_open: strToBool(common.tcp_fast_open),
+		tcp_multi_path: strToBool(common.tcp_multi_path),
+		udp_fragment: strToBool(common.udp_fragment),
+		udp_mapping: !isEmpty(ctx.udp_mapping) ? ctx.udp_mapping : null,
+		udp_filtering: !isEmpty(ctx.udp_filtering) ? ctx.udp_filtering : null,
+		udp_nat_max: ctx.udp_nat_max
+	};
+}
+
+export const EndpointFactory = {
+	/* Node -> sing-box endpoint object, or null when there is nothing to
+	 * build. Unlike OutboundFactory.create() this never dies: an endpoint
+	 * is only ever reached for a node the routing layer already selected,
+	 * and the caller treats null as "skip this endpoint". */
+	create: (node, ctx) => {
+		if (type(node) !== 'object' || isEmpty(node))
+			return null;
+
+		return build_endpoint(node, ctx);
+	}
+};
+
+/* --- server inbound ----------------------------------------------------- */
+
+/* PR-04: the server half of the Adapter. Same data-table approach as
+ * the outbound side: the protocol differences are *fields*, not
+ * behaviour, so they are expressed as tables rather than a branch per
+ * protocol. generator/server.uc used to spell every one of these out
+ * inline while reading flat UCI keys off the section dict.
+ *
+ * Adding a protocol means adding two rows: INBOUND_CREDENTIALS and
+ * INBOUND_OPTIONS in model.uc, and an INBOUND_OPTION_FIELDS row here. */
+
+/* Listener-level fields every inbound emits. Each value is a function of
+ * the Inbound, or null (which removeBlankAttrs() strips). */
+const INBOUND_COMMON_FIELDS = {
+	listen: (inbound) => inbound.address || '::',
+	listen_port: (inbound) => strToInt(inbound.port),
+	bind_interface: (inbound) => inbound.common.bind_interface,
+	reuse_addr: (inbound) => strToBool(inbound.common.reuse_addr),
+	tcp_fast_open: (inbound) => strToBool(inbound.common.tcp_fast_open),
+	tcp_multi_path: (inbound) => strToBool(inbound.common.tcp_multi_path),
+	udp_fragment: (inbound) => strToBool(inbound.common.udp_fragment),
+	udp_timeout: (inbound) => strToTime(inbound.common.udp_timeout),
+	network: (inbound) => inbound.common.network
+};
+
+/* Listener fields a protocol must NOT be given even when the UCI section
+ * happens to carry the option. sing-box 1.14's snell inbound takes no
+ * udp_fragment / udp_timeout / network; the pre-PR-04 generator had a
+ * dedicated build_snell_inbound() that omitted them, and this table
+ * keeps that behaviour instead of relying on the user not setting them. */
+const INBOUND_COMMON_OMIT = {
+	snell: ['udp_fragment', 'udp_timeout', 'network']
+};
+
+/* Protocols whose sing-box inbound has no users[] block. snell carries a
+ * single top-level psk, shadowsocks a top-level password + method; giving
+ * either of them a users[] entry makes sing-box reject the section
+ * ("snell: bad user key" - the users entry is interpreted as an
+ * additional user key). */
+const INBOUND_NO_USERS = ['shadowsocks', 'snell'];
+
+/* Credential fields the inbound emits, keyed by the sing-box field
+ * name. Most protocols put them in the users[] block (below); snell
+ * wants a single top-level `psk`, and shadowsocks / shadowtls a
+ * top-level password (plus method for shadowsocks), so those are
+ * handled here. */
+function INBOUND_CLAIM_FIELDS(inbound) {
+	switch (inbound.type) {
+	case 'snell':
+		return { psk: inbound.credentials.psk };
+	case 'shadowsocks':
+		return {
+			method: inbound.credentials.method,
+			password: inbound.credentials.password
+		};
+	case 'shadowtls':
+		return { password: inbound.credentials.password };
+	default:
+		return {};
+	}
+}
+
+/* The users[] entry. sing-box wants one user per inbound; every
+ * protocol not listed in INBOUND_NO_USERS accepts the block. */
+function build_inbound_user(inbound) {
+	const creds = inbound.credentials || {};
+	const opts = inbound.protocol_options || {};
+
+	return {
+		name: !(inbound.type in ['http', 'mixed', 'naive', 'socks']) ?
+			'cfg-' + inbound.id + '-server' : null,
+		username: creds.username,
+		password: creds.password,
+
+		/* Hysteria (1) authentication: exactly one of the two
+		 * spellings, selected by the auth type. */
+		auth: (opts.auth_type === 'base64') ? creds.auth_base64 : null,
+		auth_str: (opts.auth_type === 'string') ? creds.auth_str : null,
+
+		uuid: creds.uuid,
+
+		/* VLESS / VMess. Both are per-user fields: sing-box has no
+		 * top-level `flow` on a vless inbound nor `alterId` on a vmess
+		 * one, which is why INBOUND_OPTION_FIELDS has no row for these
+		 * two protocols. */
+		flow: opts.flow,
+		alterId: strToInt(opts.alter_id)
+	};
+}
+
+/* Per-protocol inbound fields, keyed by the sing-box field name. Only
+ * the protocols whose sing-box inbound carries something beyond the
+ * shared listener/credential/TLS/transport set need a row. */
+const INBOUND_OPTION_FIELDS = {
+	anytls: {
+		padding_scheme: (inbound) => inbound.protocol_options.padding_scheme
+	},
+	/* Hysteria (1) and Hysteria2 share three fields and differ on
+	 * obfs: v1 carries the obfuscation as a plain password string,
+	 * v2 as a {type, password, min_packet_size, max_packet_size}
+	 * object. Emitting v1's obfs as a string is what the generator
+	 * always did - the {type, ...} shape on a v1 inbound is a
+	 * sing-box rejection. */
+	hysteria: {
+		up_mbps: (inbound) => strToInt(inbound.protocol_options.up_mbps),
+		down_mbps: (inbound) => strToInt(inbound.protocol_options.down_mbps),
+		obfs: (inbound) => inbound.protocol_options.obfs_password,
+		ignore_client_bandwidth: (inbound) => strToBool(inbound.protocol_options.ignore_client_bandwidth),
+		masquerade: (inbound) => inbound.protocol_options.masquerade
+	},
+	hysteria2: {
+		up_mbps: (inbound) => strToInt(inbound.protocol_options.up_mbps),
+		down_mbps: (inbound) => strToInt(inbound.protocol_options.down_mbps),
+		obfs: (inbound) => inbound.protocol_options.obfs_type ? {
+			type: inbound.protocol_options.obfs_type,
+			password: inbound.protocol_options.obfs_password,
+			min_packet_size: strToInt(inbound.protocol_options.obfs_min_packet_size),
+			max_packet_size: strToInt(inbound.protocol_options.obfs_max_packet_size)
+		} : inbound.protocol_options.obfs_password,
+		ignore_client_bandwidth: (inbound) => strToBool(inbound.protocol_options.ignore_client_bandwidth),
+		masquerade: (inbound) => inbound.protocol_options.masquerade
+	},
+	snell: {
+		version: (inbound) => strToInt(inbound.protocol_options.version) || 5,
+		obfs_mode: (inbound) => inbound.protocol_options.obfs_mode
+		/* no `mode`: sing-box 1.14 rejects it on a snell inbound; it
+		 * was a v6-only option and v6 is not supported. */
+	},
+	tuic: {
+		congestion_control: (inbound) => inbound.protocol_options.congestion_control,
+		auth_timeout: (inbound) => strToTime(inbound.protocol_options.auth_timeout),
+		zero_rtt_handshake: (inbound) => strToBool(inbound.protocol_options.zero_rtt_handshake),
+		heartbeat: (inbound) => strToTime(inbound.protocol_options.heartbeat)
+	}
+	/* No row for vless / vmess: both protocols' only per-protocol knobs
+	 * (flow, alterId) are per-user fields, emitted by
+	 * build_inbound_user() above. sing-box has no top-level `flow` on a
+	 * vless inbound nor `alterId` on a vmess one, so adding a row here
+	 * would emit a field sing-box rejects. The Loader still loads them
+	 * into inbound.protocol_options (INBOUND_OPTIONS in model.uc), which
+	 * is where build_inbound_user() reads them from.
+	 *
+	 * No row for trojan / shadowtls either: everything they carry is
+	 * shared (credentials / TLS / transport). */
+};
+
+/* The server-only TLS tail, re-keyed from the Inbound's canonical
+ * names into the UCI option names buildTLSObject() reads. That shared
+ * builder is exercised directly by tests/ucode/test_tls_transport.uc
+ * and is used by both the client and the server path, so its signature
+ * stays as it is; this is the single place the flat names survive. */
+function build_tls_server_extras(tls_server) {
+	const extras = {};
+
+	for (let canonical, uci in INBOUND_TLS_SERVER)
+		extras[uci] = tls_server[canonical];
+
+	return extras;
+}
+
+/* Build the inbound `multiplex` block. The server side has no
+ * max_connections / min_streams / max_streams (those are client
+ * dialling knobs), so this is deliberately a smaller shape than the
+ * outbound factory's build_multiplex(). */
+function build_inbound_multiplex(mux) {
+	if (!mux || mux.enabled !== '1')
+		return null;
+
+	return {
+		enabled: true,
+		padding: strToBool(mux.padding),
+		brutal: (mux.brutal && mux.brutal.enabled === '1') ? {
+			enabled: true,
+			up_mbps: strToInt(mux.brutal.up_mbps),
+			down_mbps: strToInt(mux.brutal.down_mbps)
+		} : null
+	};
+}
+
+/* Inbound -> sing-box inbound object. Pure: no UCI, no file access. */
+function build_inbound(inbound) {
+	const out = {
+		type: inbound.type,
+		tag: Inbound.tag(inbound)
+	};
+
+	const omit = INBOUND_COMMON_OMIT[inbound.type] || [];
+
+	for (let field, spec in INBOUND_COMMON_FIELDS) {
+		if (field in omit)
+			continue;
+		out[field] = resolve(spec, inbound);
+	}
+
+	const claims = INBOUND_CLAIM_FIELDS(inbound);
+	for (let field, value in claims)
+		out[field] = value;
+
+	const options = INBOUND_OPTION_FIELDS[inbound.type] || {};
+	for (let field, spec in options)
+		out[field] = resolve(spec, inbound);
+
+	out.users = (inbound.type in INBOUND_NO_USERS) ? null : [ build_inbound_user(inbound) ];
+
+	out.multiplex = build_inbound_multiplex(inbound.multiplex);
+	out.tls = buildTLSObject(inbound.tls, true, build_tls_server_extras(inbound.tls_server || {}));
+	out.transport = buildTransportObject(inbound.transport, true);
+
+	/* Same contract as build_outbound(): return the final artifact so a
+	 * golden snapshot can compare it against what sing-box is handed. */
+	return removeBlankAttrs(out);
+}
+
+/* Per-protocol requirements, mirroring OutboundFactory's
+ * REQUIRED_CREDENTIALS: what the sing-box inbound for this protocol
+ * needs in order to be usable. */
+const REQUIRED_INBOUND_CREDENTIALS = {
+	vless:     ['uuid'],
+	vmess:     ['uuid'],
+	trojan:    ['password'],
+	hysteria2: ['password'],
+	tuic:      ['uuid', 'password'],
+	shadowsocks: ['password'],
+	snell:     ['psk'],
+	anytls:    ['password'],
+	shadowtls: ['password'],
+	/* These run without a credential: http / mixed / socks / naive can
+	 * be anonymous, and hysteria (1) may carry its auth out of band. */
+	hysteria:  [],
+	http:      [],
+	mixed:     [],
+	naive:     [],
+	socks:     []
+};
+
+function inbound_problems(inbound) {
+	let problems = [...Inbound.validate(inbound)];
+
+	const required = REQUIRED_INBOUND_CREDENTIALS[inbound.type] || [];
+	const creds = inbound.credentials || {};
+
+	for (let field in required)
+		if (!creds[field])
+			problems = [...problems, `${inbound.type} requires ${field}`];
+
+	return problems;
+}
+
+export const InboundFactory = {
+	problems: inbound_problems,
+
+	buildable: (inbound) => length(inbound_problems(inbound)) === 0,
+
+	/* Inbound -> { inbound, problems }. Never dies, so a single broken
+	 * server section can be reported by the caller instead of taking
+	 * the whole server instance down. */
+	tryCreate: (inbound) => {
+		const problems = inbound_problems(inbound);
+
+		if (length(problems))
+			return { inbound: null, problems: problems };
+
+		return { inbound: build_inbound(inbound), problems: [] };
+	},
+
+	/* Inbound -> sing-box inbound object, or die(). */
+	create: (inbound) => {
+		const problems = inbound_problems(inbound);
+
+		if (length(problems))
+			die(`inbound '${inbound.id}': ${join(', ', problems)}\n`);
+
+		return build_inbound(inbound);
 	}
 };

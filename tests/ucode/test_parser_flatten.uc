@@ -43,12 +43,18 @@ function expect(name, got, want) {
 	}
 }
 
-/* For each sample, check that flatten(normalize(parse_uri(uri)))
- * equals the parser's flat output, modulo the field-set the
- * canonical mapping legitimately drops (null / undefined values).
+/* The invariant that matters for the Repository: every value the parser
+ * actually set must survive parse -> normalize -> flatten unchanged.
  *
- * Equality is field-by-field via sorted key lists: we sort both
- * sides' keys, compare lengths, and walk pairwise. */
+ * Nulls are excluded on purpose - removeBlankAttrs()/flatten() drop them
+ * and the Loader reads an absent option as null, so a null round-trip is
+ * observably lossless. A non-null value that disappears is data loss:
+ * the Repository writes `flatten()`'s output, so on the next subscription
+ * update that UCI option would be *deleted* from the stored node.
+ *
+ * The reverse direction is checked too: flatten() must not invent keys
+ * the parser never produced, or the Repository would write options the
+ * node form does not own. */
 function round_trip(name, uri, features) {
 	const flat = parse_uri(uri, features, LOG);
 	if (!flat)
@@ -57,20 +63,25 @@ function round_trip(name, uri, features) {
 	const node = normalize(flat);
 	const back = flatten(node);
 
-	const flat_keys = sort(keys(flat));
-	const back_keys = sort(keys(back));
-	expect(sprintf('%s: round-trip key set', name), back_keys, flat_keys);
-
-	/* Every value must round-trip too. */
-	for (let k in flat_keys) {
-		const kk = flat_keys[k];
-		/* Identity / metadata / type: same on both sides. */
-		expect(sprintf('%s: %s', name, kk), back[kk], flat[kk]);
+	/* 1. every non-null parser value survives, unchanged. */
+	for (let k, v in flat) {
+		if (v === null)
+			continue;
+		expect(sprintf('%s: %s survives round-trip', name, k), back[k], v);
 	}
 
-	/* And the canonical Node must have the right address /
-	 * port / type / name (label) so the Loader's read path
-	 * gets the same view the parser produced. */
+	/* 2. flatten() only emits keys the parser produced (plus the
+	 *    metadata the orchestrator attaches). */
+	const flat_keys = keys(flat);
+	for (let k, v in back) {
+		if (v === null)
+			continue;
+		if (index(flat_keys, k) === -1)
+			expect(sprintf('%s: %s is not a parser field', name, k), k, null);
+	}
+
+	/* 3. and the canonical Node must carry the identity the Loader's
+	 *    read path would reconstruct. */
 	expect(sprintf('%s: canonical type', name), node.type, flat.type);
 	expect(sprintf('%s: canonical address', name), node.address, flat.address);
 	expect(sprintf('%s: canonical port', name), node.port, flat.port);
@@ -97,10 +108,9 @@ const SAMPLES = [
 	{ name: 'vmess',   uri: 'vmess://eyJ2IjoiMiIsInBzIjoiVk1lc3MiLCJhZGQiOiJwLmV4YW1wbGUuY29tIiwicG9ydCI6IjQ0MyIsImlkIjoiM2FmODg1NjEtOWM2OS00YjE5LThmN2UtZjA4ZDU4MGJjMzM5IiwiYWlkIjoiMCIsIm5ldCI6IndzIiwidHlwZSI6Im5vbmUiLCJob3N0IjoicC5leGFtcGxlLmNvbSIsInBhdGgiOiIvd3MiLCJ0bHMiOiJ0bHMiLCJzbmkiOiJwLmV4YW1wbGUuY29tIn0=', features: FEATURES }
 ];
 
-for (let i in SAMPLES) {
-	const s = SAMPLES[i];
+/* ucode's for-in over an array yields the elements, not the indices. */
+for (let s in SAMPLES)
 	round_trip(s.name, s.uri, s.features);
-}
 
 /* --- explicit canonical -> flat shape checks --------------------------- */
 
