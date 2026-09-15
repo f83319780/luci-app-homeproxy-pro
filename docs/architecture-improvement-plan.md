@@ -43,14 +43,14 @@
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | PR-05 之前 | 100 | 95 | 90 | 95 | 95 | 95 | 65 | 40 | 45 | 95 | **81.5%** |
 | PR-05 之后 | 100 | 95 | 90 | 95 | 95 | 95 | 65 | **80** | 45 | 95 | **85.5%** |
+| P0 修复之后 | 100 | 95 | 90 | 95 | 95 | 95 | **90** | 80 | 45 | 95 | **88.0%** |
 
-> PHASE 6 从 85 下调到 **65**：§2.14 的 P0 说明「回滚安全网」在运行时这一段并不可靠。
-> 这个缺陷**早于 PR-05**（`health.sh` 是上一轮抽出来的，判据没变），所以两行都按 65 计。
+> PHASE 6 在 PR-05 之后一度下调到 **65**：§2.14 的 P0 说明「回滚安全网」在运行时这一段
+> 并不可靠（该缺陷早于 PR-05）。§2.14.6 修好并真机验证之后回到 **90**。
 
 > **口径修正**：本文件此前写"约 95%"，与它自己的 PHASE 表对不上。按表计算 PR-05 之前是
 > **81.5%**，落在指导建议"整体架构成熟度 80–85%"的区间内 —— 两份文档本来就没有分歧，
-> 是这里的叙述数字写飘了。PR-05 之后是 **85.5%**（PHASE 7 从 40 推到 80，
-> 同时 PHASE 6 因 §2.14 的 P0 从 85 下调到 65）。
+> 是这里的叙述数字写飘了。PR-05 之后 **85.5%**，P0 修复之后 **88.0%**。
 
 已落地的部分（PHASE 1/2/3/4/5 收尾、§4 安全 8/9、PHASE 9 收尾 5/6、PHASE 7 抽离）：
 
@@ -89,7 +89,7 @@
 | 3 | Protocol Adapter | ✅ ~95% | PR-04 已落地（commit f657063）：`Inbound` 领域模型 + `INBOUND_CREDENTIALS`/`INBOUND_OPTIONS`/`INBOUND_COMMON`/`INBOUND_TLS_SERVER` 四张表；`InboundFactory` 与 `OutboundFactory` 同形；WireGuard endpoint 也搬进 `EndpointFactory`，Generator 不再持有协议构建逻辑；`generator/server.uc` 165 → 60 行；顺带修掉 fixture 的 `listen_port` 缺陷并新增 inbound golden 快照 |
 | 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
-| 6 | Candidate Config | 🔴 ~65% | known-good / 生成失败回退 / 健康门 / 回滚**机制**已落地并有 16 项测试，**生成期**失败链成立；但 PR-05 验证轮在真机上实测出一个 **P0**：健康门会把「能过 check 但起不来」的配置判为健康，`reload` 报 `Reload completed.` 而服务实际是死的，并把该坏配置写进 known-good（**§2.14**）。回滚分支因此被短路 —— 安全网在运行时这一段失效 |
+| 6 | Candidate Config | 🟢 ~90% | 生成期失败链成立；运行期的 P0（§2.14）**已修复并真机验证**（commit `bb4e216`）：门改为 procd 视角 + 监听归属 + 连续稳定采样，known-good 只在门通过后写入，回滚被真实触发并成功。剩余 = 回滚路径尚无自动化 on-target job |
 | 7 | Runtime | ✅ ~80% | **PR-05 已落地**：`init.d/homeproxy` 517 → 253 行，dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 实例注册 / 生成事务全部搬到 `scripts/runtime/{service,dns,firewall,net}.sh`（+ 既有 `config.sh`/`health.sh`）。剩余 = 观点 18 的健康分级（listener / functional）与观点 21 的显式状态机，见 §2.10.3 与 §2.10.5 |
 | 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除；协议表前后端仍 6 份不同步，`node.js`↔`server.js` 仍有 ~229 行重复 |
 | 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
@@ -115,7 +115,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | # | 大项 | 规模 | 风险 | 估算（agent 工时） |
 |---|---|---|---|---|
 | ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
-| **J** | **§2.14 的 P0：健康门判据（稳定存活 + listener 健康 + known-good 刷新时机）** | **中** | **高（改的是回滚安全网本身；必须有故障注入回归）** | **3 – 6** |
+| ~~J~~ | ~~§2.14 的 P0：健康门判据（稳定存活 + listener 健康 + known-good 刷新时机）~~ | ~~中~~ | ~~高~~ | ~~3 – 6~~ ✅ 已落地（commit `bb4e216`，见 §2.14.6–§2.14.8）：离机故障注入回归 + 真机 192.168.1.102 完整闭环 |
 | B | PHASE 8 LuCI 模块化（协议 registry 单一真源 + `components/`+`shared/` + 去重） | 大 | 高（浏览器流程无法自动化验证） | 9 – 15 |
 | ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
 | ~~D~~ | ~~PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码）~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit `ca01141`，PR-01 §A + §B）；server inbound 领域化留在 H（PR-04） |
@@ -125,7 +125,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | ~~H1~~ | ~~PHASE 5 收尾（normalizer/validator、6 处 `uci.set/commit` 收敛、Repository canonical Node 写）~~ | ~~中~~ | ~~低–中~~ | ~~5 – 8~~ ✅ 已落地（commit e88f7c7，PR-03） |
 | ~~H2~~ | ~~PHASE 3 server inbound 领域化（`generator/server.uc` 走 Domain Model / Adapter）~~ | ~~中~~ | ~~中~~ | ~~3 – 5~~ ✅ 已落地（commit f657063，PR-04） |
 | I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（A / C / D / E / F / G / H1 / H2 已完成）** | | | **15 – 29**（未完成：J 3 – 6、B 9 – 15、I 1 – 2） |
+| | **合计（A / C / D / E / F / G / H1 / H2 / J 已完成）** | | | **10 – 17**（未完成：B 9 – 15、I 1 – 2） |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
 ~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
@@ -185,7 +185,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | 15 | `update_subscriptions.uc` 退化为 Orchestrator | ✅ | 全文 `uci.set/commit/delete` **零命中**（§2.5 §C 本轮勘误）；只留 `cursor()` 交给 Repository | — |
 | 16 | Repository 是唯一持久化边界 | ✅ | 订阅链路上 `subscription/repository.uc` 是唯一 UCI 写入者（37 处 `uci.`） | PR-07 守护 |
 | 17 | Candidate / Transaction / Rollback 三层概念 | ✅ | §2.6：文件快照路线（`runtime/config.sh` + known-good），**未**依赖"跨进程未提交 UCI 可见" | — |
-| 18 | Runtime 健康应超越"进程活着" | 🔴 **P0** | `runtime/health.sh`（54 行）只做实例探测（`pgrep` + ubus 二选一）。**这不只是「不够好」：真机实测证明它会把起不来的配置判为健康并污染 known-good（§2.14）**。listener / functional 两级缺失 | PR-05 续（§2.10.3 + §2.14.5），**最高优先** |
+| 18 | Runtime 健康应超越"进程活着" | ✅ | 该观点对应的 P0 已修复（§2.14，commit `bb4e216`）：判据 = procd 视角（`running` + 无失败 `exit_code`）+ **listener 归属**（`netstat -p` 属主必须是 sing-box）+ **连续 N 次稳定采样**。**Process / Configuration / Listener 三级已落地**；Functional Health 仍缺（有意为之：探针目标不可达 ≠ 本地配置坏，不应触发回滚） | — |
 | 19 | `init.d/homeproxy` 继续减负 | ✅ | **PR-05 已落地**：517 → **253 行**；`runtime/{service,dns,firewall,net}.sh` 承接 dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 注册 / 生成事务（§2.7、§2.10） | — |
 | 20 | 已有 `procd respawn`，不重复实现 supervision | ✅ | `procd_set_param respawn` ×3（`init.d:263,313,320`）；全文件无 `while true`/`sleep` 守护循环 | — |
 | 21 | Known-Good 成为正式 Runtime 状态 | 🟡 | known-good 副本 + 回滚**机制**已在（§2.6）并在真机验证轮跑通刷新；但**没有**显式 `KNOWN_GOOD→CANDIDATE→VALIDATING→ACTIVATING→HEALTHY` 状态机 | PR-05 续（§2.10.5） |
@@ -197,7 +197,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | 27 | Full on-target test 是 CI 的重要剩余缺口 | ❌ | 仍无 on-target CI job。**该观点有两处已过期**，见 §2.13.3 | PR-07 |
 | 28 | 必须建立 Architecture Guard | ❌ | 无任何边界检查存在 | **PR-07（建议先做）** |
 
-**统计**：✅ 18 项、🟡 6 项、🔴 1 项（观点 18，§2.14 的 P0）、❌ 3 项。三个 ❌（23 / 27 / 28）恰好就是 §0.5 的三个未开始 PR。
+**统计**：✅ 19 项、🟡 6 项、❌ 3 项。三个 ❌（23 / 27 / 28）恰好就是 §0.5 的三个未开始 PR。
 🟡 的 7 项里：03 与 05 属于 "Domain Model 完整化" 的尾巴（`tls.raw` 死字段见 §2.13.1，
 `dns/routing` 领域对象化）；18 与 21 是 PR-05 没做完的可靠性半场（健康分级、状态机）；
 02 与 25 要等 PR-07 的 Guard 才有意义；08 是一个独立的 validator 小项。
@@ -211,7 +211,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 | PR-02 | Parser Normalization | ✅ 已落地 | §2.2 | `33994fa`；尾巴 = validator 扩展（观点 08） |
 | PR-03 | Subscription Transaction Boundary | ✅ 已落地 | §2.5 | `e88f7c7` |
 | PR-04 | Protocol Adapter Completion | ✅ 已落地 | §2.3 | `f657063` |
-| PR-05 | Runtime Reliability 2.0 | 🟢 抽离半场已落地 | §2.7 / §2.10 | `c2aeac5`； 已落地：`init.d` 517→253 行 + `runtime/{service,dns,firewall,net}.sh`；离机差分 trace 等价测试 + 真机 192.168.1.102 procd 生命周期验证。**剩余半场** = 健康分级（观点 18，**§2.14 的 P0 使这一项升为最高优先**）与显式状态机（观点 21），见 §2.10.3 / §2.10.5 / §2.14.5 |
+| PR-05 | Runtime Reliability 2.0 | 🟢 抽离半场已落地 | §2.7 / §2.10 | `c2aeac5`； 已落地：`init.d` 517→253 行 + `runtime/{service,dns,firewall,net}.sh`；离机差分 trace 等价测试 + 真机 192.168.1.102 procd 生命周期验证。**运行期 P0（§2.14）已随本项一并修复并真机验证**（commit `bb4e216`）；剩余半场 = 观点 21 的显式状态机与 Functional Health，见 §2.10.5 / §2.14.5 |
 | PR-06 | LuCI Modularization | ⬜ 未开始 | §2.11 | 需人工浏览器回归 |
 | PR-07 | Architecture Guard + CI | ⬜ 未开始 | §2.12 | **建议作为下一个 PR**，理由见 §2.12 |
 
@@ -1216,7 +1216,11 @@ PR-05 之后 init.d 只剩生命周期编排 + 配置读取 + 三个 service 函
    改任一处都会让健康门**静默失效**（退化成"总是超时 → 总是回滚"）。建议加一条断言把两者绑在一起测。
 3. **dnsmasq 卸载不对称**：`hp_dnsmasq_remove_snippets` 无条件 `rm -rf`，即使 `start` 从未写入
    （例如 `outbound_node == nil` 时）。影响很小，但是"删除不存在的东西"这类噪音的来源。
-4. **`hp_prepare_runtime_files` 的 `chown` 在 custom 模式下必然报 warning**：它 `chown` 了
+4. **（已在 §2.14 修复）健康门判据**：`hp_instance_running` 原来的 `pgrep` 优先在真机上是错的
+   （陈旧进程会覆盖 procd 的「未运行」）。commit `bb4e216` 把 procd 视角升为权威，
+   并给测试 harness 补上保真度（见 §2.14.7）。
+
+5. **`hp_prepare_runtime_files` 的 `chown` 在 custom 模式下必然报 warning**：它 `chown` 了
    `$HP_DIR/cache.db`，而 `cache.db` 只在 `bypass_mainland_china` 下创建。真机日志里可见
    `Warning: failed to change the ownership of the runtime files to sing-box.`。
    **这是 PR-05 之前就有的行为**（该行逐字未改，差分 trace 的场景 A/B 未覆盖 custom + 无 cache.db
@@ -1454,7 +1458,7 @@ ImmortalWrt **主路由**；SSH 回退分支会把整个 checkout `tar` 上传�
 - §2.8 表格里的行号仍是 PR-01～04 之前的位置（`parse_uri.uc:445-483`、`loader.uc:168-256`），
   这些文件/行段已不存在；PR-06 落地时应一并更新（§2.11 已给出新行号）。
 
-### 2.14 ⚠️ 真机实测发现的 P0：健康门会把"起不来"的配置判为健康，并写进 known-good
+### 2.14 ~~⚠️ 真机实测发现的 P0：健康门会把"起不来"的配置判为健康，并写进 known-good~~ ✅ 已修复（commit `bb4e216`）
 
 这是**试图验证回滚分支时**发现的，不是推测。它推翻了本文此前"失败链已经成立"的说法
 （§0.1 / §2.6）在**运行时**这一段的成立性 —— 生成期的失败链是对的，运行期的**不是**。
@@ -1515,7 +1519,7 @@ sing-box 是**先绑定 dns-in（5333）成功、再绑定 mixed-in（5399）失
 3. 这也解释了为什么**回滚分支在真机上极难触发**：不是"没测"，而是这条路被健康门的误判
    在它之前就短路了（真正能触发回滚的，只剩"进程根本起不来"这种更窄的失败）。
 
-#### 2.14.5 修法（进入 PR-05 剩余半场，优先级提到最高）
+#### 2.14.5 修法（已实施）
 
 1. **门要证明"稳定存活"，不只是"曾经活着"**：进程必须在 N 秒（建议 5s）观察窗内**持续**存在，
    且**没有**非零 `exit_code` —— `ubus call service list` 已经直接给了 `exit_code` 字段，
@@ -1527,7 +1531,54 @@ sing-box 是**先绑定 dns-in（5333）成功、再绑定 mixed-in（5399）失
    服务**仍在用旧配置运行**、known-good **未被覆盖**。这条测试要在真机上跑，
    或先把 `hp_instance_running` 抽成可 stub 的判据再离机跑。
 
-在修好之前，本文件不再声称运行时失败链已经成立：**生成期 ✅ 成立；运行期 ❌ 不成立**。
+#### 2.14.6 修法落地（commit `bb4e216`）—— 一个症状拆成五个缺陷
+
+上面 2.14.5 的四条是**计划**。实际动手时，真机测量把一个症状拆成了五个**互相独立**的缺陷，
+少修任何一个门都不成立。五个都只有真机能发现：
+
+| # | 缺陷 | 真机证据 | 修法 |
+|---|---|---|---|
+| 1 | 判据只有"存在匹配进程"，而 `pgrep -f` 被**陈旧进程**满足 | 实测：一个 pid（5373）一直不死，同时 procd 每秒重启一个崩溃实例 → 门在整个观察窗都"看到活着" | procd 的视角（`ubus service list`）升为唯一权威；`pgrep` 降级为"ubus 不可用"时的兜底 |
+| 2 | "端口在听" ≠ "**我们在听**" | 注入故障时 5399 **确实在听**——属主是占位者 socat | 用 `netstat -p` 的属主列要求该端口属于 sing-box |
+| 3 | 门放错了位置：`USE_PROCD=1` 下 procd 是在 `start_service` **返回之后**（rc.common 的 `procd_close_service`）才拉起实例的 | 门在真机上永远超时 | 门移入 `service_started()` —— rc.common 的 post-start 钩子 |
+| 4 | `start()` 的返回值是 `procd_close_service` 的，不是 `start_service` 的 | reload 把"门失败"读成成功，直接打 `Reload completed.` | 失败写 `$RUN_DIR/failed-side`，`reload_service` 读文件判断 |
+| 5 | 15s 预算短于 procd 的 respawn 回退（实测每次重试等 5s，重试耗尽后更久） | 回滚重启已经起来了，门却刚宣告失败 | 默认预算 30s；回滚重启单独给 60s |
+
+**第 6 个缺陷是最后一轮真机跑才暴露的**：门校验的是 **UCI 描述的端口**，而不是
+**正在运行的配置声明的端口**。回滚之后 live 文件是**较旧的 known-good 副本**，
+于是门一直在等一个那份配置根本不会绑定的端口（5399），把一个已经成功的回滚判成失败。
+现在端口由 `hp_config_ports()` 从 live 文件里读。
+
+**同时修掉 `known-good` 的写入时机**：`hp_start_generated_config` 不再写 known-good，
+候选配置只有在门通过之后才由 `hp_promote_known_good` 记录。此前 `start_service` 在门运行**之前**
+就覆盖了它，所以回滚发现"失败配置已经是 known-good"，直接放弃——这才是 P0 的核心。
+
+#### 2.14.7 测试（新增，都是能失败的测试）
+
+| 测试 | 覆盖 |
+|---|---|
+| `tests/runtime/test_config_transaction.sh` +11 项 | 陈旧进程不得覆盖 procd；稳定性窗口不能被"一次走运的轮询"满足（交替样本必须失败、坏样本后能恢复）；监听归属三态（属于 sing-box / 被别人占 / 无属主列）；组合样本 |
+| `tests/runtime/test_runtime_extraction.sh` 场景 D | 端到端回归：健康配置起来并被记录 → 换成一个 mixed_port 被占的候选 → **门必须拒绝、known-good 必须存活、回滚必须把服务带回来** |
+| 基线文件 | `trace.pre-pr05.txt`（579 行）与 `trace.golden.txt`（805 行）用**同一套 harness** 采集，两者的 `diff` 就是本次有意的行为变更 |
+
+**harness 自己有三个 bug**，它们各自藏住了上面的缺陷，一并修掉：按场景的夹具在
+source 默认值**之前**赋值而被静默重置（所有场景其实跑同一份配置）；procd 被建模成
+"注册即启动"（**正好藏住缺陷 3**）；管道两端并发写 trace 导致顺序不确定。
+
+#### 2.14.8 真机实测结论
+
+```
+1) 健康 start        -> 门在稳定窗口后通过，记录 known-good
+2) 占住 5399 + mixed_port=5399 + reload
+                     -> 候选被拒（30s 预算耗尽，"did not come up"）
+                     -> 回滚："Starting with the last known-good client configuration."
+                     -> 约 3s 后 "sing-box 1.14.0 started." + "Rollback completed; ..."
+                     -> reload rc=0
+3) 结局              -> running=true；live 与 known-good 都是 5330（旧的好配置）；
+                        5330/5333 的监听属主是 sing-box；无 failed-side 标记
+```
+
+**生成期 ✅ 成立；运行期 ✅ 现在也成立。**
 
 ---
 
@@ -1677,7 +1728,10 @@ P2（结构）
 35. ✅ test(firewall): check the {%- glue bug without needing the fw4 module    # §2.3.2 (`601cd9d`)
 36. ✅ ci(toolchain): set CMAKE_INSTALL_RPATH so the binaries find libucode     # §2.3.2 (`7822e6f`)
 37. ✅ docs: record the pinned-ucode round and the honest NOT RUN               # §2.3.2 (`7e561e0`)
-39. 🔴 fix(runtime): make the reload health gate prove stability, not existence  # §2.14
+39. ✅ fix(runtime): make the reload health gate prove stability, not existence  # §2.14  (`bb4e216`)
+      一个症状拆成 6 个缺陷：pgrep 陈旧进程、监听归属、门放在 start_service 之内（procd 尚未启动）、
+      rc.common 不传 start_service 状态、respawn 回退长于预算、门校验 UCI 端口而非运行中配置；
+      并把 known-good 的写入推迟到门通过之后
       真机实测 P0：reload 报成功而服务是死的，坏配置写进 known-good。
       改成「持续存活 N 秒 + exit_code 为 0 + required listeners 在 listen」后再刷新 known-good，
       并补故障注入（占端口）回归测试。**建议先于 PR-07 / PR-06。**
@@ -1687,9 +1741,7 @@ P2（结构）
       + tests/fixtures/runtime/trace.pre-pr05.txt；tests/run.sh 默认测试机改为 192.168.1.102；
       真机 192.168.1.102 验证 start/reload/stop
 
-**最高优先（超出原 PR 排序）**：先修 §2.14 的 P0（健康门判据）——它让"回滚安全网"在运行时
-这一段失效，属于"已经没有安全网还在上面加功能"。工作量小（`health.sh` + `init.d` reload 路径），
-但必须有故障注入回归。然后再按下面的顺序走。
+**最高优先项已完成**：§2.14 的 P0 已修并真机验证（commit `bb4e216`）。下面按正常顺序走。
 
 **下一步（PR-07 → PR-06 → PR-05 剩余半场）**：
 先做 **PR-07 Architecture Guard**（§2.12）——边界今天已经是干净的（§2.12.2 实测），
