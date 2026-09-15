@@ -24,6 +24,14 @@ const callServiceList = rpc.declare({
 	expect: { '': {} }
 });
 
+/* Module-scoped guard: register the view-level status poll exactly
+ * once, regardless of how many times the view's render() runs (LuCI
+ * sometimes re-invokes the view handler on UCI commit). Without this,
+ * poll.add() inside a section render() handler leaks a fresh handler
+ * on every render and the status bar starts updating multiple times
+ * per tick. */
+let client_status_poll_registered = false;
+
 const callReadDomainList = rpc.declare({
 	object: 'luci.homeproxy',
 	method: 'acllist_read',
@@ -49,14 +57,22 @@ function getServiceStatus() {
 }
 
 function renderStatus(isRunning, version) {
-	let spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
-	let renderHTML;
-	if (isRunning)
-		renderHTML = spanTemp.format('green', _('HomeProxy'), version, _('RUNNING'));
-	else
-		renderHTML = spanTemp.format('red', _('HomeProxy'), version, _('NOT RUNNING'));
+	/* Defense-in-depth: features.version comes from `sing-box version`
+	 * stdout parsed by a regex, but it is interpolated into an
+	 * `innerHTML =` sink. Force the version through a strict allow-list
+	 * regex (semver-ish) so a hostile sing-box binary - or a future
+	 * change to the parser - cannot smuggle HTML into this template.
+	 * Anything that does not match renders as 'unknown' instead of
+	 * being silently dropped. */
+	let safeVersion = 'unknown';
+	if (typeof version === 'string' && /^[\w.\-+]+$/.test(version))
+		safeVersion = version;
 
-	return renderHTML;
+	let spanTemp = '<em><span style="color:%s"><strong>%s (sing-box v%s) %s</strong></span></em>';
+	if (isRunning)
+		return spanTemp.format('green', _('HomeProxy'), safeVersion, _('RUNNING'));
+	else
+		return spanTemp.format('red', _('HomeProxy'), safeVersion, _('NOT RUNNING'));
 }
 
 let stubValidator = {
@@ -103,16 +119,29 @@ return view.extend({
 
 		s = m.section(form.TypedSection);
 		s.render = function () {
-			poll.add(function () {
-				return L.resolveDefault(getServiceStatus()).then((res) => {
-					let view = document.getElementById('service_status');
-					view.innerHTML = renderStatus(res, features.version);
-				});
-			});
-
+			/* The status bar is rendered into the page body by the
+			 * view-level poll handler below. This section only paints the
+			 * placeholder; registering poll.add() here would leak a fresh
+			 * poll handler every time the user calls map.reset() (every
+			 * UCI write re-renders this section). */
 			return E('div', { class: 'cbi-section', id: 'status_bar' }, [
 					E('p', { id: 'service_status' }, _('Collecting data...'))
 			]);
+		}
+
+		/* View-level poll: registered exactly once per navigation, never
+		 * inside a section's render() handler. getElementById may return
+		 * null when LuCI swaps the DOM tree between renders - guard
+		 * against it instead of throwing. */
+		if (!client_status_poll_registered) {
+			client_status_poll_registered = true;
+			poll.add(function () {
+				return L.resolveDefault(getServiceStatus()).then((res) => {
+					let view = document.getElementById('service_status');
+					if (view)
+						view.innerHTML = renderStatus(res, features.version);
+				});
+			});
 		}
 
 		s = m.section(form.NamedSection, 'config', 'homeproxy');
@@ -1674,16 +1703,33 @@ return view.extend({
 		so.depends({'homeproxy.config.routing_mode': 'custom', '!reverse': true});
 		so.load = function(/* ... */) {
 			return L.resolveDefault(callReadDomainList('proxy_list')).then((res) => {
-				return res.content;
+				/* acllist_read returns { content: null, error: '...' }
+				 * when the backend rejected the request (bad type, file
+				 * unreadable, ...). Surface the error instead of silently
+				 * resolving to "" which makes the field look unchanged. */
+				if (res && res.error)
+					ui.addNotification(null, E('p', _('Failed to read domain list: %s.').format(res.error)));
+				return res ? res.content : '';
 			}, {});
 		}
 		so.write = function(_section_id, value) {
-			return callWriteDomainList('proxy_list', value);
+			return callWriteDomainList('proxy_list', value).then((ret) => {
+				/* Without this, a backend error like "UCI commit failed"
+				 * is silently dropped and the user sees the old value
+				 * reappear after refresh with no explanation. */
+				if (ret && ret.result === false)
+					throw (ret.error || 'unknown error');
+				return true;
+			});
 		}
 		so.remove = function(/* ... */) {
 			let routing_mode = this.section.formvalue('config', 'routing_mode');
 			if (routing_mode !== 'custom')
-				return callWriteDomainList('proxy_list', '');
+				return callWriteDomainList('proxy_list', '').then((ret) => {
+					if (ret && ret.result === false)
+						throw (ret.error || 'unknown error');
+					return true;
+				});
 			return true;
 		}
 		so.validate = function(section_id, value) {
@@ -1706,16 +1752,26 @@ return view.extend({
 		so.depends({'homeproxy.config.routing_mode': 'custom', '!reverse': true});
 		so.load = function(/* ... */) {
 			return L.resolveDefault(callReadDomainList('direct_list')).then((res) => {
-				return res.content;
+				if (res && res.error)
+					ui.addNotification(null, E('p', _('Failed to read domain list: %s.').format(res.error)));
+				return res ? res.content : '';
 			}, {});
 		}
 		so.write = function(_section_id, value) {
-			return callWriteDomainList('direct_list', value);
+			return callWriteDomainList('direct_list', value).then((ret) => {
+				if (ret && ret.result === false)
+					throw (ret.error || 'unknown error');
+				return true;
+			});
 		}
 		so.remove = function(/* ... */) {
 			let routing_mode = this.section.formvalue('config', 'routing_mode');
 			if (routing_mode !== 'custom')
-				return callWriteDomainList('direct_list', '');
+				return callWriteDomainList('direct_list', '').then((ret) => {
+					if (ret && ret.result === false)
+						throw (ret.error || 'unknown error');
+					return true;
+				});
 			return true;
 		}
 		so.validate = function(section_id, value) {

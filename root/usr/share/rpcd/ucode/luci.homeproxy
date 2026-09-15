@@ -101,7 +101,15 @@ const methods = {
 		args: { filename: 'filename' },
 		call: function(req) {
 			const writeCertificate = (filename, priv) => {
-				const tmpcert = '/tmp/homeproxy_certificate.tmp';
+				/* Per-button staging path. The previous code used a
+				 * single /tmp/homeproxy_certificate.tmp shared by every
+				 * certificate button, which was a race: the second upload
+				 * landed on top of the first while the backend was still
+				 * reading it, and a slow upload could overwrite a faster
+				 * one. The frontend (homeproxy.js uploadCertificate)
+				 * derives the same path from the UCI option name, and
+				 * the ACL write list enumerates all four. */
+				const tmpcert = `/tmp/homeproxy_cert_${filename}.tmp`;
 				const filestat = lstat(tmpcert);
 
 				if (!filestat || filestat.type !== 'file' || filestat.size <= 0) {
