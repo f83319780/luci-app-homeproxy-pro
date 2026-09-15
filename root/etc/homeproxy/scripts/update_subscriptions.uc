@@ -82,9 +82,15 @@ const routing_mode = loaded.general.routing_mode;
 
 const allow_insecure = sub.allow_insecure || '0';
 const filter_mode = sub.filter_nodes || 'disabled';
-const filter_keywords = sub.filter_keywords || [];
+/* subscription_urls and filter_keywords are siblings of `subscription`,
+ * not members of it: load_access_control() puts them straight on
+ * access_control (loader.uc:303-304), and test_domain_model_skeleton.uc
+ * asserts that shape.  Reading them through `sub.` yielded [] forever, so
+ * the guard below never called main() and the updater exited 0 having done
+ * nothing - the LuCI button and the cron entry were both silent no-ops. */
+const filter_keywords = loaded.access_control.filter_keywords || [];
 const packet_encoding = sub.packet_encoding || 'xudp';
-const subscription_urls = sub.subscription_urls || [];
+const subscription_urls = loaded.access_control.subscription_urls || [];
 const user_agent = sub.user_agent;
 
 let main_node, main_udp_node;

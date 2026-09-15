@@ -66,6 +66,13 @@ echo "== runtime extraction equivalence (PR-05) =="
 # script refactor did not change behaviour.
 sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" || FAILED=1
 
+echo "== architecture guard =="
+# Cross-file invariants that no single-layer test can see: the generators must
+# read the production UCI directory, and the subscription updater must read the
+# fields where the Loader actually puts them.  Both regressed silently once.
+# Pure shell, no ucode/node, so it also runs before the toolchain branch.
+sh "$ROOT/tests/arch-guard.sh" "$ROOT" || FAILED=1
+
 echo "== ucode tests =="
 if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
 	# The generator cases feed the emitted config to `sing-box check` and the

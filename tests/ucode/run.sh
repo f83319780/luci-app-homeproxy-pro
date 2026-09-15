@@ -232,6 +232,13 @@ echo "== subscription repository integration test =="
 # a sandboxed config dir with seed sections.
 sh "$ROOT/tests/ucode/test_subscription_repository.sh" "$ROOT" "$WORK/subscription_repo" || FAILED=1
 
+echo "== subscription updater actually runs =="
+# Drives update_subscriptions.uc end to end, which nothing did before: the
+# script read subscription_urls off the wrong object, so `call(main)` never
+# ran and both the LuCI button and the cron entry were silent no-ops.  The
+# URL points at a closed port, so main() fails before its reload call.
+sh "$ROOT/tests/ucode/test_subscription_updater_runs.sh" "$ROOT" "$WORK/updater_runs" || FAILED=1
+
 echo "== homeproxy helper tests =="
 rm -rf "$WORK/homeproxy"
 mkdir -p "$WORK/homeproxy"
