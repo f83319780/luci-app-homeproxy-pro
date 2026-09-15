@@ -21,6 +21,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Also callable, so build.yml can make the release depend on this suite
+  # instead of re-implementing it.  Before that, tagging published binaries from
+  # a commit the tests had never run on: build.yml's only check was the
+  # warn-only translation one, and branch protection is not available on this
+  # repository (the API returns 403 on a private repo without Pro).
+  workflow_call:
 
 concurrency:
   group: arch-${{ github.ref }}
