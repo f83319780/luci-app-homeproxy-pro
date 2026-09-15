@@ -18,7 +18,7 @@ import {
 	wGETVerbose, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl
 } from 'homeproxy';
 
-import { parse_uri } from 'parse_uri';
+import { parse_uri } from './parser/uri.uc';
 
 import { check as filter_check, apply_policy } from './subscription/filter.uc';
 import { decode as decode_subscription } from './subscription/decoder.uc';

@@ -754,7 +754,7 @@ return view.extend({
 							let packet_encoding = uci.get(data[0], 'subscription', 'packet_encoding');
 
 							/* Every link is parsed - and rejected - by the
-							 * backend parser (parse_uri.uc), so importing a
+							 * backend parser (parser/uri.uc), so importing a
 							 * link and receiving it through a subscription
 							 * can no longer disagree about what it means. */
 							return Promise.all(input_links.map((l) => hp.parseShareLink(l)))
