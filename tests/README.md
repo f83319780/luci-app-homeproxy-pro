@@ -27,6 +27,39 @@ tests/run.sh
   the fallback untars the whole checkout into `$HP_TEST_DIR` on the target, and
   `192.168.1.1` is the box the house actually routes through.
 
+### The staging policy: never install
+
+The ssh path **copies the checkout and runs it in place**. It never installs the
+package and never runs `apk` or `opkg` on the target. That is a rule, not a
+preference.
+
+Installing on a live device runs the package manager, which rewrites
+`/etc/config/homeproxy` from the feed package — and on 2026-09-15 that destroyed
+the test machine's node configuration. There was no backup and no snapshot, and
+six nodes plus the `dns`, `server` and `subscription` sections were
+unrecoverable. Staging cannot do that: everything it writes lives under
+`$HP_TEST_DIR` and nothing outlives the run.
+
+Two consequences are printed rather than left to be discovered. `tests/run.sh`
+reports both versions before staging:
+
+```
+== target and source versions (staging; the package is not installed) ==
+  source  : 28.9.1.14-r1
+  target  : luci-app-homeproxy-26.236.50544~cb5d434
+  sing-box: 1.14.1
+```
+
+* the target may have a different build of the app installed, or none. **What is
+  tested is the checkout, not what the device runs** — so "it passes on the
+  device" never means "the installed package is good".
+* `sing-box` on the target is whatever the target has. The local branch gates on
+  ≥ 1.14; the staging branch records the version instead, because it cannot
+  install one.
+
+If a test genuinely needs the installed package, that is a different test and
+needs a different safety story (a config backup, taken first, on the device).
+
 `tests/run.sh` exits non-zero if anything fails. The ucode part can also be run
 on its own on a target:
 

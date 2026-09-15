@@ -136,6 +136,32 @@ else
 	# interpolated bare into `rm -rf`, so a value with a space would have
 	# removed two paths instead of one.
 	SSH="ssh -o BatchMode=yes -o ConnectTimeout=10"
+
+	# The staging policy, stated where it is carried out: this suite copies the
+	# checkout to the target and runs it from there. It never installs the
+	# package and never runs `apk`/`opkg` on the target.
+	#
+	# That is not a style preference. Running the package manager on a live
+	# device rewrote /etc/config/homeproxy with the feed package's default and
+	# the user's node configuration was lost; there was no backup and no
+	# snapshot. Staging cannot do that - nothing it writes outlives the run.
+	#
+	# The prices of staging are a version skew and a two-version problem, so
+	# both are printed rather than left to be discovered:
+	#   - the target may have a *different* build of the app installed (or none);
+	#     what is tested is the checkout, not what the device runs;
+	#   - `sing-box` on the target is whatever the target has, which is why the
+	#     local branch gates on >= 1.14 and this one records the version.
+	echo "== target and source versions (staging; the package is not installed) =="
+	SRC_VERSION="$(sed -n 's/^PKG_VERSION:=//p' "$ROOT/Makefile")-r$(sed -n 's/^PKG_RELEASE:=//p' "$ROOT/Makefile")"
+	echo "  source  : $SRC_VERSION"
+	# Single-quoted on purpose: the inner $(...) must be evaluated by the
+	# target's shell, not by this one. Double quotes here need three levels of
+	# escaping and the first attempt produced "unterminated quoted string".
+	# `apk info -v` prints the description, not the version; `apk list -I` gives
+	# "name-version arch {repo} [installed]".
+	$SSH "$HOST" 'pkg=$(apk list -I luci-app-homeproxy 2>/dev/null | head -1 | cut -d" " -f1); [ -n "$pkg" ] || pkg=$(opkg status luci-app-homeproxy 2>/dev/null | sed -n "s/^Version: //p" | head -1); [ -n "$pkg" ] || pkg="(not installed)"; sb=$(sing-box version 2>/dev/null | sed -n "s/^sing-box version \([0-9][0-9.]*\).*/\1/p" | head -1); echo "  target  : $pkg"; echo "  sing-box: ${sb:-unknown}"' || true
+
 	if tar czf - -C "$ROOT" --exclude .git --exclude node_modules . \
 		| $SSH "$HOST" "rm -rf '$REMOTE_DIR' && mkdir -p '$REMOTE_DIR' && tar xzf - -C '$REMOTE_DIR'"; then
 		STAGED_REMOTELY=1
