@@ -227,6 +227,9 @@ else
 	FAILED=1
 fi
 
+echo "== migrate_config regressions =="
+sh "$ROOT/tests/ucode/test_migrate_config.sh" "$ROOT" "$WORK/migrate" || FAILED=1
+
 echo "== executeCommand() failure-path test =="
 rm -rf "$WORK/homeproxy_inject"
 mkdir -p "$WORK/homeproxy_inject"
