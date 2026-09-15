@@ -10,16 +10,17 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **60% ~ 65%**（PHASE 6 已接近完成，PHASE 9 到 75%，
-但 PHASE 4 仍为 0%）。剩余部分见 §0.3。
+按文档的 9 个 PHASE 取平均，目前约 **70% ~ 75%**（PHASE 6 已接近完成，PHASE 9 到 75%，
+PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4）。
+剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
 |---|---|---|---|
 | 0 | Baseline | ✅ 完成 | 文档化充分 |
 | 1 | Domain Model | 🟡 ~80% | `Node` 已建；`dns/routing/access_control/server` 仍是 raw UCI dict；`Node.raw` / `Config.raw` / `tls.raw` 全无人读；`ConfigQuery` 有 3 个死 helper |
 | 2 | Parser | 🟡 ~50% | 已按协议拆成 `parse_<proto>_uri()`；无 `parser/` 目录、无 normalize/validator 层、输出仍是扁平 UCI 键 |
-| 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`direct_overrides` 仍是模块级副作用，`generate_endpoint` 仍是独立函数 |
-| 4 | Generator 拆分 | ❌ ~0% | `generate_client.uc` 已涨到 1240 行，`generator/` 目录不存在，仍靠 `__LOADER_DIR__` sed 做测试 |
+| 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`generate_endpoint` 仍是独立函数，`direct_overrides` 已随 PHASE 4 改成显式参数 |
+| 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
 | 5 | Subscription Pipeline | 🟡 ~75% | fetcher/decoder/filter/repository 已拆，已事务化 + 先抓取后 reload；缺 normalizer/validator，urltest 校准仍在 repository 之外提交 |
 | 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
 | 7 | Runtime | 🟡 ~40% | `runtime/{config,health}.sh` 已抽、重复 `sing-box check` 已去；`dns`/`firewall`/`service` 仍在 init.d（517 行） |
@@ -38,7 +39,7 @@
 
 | # | 大项 | 规模 | 风险 | 估算（agent 工时） |
 |---|---|---|---|---|
-| A | PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入） | 大 | 中（回归面大，但有 golden 快照兜底） | 6 – 10 |
+| ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
 | B | PHASE 8 LuCI 模块化（协议 registry 单一真源 + `components/`+`shared/` + 去重） | 大 | 高（浏览器流程无法自动化验证） | 9 – 15 |
 | C | §4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态） | 中 | 中（路径白名单可能影响既有配置） | 5 – 9 |
 | D | PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码） | 中 | 中 | 4 – 7 |
@@ -345,41 +346,61 @@ outbound 包成一份配置交给 `sing-box check`。快照只能发现"变化"�
 
 遗留：
 1. **WireGuard endpoint 未 Adapter 化**（§1.2）。
-2. `direct_overrides` 仍是模块级全局副作用（`generate_client.uc:202,292-296`，route builder 在
+2. ~~`direct_overrides` 仍是模块级全局副作用（`generate_client.uc:202,292-296`，route builder 在
    `:912,924,1014` 读它）。文档建议的 `Node.raw.direct_overrides` / 数据化没有落地。
    建议改成 `generate_outbound()` 返回 `{outbound, override}`，或在 route 层直接查
-   `node.protocol_options.override_address`（数据已经在 Node 里了，`loader.uc:254-257`）。
+   `node.protocol_options.override_address`（数据已经在 Node 里了，`loader.uc:254-257`）。~~ ✅
+   已在 PHASE 4 中落地（commit `0c67d77`）—— `generate_outbound(node, mark, direct_overrides)`
+   把 override 写进 caller 持有的 map，route builder 从同一个 map 读出 route-options action，
+   不再有模块级状态。
 3. `CLAIM_FIELDS` 与 `OPTION_FIELDS.hysteria/hysteria2` 里 `auth`/`auth_str` 重复出现
    （`adapter.uc:150-154` 与 `:227-237`），`CLAIM_FIELDS` 的那两份是死代码（会被 OPTION_FIELDS 覆盖）。
 4. `generate_server.uc` **完全没有走 Domain Model / Adapter**：它从 `dm.server.inbounds` 拿到的是
    扁平 UCI dict，然后逐字段 `cfg.snell_version` / `cfg.shadowsocks_encrypt_method`（`:61-158`）。
    server 端等于没重构。建议增加 `EndpointFactory`/`InboundFactory` 与 `Node` 对称的 server 模型。
 
-### 2.4 PHASE 4 — Generator 拆分（当前 0%，但收益最直接）
+### 2.4 PHASE 4 — Generator 拆分 ~~（当前 0%，但收益最直接）~~ ✅ 已落地（commit `0c67d77`）
 
-`generate_client.uc` 1191 行，内部段落非常清晰，可以**按现有 `/* xxx start */` 注释机械拆分**，
-风险低、review 容易：
+> ~~`generate_client.uc` 1191 行，内部段落非常清晰，可以**按现有 `/* xxx start */` 注释机械拆分**，
+> 风险低、review 容易：~~
+>
+> | ~~目标文件~~ | ~~现有行区间~~ | ~~内容~~ |
+> |---|---|---|
+> | ~~`generator/common.uc`~~ | ~~394-411, 1180-1191~~ | ~~`config.log`、`config.ntp`、`$schema`、写盘 + `sing-box check`~~ |
+> | ~~`generator/dns.uc`~~ | ~~413-648~~ | ~~DNS servers / rules / final（最大一块）~~ |
+> | ~~`generator/inbound.uc`~~ | ~~650-708~~ | ~~`config.inbounds`~~ |
+> | ~~`generator/outbound.uc`~~ | ~~244-278, 710-850~~ | ~~`generate_endpoint`、默认/main/urltest outbounds~~ |
+> | ~~`generator/route.uc`~~ | ~~852-1132~~ | ~~route rules + final~~ |
+> | ~~`generator/ruleset.uc`~~ | ~~1094-1165~~ | ~~rule_set + `http_clients` 归一化~~ |
+> | ~~`generator/client.uc`~~ | ~~394-1191 的编排~~ | ~~只做 orchestration~~ |
+>
+> ~~配套（比拆文件更重要）：~~
+> ~~1. **去掉 sed 注入式测试**。把 `generate_client.uc` 变成~~
+>    ~~`generator/client.uc`（`export function generate(config, opts)`）+ 一个 10 行的 CLI 壳。~~
+>    ~~这样 `Loader.load('__LOADER_DIR__')` 和 `/* HP_TEST_HOOK */` 都可以删掉，~~
+>    ~~测试直接 `import { generate } from ...; generate(Loader.load(fixture_dir))`。~~
+>    ~~现在的 `__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 机制已经部分腐朽~~
+>    ~~（`test_demo_architecture.sh:158-159` 的两条 sed 是**空操作**，见 §3.1）。~~
+> ~~2. **删掉重复的 `sing-box check`**：`generate_client.uc:1187` 与 `init.d:110` 检查同一份文件；~~
+>    ~~`generate_server.uc:170` 与 `init.d:245` 同理。文档明确"不要重复实现已有的 sing-box check"。~~
+>    ~~建议生成器只负责"原子写入 candidate + 序列化"，check 交给 runtime（或反之）。~~
 
-| 目标文件 | 现有行区间 | 内容 |
-|---|---|---|
-| `generator/common.uc` | 394-411, 1180-1191 | `config.log`、`config.ntp`、`$schema`、写盘 + `sing-box check` |
-| `generator/dns.uc` | 413-648 | DNS servers / rules / final（最大一块） |
-| `generator/inbound.uc` | 650-708 | `config.inbounds` |
-| `generator/outbound.uc` | 244-278, 710-850 | `generate_endpoint`、默认/main/urltest outbounds |
-| `generator/route.uc` | 852-1132 | route rules + final |
-| `generator/ruleset.uc` | 1094-1165 | rule_set + `http_clients` 归一化 |
-| `generator/client.uc` | 394-1191 的编排 | 只做 orchestration |
+**落地形态**（commit `0c67d77`）：
 
-配套（比拆文件更重要）：
-1. **去掉 sed 注入式测试**。把 `generate_client.uc` 变成
-   `generator/client.uc`（`export function generate(config, opts)`）+ 一个 10 行的 CLI 壳。
-   这样 `Loader.load('__LOADER_DIR__')` 和 `/* HP_TEST_HOOK */` 都可以删掉，
-   测试直接 `import { generate } from ...; generate(Loader.load(fixture_dir))`。
-   现在的 `__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 机制已经部分腐朽
-   （`test_demo_architecture.sh:158-159` 的两条 sed 是**空操作**，见 §3.1）。
-2. **删掉重复的 `sing-box check`**：`generate_client.uc:1187` 与 `init.d:110` 检查同一份文件；
-   `generate_server.uc:170` 与 `init.d:245` 同理。文档明确"不要重复实现已有的 sing-box check"。
-   建议生成器只负责"原子写入 candidate + 序列化"，check 交给 runtime（或反之）。
+- `root/etc/homeproxy/scripts/generator/` 共 8 个模块 / 1811 行；`scripts/generate_client.uc` 从 1240 行降到 37 行的 CLI 壳，`scripts/generate_server.uc` 从 175 行降到 30 行。
+- 模块清单：
+  - `common.uc`（165）：`parse_port` + 五个 selector helper（`get_outbound` / `get_resolver` / `get_ruleset` / `get_direct_override` / `isDirectOutboundTag`）+ `attachSchema` + `attachExperimental`。
+  - `dns.uc`（336）：`initDns`（公共：`default-dns` + `system-dns`）+ `append_proxy_dns`（main-dns / china-dns / NAPTR / CN-IP fallback）+ `append_custom_dns`（用户 dns_server / dns_rule）。
+  - `inbound.uc`（94）：dns-in / mixed-in / redirect-in / tproxy-in / tun-in。
+  - `outbound.uc`（334）：`generate_endpoint`（WireGuard）、`generate_outbound`（调 Adapter、写 `direct_overrides`）、`buildMainOutbounds` / `buildCustomOutbounds` + `keep_candidate` 剪枝。
+  - `route.uc`（301）：`initRoute` + `build_route_proxy`（resolve + geoip-cn + main override + remote rule_sets）+ `build_route_custom`。
+  - `ruleset.uc`（117）：`build_user_rulesets` + `build_http_clients`（sing-box 1.14 download_detour → http_client 归一化）。
+  - `client.uc`（299）：编排器，`build_ctx` 后串行调用各模块。
+  - `server.uc`（165）：server inbound dispatcher（snell 单独 shape + generic users[]/TLS/transport）。
+- `direct_overrides` 已改为编排器持有的显式 `parameter`（不再是模块级副作用）；`generate_outbound(node, mark, direct_overrides)` 把节点直接路由 + override 同步写进 caller 的 map，route builder 之后从同一个 map 读出 route-options action。
+- **sed 注入彻底清除**：`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 三个 token 在源码中已不存在（`grep` 全空）。测试 staging 改为 `Loader.load(HP_DIR + '/config')` —— 测试自己改写 `homeproxy.uc` 的 `HP_DIR` 常量，shell 用它解析 UCI 目录，**无需任何源文件 sed**。
+- **重复 `sing-box check` 已在 PHASE 6 解决**：generator 做原子写 + check；`init.d/homeproxy` 不再 check（comment "the only `sing-box check` in this path"）；runtime 通过 `hp_ensure_live` 探测 live 文件存在性。
+- **回归**：byte-level 一致 —— client 6773 / custom 1860 / server 3865（差异为 `data_directory` 路径，9 字节）/ wireguard 3755 / partial_invalid 3494，与 baseline 一字不差；golden protocol snapshot（14 项）、protocol inventory（122 项）、domain model skeleton（63 项）、subscription filter/decoder/repository、homeproxy helper、executeCommand 失败路径全部 PASS。`firewall template rendering` 失败是预先就有的环境限制（绝对路径 `/etc/homeproxy/...` 只能 target 解析），跟本次重构无关。
 
 ### 2.5 PHASE 5 — Subscription Pipeline 收尾
 
