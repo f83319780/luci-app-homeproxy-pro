@@ -522,21 +522,6 @@ return baseclass.extend({
 		return (p(a) + p(b) + p(c) + p(d)).toLowerCase();
 	},
 
-	decodeBase64Str(str) {
-		if (!str)
-			return null;
-
-		/* Thanks to luci-app-ssr-plus */
-		str = str.replace(/-/g, '+').replace(/_/g, '/');
-		let padding = (4 - str.length % 4) % 4;
-		if (padding)
-			str = str + Array(padding + 1).join('=');
-
-		return decodeURIComponent(Array.prototype.map.call(atob(str), (c) =>
-			'%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-		).join(''));
-	},
-
 	getBuiltinFeatures() {
 		const callGetSingBoxFeatures = rpc.declare({
 			object: 'luci.homeproxy',
