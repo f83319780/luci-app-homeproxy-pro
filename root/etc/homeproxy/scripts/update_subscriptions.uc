@@ -3,6 +3,32 @@
  * SPDX-License-Identifier: GPL-2.0-only
  *
  * Copyright (C) 2023 ImmortalWrt.org
+ *
+ * PR-03 (Subscription Transaction Boundary): the orchestrator no
+ * longer touches UCI directly. All UCI writes live in
+ * subscription/repository.uc. The pipeline is:
+ *
+ *   Loader.load()           -> read subscription + main_node refs
+ *   parse_uri()             -> flat UCI keys (the parser's output)
+ *   apply_policy()          -> flat UCI tweaks (tls_insecure,
+ *                              packet_encoding). Kept on the flat
+ *                              side so tests/ucode/test_subscription_filter.uc
+ *                              does not have to construct canonical
+ *                              fixtures.
+ *   normalize()             -> canonical Node (parser/normalize.uc).
+ *   Repository.apply_nodes  -> writes UCI for subscription nodes
+ *                              (internally flatten()s the canonical
+ *                              nodes, so the orchestrator never
+ *                              touches UCI).
+ *   Repository.apply_main_node_refs -> writes UCI for main_node /
+ *                              main_udp_node / urltest cleanup.
+ *   Repository.scrub_stale_urltest_refs -> one-shot pass over UCI
+ *                              routing_nodes for stale urltest_nodes
+ *                              entries.
+ *
+ * Every UCI write the run performs is therefore in
+ * subscription/repository.uc. The orchestrator's only UCI side
+ * effect is passing its cursor to the Repository methods.
  */
 
 'use strict';
@@ -19,60 +45,58 @@ import {
 } from 'homeproxy';
 
 import { parse_uri } from './parser/uri.uc';
+import { normalize } from './parser/normalize.uc';
 
 import { check as filter_check, apply_policy } from './subscription/filter.uc';
 import { decode as decode_subscription } from './subscription/decoder.uc';
 import { fetch as fetch_subscription } from './subscription/fetcher.uc';
-import { apply as repository_apply } from './subscription/repository.uc';
+import { Repository } from './subscription/repository.uc';
 
-/* UCI config start */
-const uci = cursor();
+import { Loader } from './config/loader.uc';
 
+/* UCI config start: a single cursor that every Repository method
+ * shares. Loader uses its own cursor for the read at the top of
+ * main(); both cursors target /etc/config/homeproxy so writes go
+ * through the same on-disk file. The snapshot below is taken
+ * BEFORE any commit, so a failure part-way through this run can
+ * restore the previous file and leave the running service on its
+ * current config. */
 const CONFIG_FILE = '/etc/config/homeproxy';
 const uciconfig = 'homeproxy';
+
+const uci = cursor();
 uci.load(uciconfig);
 
 const ucimain = 'config',
       ucinode = 'node',
       ucisubscription = 'subscription';
 
-const allow_insecure = uci.get(uciconfig, ucisubscription, 'allow_insecure') || '0',
-      filter_mode = uci.get(uciconfig, ucisubscription, 'filter_nodes') || 'disabled',
-      filter_keywords = uci.get(uciconfig, ucisubscription, 'filter_keywords') || [],
-      packet_encoding = uci.get(uciconfig, ucisubscription, 'packet_encoding') || 'xudp',
-      subscription_urls = uci.get(uciconfig, ucisubscription, 'subscription_url') || [],
-      user_agent = uci.get(uciconfig, ucisubscription, 'user_agent');
+/* PR-03 §2.5 #3: the orchestrator used to hold its own
+ * uci.cursor() and re-read subscription.* / config.* one field at
+ * a time. Now it goes through Loader.load(), which is read-only
+ * and exposes the canonical sub-objects
+ * (`config.access_control.subscription`). The Repository methods
+ * continue to take the raw cursor for the writes because the
+ * cursor is the UCI writer contract. */
+const loaded = Loader.load();
+const sub = loaded.access_control.subscription;
+const routing_mode = loaded.general.routing_mode;
 
-const routing_mode = uci.get(uciconfig, ucimain, 'routing_mode') || 'bypass_mainland_china';
+const allow_insecure = sub.allow_insecure || '0';
+const filter_mode = sub.filter_nodes || 'disabled';
+const filter_keywords = sub.filter_keywords || [];
+const packet_encoding = sub.packet_encoding || 'xudp';
+const subscription_urls = sub.subscription_urls || [];
+const user_agent = sub.user_agent;
+
 let main_node, main_udp_node;
 if (routing_mode !== 'custom') {
-	main_node = uci.get(uciconfig, ucimain, 'main_node') || 'nil';
-	main_udp_node = uci.get(uciconfig, ucimain, 'main_udp_node') || 'nil';
+	main_node = loaded.general.main_node;
+	main_udp_node = loaded.general.main_udp_node;
 }
-/* UCI config end */
 
-/* String helper start */
-/* B1.1: filter_check() moved to subscription/filter.uc; the
- * pure logic now takes mode + keywords + log as arguments so the
- * filter is testable without UCI access. The orchestrator keeps
- * the same call site shape - just adds the explicit args. */
-/* String helper end */
+const config_backup = readfile(CONFIG_FILE);
 
-/* Common var start */
-const node_cache = {},
-      node_result = [];
-
-const ubus = connect();
-/* ubus is unreachable when no ubusd is running (dev host) and the feature
-   query is optional: fall back to the same empty feature set the code below
-   already handles. */
-const sing_features = (ubus?.call('luci.homeproxy', 'singbox_get_features', {})) || {};
-if (isEmpty(sing_features))
-	log('Warning: Failed to query sing-box features via ubus, assuming defaults.');
-/* Common var end */
-
-/* Log */
-system(`mkdir -p ${RUN_DIR}`);
 function log(...args) {
 	const logfile = open(`${RUN_DIR}/homeproxy.log`, 'a');
 	logfile.write(`${getTime()} [SUBSCRIBE] ${join(' ', args)}\n`);
@@ -80,21 +104,29 @@ function log(...args) {
 }
 
 function main() {
-	/* Fetch, decode, parse and filter everything BEFORE touching the
-	 * service or UCI.  The previous version stopped the proxy first, so a
-	 * slow or failing subscription left the router without a proxy for the
-	 * whole fetch - the stop -> modify -> discover-an-error pattern the
-	 * refactor guide forbids.  Nothing below runs until a full candidate
-	 * set exists in memory. */
+	const node_cache = {};
+	const node_result = [];
+
+	const ubus = connect();
+	/* ubus is unreachable when no ubusd is running (dev host)
+	 * and the feature query is optional: fall back to the same
+	 * empty feature set the code below already handles. */
+	const sing_features = (ubus?.call('luci.homeproxy', 'singbox_get_features', {})) || {};
+	if (isEmpty(sing_features))
+		log('Warning: Failed to query sing-box features via ubus, assuming defaults.');
+
+	/* Fetch, decode, parse and filter everything BEFORE touching
+	 * the service or UCI. The previous version stopped the proxy
+	 * first, so a slow or failing subscription left the router
+	 * without a proxy for the whole fetch - the stop -> modify
+	 * -> discover-an-error pattern the refactor guide forbids.
+	 * Nothing below runs until a full candidate set exists in
+	 * memory. */
 	for (let url in subscription_urls) {
 		url = replace(url, /#.*$/, '');
 		const groupHash = md5(url);
 		node_cache[groupHash] = {};
 
-		/* B1.2: fetch + decode pipeline. The fetcher logs its
-		 * own failure (so the orchestrator does not need to know
-		 * the wGETVerbose error shape) and returns null content
-		 * on failure; the decoder handles JSON/SIP008/base64. */
 		const fetched = fetch_subscription(url, user_agent, log);
 		if (fetched.content === null)
 			continue;
@@ -103,33 +135,39 @@ function main() {
 
 		let count = 0;
 		for (let node in nodes) {
-			let config;
+			let flat;
 			if (!isEmpty(node))
-				config = parse_uri(node, sing_features, log);
-			if (isEmpty(config))
+				flat = parse_uri(node, sing_features, log);
+			if (isEmpty(flat))
 				continue;
 
-			const label = config.label;
-			config.label = null;
-			const confHash = md5(sprintf('%J', config)),
+			const label = flat.label;
+			flat.label = null;
+			const confHash = md5(sprintf('%J', flat)),
 			      nameHash = md5(groupHash + label);
-			config.label = label;
+			flat.label = label;
 
-			if (filter_check(config.label, filter_mode, filter_keywords, log))
-				log(sprintf('Skipping blacklist node: %s.', config.label));
+			if (filter_check(flat.label, filter_mode, filter_keywords, log))
+				log(sprintf('Skipping blacklist node: %s.', flat.label));
 			else if (node_cache[groupHash][confHash] || node_cache[groupHash][nameHash])
-				log(sprintf('Skipping duplicate node: %s.', config.label));
+				log(sprintf('Skipping duplicate node: %s.', flat.label));
 			else {
-				/* B1.1: tls_insecure override and vless/vmess
-				 * packet_encoding injection moved to
-				 * subscription/filter.uc. */
-				apply_policy(config, { allow_insecure, packet_encoding });
+				apply_policy(flat, { allow_insecure, packet_encoding });
 
-				config.grouphash = groupHash;
+				/* PR-03: parse -> apply_policy -> normalize
+				 * builds the canonical Node the Repository
+				 * takes. flat stays in scope for the
+				 * fingerprinting above; the canonical
+				 * Node carries the same data plus the
+				 * metadata the orchestrator attaches
+				 * (grouphash + label). */
+				const node_canonical = normalize(flat);
+				node_canonical.grouphash = groupHash;
+
 				push(node_result, []);
-				push(node_result[length(node_result)-1], config);
-				node_cache[groupHash][confHash] = config;
-				node_cache[groupHash][nameHash] = config;
+				push(node_result[length(node_result)-1], node_canonical);
+				node_cache[groupHash][confHash] = node_canonical;
+				node_cache[groupHash][nameHash] = node_canonical;
 
 				count++;
 			}
@@ -142,119 +180,56 @@ function main() {
 	}
 
 	if (isEmpty(node_result)) {
-		/* Nothing was touched yet (the fetch phase never writes), so the
-		 * running service and the stored configuration stay as they are. */
+		/* Nothing was touched yet (the fetch phase never writes),
+		 * so the running service and the stored configuration
+		 * stay as they are. */
 		log('Failed to update subscriptions: no valid node found.');
 		return false;
 	}
 
-	/* B1.2: the add / update / remove walk and the final commit
-	 * now live in subscription/repository.uc. The orchestrator
-	 * just hands it the cache + result built during the fetch
-	 * phase and uses the { added, removed } counts for the
-	 * end-of-run log. */
-	/* Object destructuring is not part of the dialect the ucode on the
-	 * target accepts (ImmortalWrt ucode 2026.01.16 rejects
-	 * `const { a, b } = ...` with "Expecting variable name"), so pull
-	 * the two counts out by name instead. */
-	const repository_result = repository_apply(
+	/* B1.2 / PR-03: the add / update / remove walk and the
+	 * final commit now live in subscription/repository.uc. The
+	 * orchestrator just hands it the canonical Node cache +
+	 * result built during the fetch phase and uses the
+	 * { added, removed } counts for the end-of-run log. */
+	const repository_result = Repository.apply_nodes(
 		uci, uciconfig, ucinode, node_cache, node_result, log
 	);
 	const added = repository_result.added,
 	      removed = repository_result.removed;
 
+	/* PR-03 §2.5 #1: the 6 inline uci.set/commit sites
+	 * (main_urltest_nodes cleanup, main_node switch on missing
+	 * target, main_udp_urltest_nodes cleanup, main_udp_node
+	 * switch, reset-to-'nil', routing_node urltest scrub) moved
+	 * into subscription/repository.uc. The orchestrator now
+	 * drives three Repository methods and replays the log lines
+	 * the Repository attached to its result. */
 	if (!isEmpty(main_node)) {
-		const first_server = uci.get_first(uciconfig, ucinode);
-		if (first_server) {
-			let main_urltest_nodes;
-			if (main_node === 'urltest') {
-				const old_urltest_nodes = uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [];
-				main_urltest_nodes = filter(old_urltest_nodes, (v) => {
-					if (!uci.get(uciconfig, v)) {
-						log(sprintf('Node %s is gone, removing from urltest list.', v));
-						return false;
-					}
-					return true;
-				});
-				if (length(main_urltest_nodes) !== length(old_urltest_nodes)) {
-					uci.set(uciconfig, ucimain, 'main_urltest_nodes', main_urltest_nodes);
-					uci.commit(uciconfig);
-				}
-			}
-
-			if ((main_node === 'urltest') ? !length(main_urltest_nodes) : !uci.get(uciconfig, main_node)) {
-				uci.set(uciconfig, ucimain, 'main_node', first_server);
-				uci.commit(uciconfig);
-
-				log('Main node is gone, switching to the first node.');
-			}
-
-			if (!isEmpty(main_udp_node) && main_udp_node !== 'same') {
-				let main_udp_urltest_nodes;
-				if (main_udp_node === 'urltest') {
-					const old_udp_urltest_nodes = uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [];
-					main_udp_urltest_nodes = filter(old_udp_urltest_nodes, (v) => {
-						if (!uci.get(uciconfig, v)) {
-							log(sprintf('Node %s is gone, removing from urltest list.', v));
-							return false;
-						}
-						return true;
-					});
-					if (length(main_udp_urltest_nodes) !== length(old_udp_urltest_nodes)) {
-						uci.set(uciconfig, ucimain, 'main_udp_urltest_nodes', main_udp_urltest_nodes);
-						uci.commit(uciconfig);
-					}
-				}
-
-				if ((main_udp_node === 'urltest') ? !length(main_udp_urltest_nodes) : !uci.get(uciconfig, main_udp_node)) {
-					uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
-					uci.commit(uciconfig);
-
-					log('Main UDP node is gone, switching to the first node.');
-				}
-			}
-		} else {
-			uci.set(uciconfig, ucimain, 'main_node', 'nil');
-			uci.set(uciconfig, ucimain, 'main_udp_node', 'nil');
-			uci.commit(uciconfig);
-
-			log('No available node, disable tproxy.');
-		}
+		const main_refs = Repository.apply_main_node_refs(
+			uci, uciconfig, ucimain, ucinode,
+			{ main_node, main_udp_node, has_nodes: added > 0 },
+			log
+		);
+		for (let line in main_refs.log)
+			log(line);
 	}
 
-	/* Scrub stale urltest member references in custom routing nodes */
-	uci.foreach(uciconfig, 'routing_node', (cfg) => {
-		if (cfg.node !== 'urltest' || isEmpty(cfg.urltest_nodes))
-			return null;
+	Repository.scrub_stale_urltest_refs(uci, uciconfig, log);
 
-		const cleaned_nodes = filter(cfg.urltest_nodes, (v) => uci.get(uciconfig, v));
-		if (length(cleaned_nodes) !== length(cfg.urltest_nodes)) {
-			uci.set(uciconfig, cfg['.name'], 'urltest_nodes', cleaned_nodes);
-			uci.commit(uciconfig);
-
-			log(sprintf('Routing node %s: removed gone nodes from urltest list.', cfg['.name']));
-		}
-	});
-
-	/* Reload once, after the whole candidate set is committed and stale
-	 * references are scrubbed.  The old code stopped the service before
-	 * fetching and then did stop+start; the reload path now validates the
-	 * new configuration and rolls back if an instance fails to come up, so
-	 * the service is only ever restarted onto a config that passed
-	 * `sing-box check`. */
+	/* Reload once, after the whole candidate set is committed
+	 * and stale references are scrubbed. The old code stopped
+	 * the service before fetching and then did stop+start; the
+	 * reload path now validates the new configuration and rolls
+	 * back if an instance fails to come up, so the service is
+	 * only ever restarted onto a config that passed `sing-box
+	 * check`. */
 	log('Reloading service...');
 	init_action('homeproxy', 'reload');
 
 	log(sprintf('%s nodes added, %s removed.', added, removed));
 	log('Successfully updated subscriptions.');
 }
-
-/* Snapshot of the UCI file taken before main() commits anything.  The
- * repository commits once and the reconciliation below commits several more
- * times, so a failure part-way through would leave a file the running
- * service does not match.  Restoring the snapshot in the catch puts the
- * stored configuration back to what the service actually loaded. */
-const config_backup = readfile(CONFIG_FILE);
 
 if (!isEmpty(subscription_urls))
 	try {

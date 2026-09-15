@@ -82,7 +82,7 @@ done
 # subdirectories, so they need an explicit `.uc` path that ucode's
 # resolver can follow (bare `subscription/filter` is not searched
 # in the -L tree, only top-level module names are).
-for module in homeproxy parser/uri parser/protocols parser/validator parser/normalize parser/mapping; do
+for module in homeproxy parser/uri parser/protocols parser/validator parser/normalize parser/flatten parser/mapping; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
@@ -175,6 +175,20 @@ if ( cd "$WORK/parse_uri" && ucode test_parser_normalize.uc ); then
 	echo "PASS: parser/normalize unit tests"
 else
 	echo "FAIL: parser/normalize unit tests"
+	FAILED=1
+fi
+
+echo "== parser/flatten round-trip tests =="
+# PR-03: parser/flatten.uc is the canonical -> flat inverse. The
+# round-trip invariant is that flatten(normalize(parse_uri(uri)))
+# produces the same flat UCI dict the parser would have written
+# directly, so Repository.apply_nodes can write it verbatim and
+# the Loader's next read yields the same canonical Node.
+cp "$ROOT/tests/ucode/test_parser_flatten.uc" "$WORK/parse_uri/"
+if ( cd "$WORK/parse_uri" && ucode test_parser_flatten.uc ); then
+	echo "PASS: parser/flatten round-trip tests"
+else
+	echo "FAIL: parser/flatten round-trip tests"
 	FAILED=1
 fi
 

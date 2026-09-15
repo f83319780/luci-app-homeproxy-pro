@@ -53,7 +53,13 @@ uci_seed cfgDROP00001 label=dropped-node grouphash=test-group type=vless \
 # Stage the mock + the module + the test alongside each other so
 # bare-name imports (`from 'homeproxy'`, `from 'repository'`) resolve
 # via the work-dir -L path.
+#
+# PR-03: Repository imports parser/flatten.uc, which in turn imports
+# parser/mapping.uc. Stage the whole parser/ tree into a sibling
+# `parser/` directory so the bare-name imports inside it resolve.
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$STAGE/"
+mkdir -p "$STAGE/parser"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$STAGE/parser/"
 cp "$ROOT/root/etc/homeproxy/scripts/subscription/repository.uc" "$STAGE/"
 cp "$ROOT/tests/ucode/test_subscription_repository.uc" "$STAGE/"
 
