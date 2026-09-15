@@ -1682,6 +1682,76 @@
 								}
 							},
 							{
+								"kind": "Flag",
+								"name": "multiplex_padding",
+								"title": "Enable padding",
+								"description": null,
+								"depends": [
+									[
+										"multiplex",
+										"1"
+									]
+								],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"modalonly": true
+								}
+							},
+							{
+								"kind": "Flag",
+								"name": "multiplex_brutal",
+								"title": "Enable TCP Brutal",
+								"description": "Enable TCP Brutal congestion control algorithm",
+								"depends": [
+									[
+										"multiplex",
+										"1"
+									]
+								],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"modalonly": true
+								}
+							},
+							{
+								"kind": "Value",
+								"name": "multiplex_brutal_down",
+								"title": "Download bandwidth",
+								"description": "Download bandwidth in Mbps.",
+								"depends": [
+									[
+										"multiplex_brutal",
+										"1"
+									]
+								],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"datatype": "uinteger",
+									"modalonly": true
+								}
+							},
+							{
+								"kind": "Value",
+								"name": "multiplex_brutal_up",
+								"title": "Upload bandwidth",
+								"description": "Upload bandwidth in Mbps.",
+								"depends": [
+									[
+										"multiplex_brutal",
+										"1"
+									]
+								],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"datatype": "uinteger",
+									"modalonly": true
+								}
+							},
+							{
 								"kind": "ListValue",
 								"name": "multiplex_protocol",
 								"title": "Protocol",
@@ -1760,76 +1830,6 @@
 										"multiplex_max_connections": "",
 										"multiplex_min_streams": ""
 									}
-								],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"datatype": "uinteger",
-									"modalonly": true
-								}
-							},
-							{
-								"kind": "Flag",
-								"name": "multiplex_padding",
-								"title": "Enable padding",
-								"description": null,
-								"depends": [
-									[
-										"multiplex",
-										"1"
-									]
-								],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"modalonly": true
-								}
-							},
-							{
-								"kind": "Flag",
-								"name": "multiplex_brutal",
-								"title": "Enable TCP Brutal",
-								"description": "Enable TCP Brutal congestion control algorithm",
-								"depends": [
-									[
-										"multiplex",
-										"1"
-									]
-								],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"modalonly": true
-								}
-							},
-							{
-								"kind": "Value",
-								"name": "multiplex_brutal_down",
-								"title": "Download bandwidth",
-								"description": "Download bandwidth in Mbps.",
-								"depends": [
-									[
-										"multiplex_brutal",
-										"1"
-									]
-								],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"datatype": "uinteger",
-									"modalonly": true
-								}
-							},
-							{
-								"kind": "Value",
-								"name": "multiplex_brutal_up",
-								"title": "Upload bandwidth",
-								"description": "Upload bandwidth in Mbps.",
-								"depends": [
-									[
-										"multiplex_brutal",
-										"1"
-									]
 								],
 								"values": [],
 								"subsection": null,
