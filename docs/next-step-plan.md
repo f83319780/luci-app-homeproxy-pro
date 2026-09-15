@@ -46,6 +46,11 @@
 | P2-3 | 低危安全项 + 后端复核遗留（#3-#6 已完成✅，余 #7-#12） | P2 | 小 | 无 |
 | P2-4 | 测试确定性（固定 `/tmp`→`mktemp`、`rm -rf` 引号、ssh `BatchMode`） | P2 | 小 | 无 |
 | P2-5 | JSON 资产校验 + 出厂配置解析 | P2 | 小 | 无 · 已完成✅ |
+| P2-3a | 后端复核 #8 订阅更新加锁 + 原子回滚 | P2 | 中 | 无 · 已完成✅ |
+| P2-3b | 后端复核 #10 `tun_name` 未校验就进 nft | P2 | 小 | 无 · 已完成✅ |
+| P2-3c | 后端复核 #11 `wget --header-file` 不存在（token 路径全废） | P2 | 小 | 无 · 已完成✅ |
+| P2-3d | 后端复核 #12 一个畸形 `ss://` 中止整个更新 | P2 | 小 | 无 · 已完成✅ |
+| P2-3e | 后端复核 #7 悬空引用改为具名诊断（**修复未经测试验证**） | P2 | 小 | 无 · 已完成（见说明） |
 | P2-6 | PHASE 8 残留：状态三件套（**需先补守卫**） | P2 | 中 | P1-1 守卫 + P1-7 |
 | P2-7 | PHASE 8 残留：GridSection ×5 / 动态 load ×13 | P2 | 中 | 无 |
 | P2-8 | 代码卫生 §2.10.8 四项 | P2 | 小 | 无 |
@@ -507,6 +512,32 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 > **#6 已完成**：vmess 丢 `packet_encoding`；golden 快照把缺失锁住了，
 > 重新生成后恰好只多出 `"packet_encoding": "packetaddr"`——**这个 diff 就是证据**。
 
+### 本轮追加完成的后端复核项（#7 #8 #10 #11 #12）
+
+- **#8 已完成**：订阅更新器的回滚改为**写临时文件 + `mv`**（原来 `writefile` 先截断，
+  中途崩溃就把 `/etc/config/homeproxy` 留成半截）；并加了 **`mkdir` 锁**，
+  cron 与 LuCI 按钮不会再交错提交。锁超过 10 分钟视为被遗弃并打破（被杀掉的进程
+  没法自己清理），否则一次崩溃会永久堵死所有更新。ucode 没有 `finally`，两条路径都显式释放。
+  **踩到三个只有跑起来才会发现的问题**：`getTime()` 是格式化函数不是时钟，
+  `getTime() - st.mtime` 得到 NaN 所以过期检查从不触发（应该用 `time()`）；
+  `acquire_lock()` 一开始被插在 `log()` 定义之前，而 ucode **不提升函数声明**，
+  运行时报"access to undeclared variable"；测试里 `TUN_NAME` 没重置，污染了后面的场景。
+- **#10 已完成**：`tun_name` 是 UCI 值，直接插进 fw4 以 root 加载的 nft 文件；
+  `;` 与 `}` 不需要换行，所以可以凭空加一条 chain。同一个文件**已经**校验了 server 的
+  port 与 network，唯独漏了它。现在按接口名规则（≤15 字符、`[A-Za-z0-9_.-]`）校验，
+  不合法就 warn 且不产出规则。**反向验证很直观**：去掉校验，payload 原样出现在生成的规则里。
+- **#11 已完成**：`--header-file` 两个 wget 都没有 → 配了 GitHub token 就问不到版本。
+  改用 `--header`（真机验证：`--header-file` 退出 2，`--header` 正常发出请求）。
+  代价是 token 进 argv（wget 没有文件式 header 选项），已在源码里写明这个取舍。
+- **#12 已完成**：`ss://` 的 userinfo 里 base64 非法时 `decodeBase64Str` 返回 null，
+  `split(null)` 是 null，取 `[0]` 抛 ReferenceError；`parse_uri` 不捕获，
+  而 `update_subscriptions.uc` 会捕获——于是一个坏链接中止整次更新。
+  **先复现**（"left-hand side expression is null" @ `ss_userinfo[0]`），再加保护并补两个用例。
+- **#7 完成但未经测试验证**：给两处 null 解引用加了具名 `die()`。
+  我试了两个 fixture（`main_node` 指向不存在的 section、`routing_node.node` 指向不存在的节点），
+  **都到不了那两行**——生成器退出 0 并跳过。我把两次尝试都**删掉了**，
+  而不是留下一个永远通过的测试。守卫严格优于 null 解引用，但它是**未经验证**的，提交信息里也这么写了。
+
 ### P2-3 低危安全项（其余）
 - `capabilities/homeproxy.json` **去掉 `CAP_SYS_PTRACE`**（五组），
   回归验证 TUN/tproxy 仍可用。**上游继承，但要在这里修掉。**
@@ -587,7 +618,7 @@ P1-7 回退假状态（先补可失败的测试）  ✅ 已完成
   ▼
 P2-1 真空检查 ✅ → P2-5 JSON 校验 ✅
   ▼
-P1-10 crontab ✅ → P2-3 低危安全 → P2-4 确定性
+P1-10 crontab ✅ → P2-3 后端复核 #7-#12 大部分 ✅ → P2-4 确定性
   ▼
 P1-9 stage 策略 → P1-8 真机 CI 作业
   ▼
