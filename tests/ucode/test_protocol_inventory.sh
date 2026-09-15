@@ -166,6 +166,11 @@ for (let layer in keys(LAYERS)) {
 
 /* 2. Every type the parser can produce must be fully modelled: the loader
  *    must know its options and the adapter must be able to emit it. */
+/* Non-empty guard: with an empty parser-types.json every check below would
+ * vanish and the section would "pass" by having nothing to check - which is
+ * how a parser that stopped producing types could go unnoticed. */
+check('the parser produced at least one type to cross-check', length(parser_types) > 0);
+
 for (let type_name in parser_types) {
 	check(sprintf("parser type '%s' is in PROTOCOL_OPTIONS", type_name),
 		type_name in PROTOCOL_OPTIONS);

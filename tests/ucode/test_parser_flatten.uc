@@ -57,8 +57,16 @@ function expect(name, got, want) {
  * node form does not own. */
 function round_trip(name, uri, features) {
 	const flat = parse_uri(uri, features, LOG);
-	if (!flat)
+
+	/* A sample the parser rejects is a broken fixture, not a reason to skip.
+	 * Returning silently left that scheme's round trip unverified while the
+	 * suite stayed green. */
+	if (!flat) {
+		checks++;
+		failures++;
+		printf('FAIL %s: parse_uri() rejected a sample this test is meant to cover\n', name);
 		return;
+	}
 
 	const node = normalize(flat);
 	const back = flatten(node);

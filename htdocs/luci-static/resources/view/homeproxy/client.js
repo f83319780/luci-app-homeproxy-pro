@@ -668,7 +668,12 @@ return view.extend({
 		if (!client_status_poll_registered) {
 			client_status_poll_registered = true;
 			poll.add(function () {
-				return L.resolveDefault(getServiceStatus()).then((res) => {
+				/* getServiceStatus() already never rejects - it resolves to null
+				 * when the query did not answer - so wrapping it in
+				 * L.resolveDefault() is a no-op. Worse, L.resolveDefault
+				 * substitutes for a null *result*, which would turn that
+				 * meaningful null back into undefined. */
+				return getServiceStatus().then((res) => {
 					let view = document.getElementById('service_status');
 					if (view)
 						view.innerHTML = renderStatus(res, features.version);
