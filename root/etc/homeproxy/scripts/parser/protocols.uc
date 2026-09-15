@@ -24,7 +24,7 @@
 
 import { urldecode, urlencode } from 'luci.http';
 
-import { decodeBase64Str, parseURL } from 'homeproxy';
+import { decodeBase64Str, isEmpty, parseURL } from 'homeproxy';
 
 /* https://shadowsocks.org/guide/sip008.html */
 export function parse_sip008_uri(uri) {
@@ -197,9 +197,18 @@ export function parse_ss_uri(uri) {
 	if (url.username && url.password)
 		/* User info encoded with URIComponent */
 		ss_userinfo = [url.username, urldecode(url.password)];
-	else if (url.username)
-		/* User info encoded with base64 */
-		ss_userinfo = split(decodeBase64Str(urldecode(url.username)), ':', 2);
+	else if (url.username) {
+		/* User info encoded with base64. decodeBase64Str() returns null for
+		 * anything that is not valid base64 (a '.' in the userinfo is
+		 * enough), and ucode's split(null, ...) is null, so indexing it
+		 * raised a ReferenceError. parse_uri() does not catch that: the RPC
+		 * import path happens to, update_subscriptions.uc does not, so one
+		 * malformed link aborted an entire subscription update. A link with
+		 * no usable userinfo is simply not a node we can build. */
+		const decoded = decodeBase64Str(urldecode(url.username));
+
+		ss_userinfo = decoded ? split(decoded, ':', 2) : {};
+	}
 
 	let ss_plugin, ss_plugin_opts;
 	if (url.search && url.searchParams.plugin) {
@@ -210,6 +219,9 @@ export function parse_ss_uri(uri) {
 			ss_plugin = 'obfs-local';
 		ss_plugin_opts = ss_plugin_info[1];
 	}
+
+	if (isEmpty(ss_userinfo[0]))
+		return null;
 
 	return {
 		label: url.hash ? urldecode(url.hash) : null,
