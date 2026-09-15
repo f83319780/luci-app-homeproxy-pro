@@ -345,26 +345,65 @@ return baseclass.extend({
 	   two forms from drifting: they used to carry a hand-written value list
 	   each, which is how `snell` ended up with a complete form block (and a
 	   place in the credential lists) but no way to select it. */
-	renderProtocolOptions(section, options) {
-		const features = options.features || {},
-		      side = options.side || 'client';
-		const o = section.option(form.ListValue, 'type', _('Type'));
+	/* The service status has three states, not two.
+	 *
+	 * `null` means the status query did not come back - rpcCall() resolves to
+	 * its fallback when the call fails. Treating that as "not running" painted
+	 * the status bar red NOT RUNNING, which is indistinguishable from the
+	 * service genuinely being down. The strings live inside _() here so the
+	 * translation scanner sees the literals; a helper that returned a key for
+	 * the caller to translate would drop out of the template, which is the
+	 * trap the protocol labels fell into. */
+	statusLabel(isRunning) {
+		if (isRunning === true)
+			return { color: 'green', text: _('RUNNING') };
+		if (isRunning === false)
+			return { color: 'red', text: _('NOT RUNNING') };
+
+		return { color: '#b8860b', text: _('STATUS UNKNOWN') };
+	},
+
+	/* Which protocol entries to offer for one side.
+	 *
+	 * The feature map comes from the singbox_get_features RPC, and rpcCall()
+	 * resolves to `{}` when that call does not come back. Filtering on an
+	 * empty map hides every feature-gated protocol (hysteria, hysteria2,
+	 * naive, tuic, wireguard), so a node already saved as one of them renders
+	 * with no matching Select option - and the next Save & Apply rewrites its
+	 * `type` to whatever happens to be first in the list, silently changing
+	 * the node's protocol.
+	 *
+	 * An empty map therefore means "features unknown", not "no features", and
+	 * nothing is filtered. Kept as a pure function so this can be asserted
+	 * without a browser: the form harness always supplies the full feature
+	 * map, which is why the faulty path was never reached by a test. */
+	protocolChoices(side, features) {
+		const known = features && Object.keys(features).length > 0;
+		const out = [];
 
 		for (const p of this.protocols) {
 			if (p.sides.indexOf(side) === -1)
 				continue;
 
-			if (typeof p.feature === 'string') {
-				if (!features[p.feature])
+			if (known) {
+				if (typeof p.feature === 'string' && !features[p.feature])
 					continue;
-			}
-			else if (Array.isArray(p.feature)) {
-				if (!p.feature.every(f => features[f]))
+				if (Array.isArray(p.feature) && !p.feature.every(f => features[f]))
 					continue;
 			}
 
-			o.value(p.type, p.label);
+			out.push(p);
 		}
+
+		return out;
+	},
+
+	renderProtocolOptions(section, options) {
+		const side = options.side || 'client';
+		const o = section.option(form.ListValue, 'type', _('Type'));
+
+		for (const p of this.protocolChoices(side, options.features))
+			o.value(p.type, p.label);
 
 		o.rmempty = false;
 
