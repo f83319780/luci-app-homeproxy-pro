@@ -1,5 +1,12 @@
 # 架构重构改进建议（对照 `homeproxy_architecture_refactor_agent_guide.md`）
 
+> **配套文档**：`docs/重构实施间断性指导建议.md`（28 项核心观点 + 7 个 PR 路线）是本文的
+> **后续阶段指引**。本文记录的是"怎么把项目修到能跑、可维护"的实施账本；
+> 那一份记录的是"接下来按什么边界推进"的判断基准。两份结论一致（当前架构成熟度 80–85%）。
+>
+> 分歧处理原则：**具体改动细节以本文为准**（本文有逐项现状证据与 commit 记录）；
+> **优先级与边界规则以那一份为准**（尤其第 28 项 Architecture Guard）。
+
 评审对象：`szwjp/luci-app-homeproxy-pro`，分支 `main`，HEAD `ad43ee2`。
 评审方式：全量阅读 + 目标设备实测（ImmortalWrt，`ucode-2026.01.16~85922056-r1`）。
 状态标记：**PASS / FAIL / NOT RUN**。
@@ -53,7 +60,7 @@ PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`s
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
 | ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 | H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
-| I | 文档与注释债务（`architecture-review.md` 部分结论已失效、README、头注释） | 小 | 低 | 1 – 2 |
+| I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
 | | **合计（A / C / G 大部分已完成）** | | | **26 – 47** |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
@@ -620,13 +627,14 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 
 即 `f(x) == f(x)`。测试脚本自己的注释也承认了（`:112-117` "both sides are the same code path"）。
 它永远不可能失败，因此也永远不可能"抓到 tuic zero_rtt / ws transport.host 这两个 bug"——
-`docs/architecture-review.md` 的 Bottom line 里那句话现在已经不成立。
+`docs/architecture-review.md` 的 Bottom line 里那句话现在已经不成立
+（该文件已随之删除，见 §0.3 附录 I：它的结论已被本文与设备实测取代）。
 
 同时 `demo/architecture/` 目录**根本不存在**（`find demo` → no such directory），但：
 - 源码头注释仍在说"the copy in demo/architecture/ must stay in lockstep"
   （`model.uc:9-11`、`loader.uc:9-13`、`adapter.uc:9-10`）；
 - `tests/README.md:105,113-119`、`tests/fixtures/architecture/README.md:14` 仍在引用它；
-- `docs/architecture-review.md:40-42,143` 仍在描述它。
+- `docs/architecture-review.md:40-42,143` 仍在描述它（文件已删除）。
 
 另外 `test_demo_architecture.sh:158-159` 的两条 sed 是**空操作**：
 `const uci = cursor();` 在 `generate_client.uc` 里已不存在，`__HP_TEST_DOMAIN_MODEL__` 也只在
