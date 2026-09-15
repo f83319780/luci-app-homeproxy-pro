@@ -145,12 +145,33 @@ let threw = null;
 try { rpc.certificate_write.call({}); } catch (e) { threw = sprintf('%s: %s', e.type, e.message); }
 check('certificate_write tolerates an empty request', threw == null, threw);
 
-const others = ['log_clean', 'connection_check', 'acllist_read', 'resources_get_version'];
-for (let m in others) {
-	let t = null;
-	try { rpc[m].call({ args: {} }); } catch (e) { t = sprintf('%s: %s', e.type, e.message); }
+/* Every method rpcd exposes, so none can be shipped without ever having been
+ * executed.  Four of these were referenced by no test at all. */
+const all_methods = [
+	'acllist_read', 'acllist_write', 'certificate_write', 'connection_check',
+	'log_clean', 'node_parse', 'resources_get_version', 'resources_update',
+	'singbox_generator', 'singbox_get_features'
+];
+
+for (let m in all_methods) {
+	check(sprintf('%s is exposed with a call()', m),
+		type(rpc[m]) === 'object' && type(rpc[m].call) === 'function');
+
+	let t = null, ret = null;
+	try { ret = rpc[m].call({ args: {} }); } catch (e) { t = sprintf('%s: %s', e.type, e.message); }
 	check(sprintf('%s tolerates an empty request', m), t == null, t);
+	check(sprintf('%s answers with an object', m), ret == null || type(ret) === 'object',
+		sprintf('got %J', ret));
 }
+
+/* The argument validators must reject, not act on, an unknown value. */
+check('acllist_read rejects an unknown list type',
+	rpc.acllist_read.call({ args: { type: 'not_a_list' } }).result === false ||
+	rpc.acllist_read.call({ args: { type: 'not_a_list' } }).error != null);
+check('connection_check rejects an unknown site',
+	rpc.connection_check.call({ args: { site: 'not_a_site' } }).result === false);
+check('log_clean rejects an unknown log type',
+	rpc.log_clean.call({ args: { type: '../etc/passwd' } }).status !== 0);
 
 printf('rpc methods: %d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);
