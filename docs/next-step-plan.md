@@ -59,6 +59,50 @@
 
 ---
 
+## 1.5 P0-7 实机安装暴露的模块解析缺陷 —— 已完成✅
+
+**这是"编译成包、装到真机"才暴露出来的**，本地套件跑了几个月都没看见。
+
+### 现象
+第一次把 workflow 编出的包装到测试机后，`init.d` 的生成器**完全跑不起来**：
+
+```
+Syntax error: Unable to resolve path for module 'homeproxy'
+```
+
+### 根因
+ucode 解析**裸模块名**时，是相对**发起 import 的那个模块所在目录**去找的。
+上游的脚本是**平铺**在 `/etc/homeproxy/scripts/` 下的，所以 `generate_client.uc`
+和 `homeproxy.uc` 同目录，`import ... from 'homeproxy'` 天然解析得到。
+而 PHASE 8 模块化把它们分进了 `config/`、`generator/`、`parser/`、`subscription/`，
+于是 `config/model.uc` 里的裸 import 会去找 `config/homeproxy.uc` —— 找不到，
+整个生成器编译失败。
+
+后果：**真机上配好节点后服务永远起不来**（`reload_service` 生成失败即中止）。
+
+### 为什么所有测试都没抓到
+**每个测试 harness 都传了 `-L <scripts 目录>`** 才能定位到它的暂存树；
+而生产环境的 `ucode -S <script>` 和 cron 的 shebang 调用**从不传**。
+harness 提供了生产缺的东西 —— 与 P0-6（`UCICONFIG_DIR`）**完全同型**。
+
+### 修复
+21 处 `import ... from 'homeproxy'` 全部改成相对路径（`./` 或 `../`），
+从根上不再依赖任何搜索路径，而不是逐个调用点补 `-L`。
+三个 subscription 测试原本把模块平铺暂存、靠裸名解析，已改为镜像生产目录结构。
+
+**新增守卫**（`tests/ucode/run.sh`）：用**不带 `-L`** 的方式跑
+`generate_client.uc` 与 `update_subscriptions.uc`，断言模块解析。
+反向验证：把任一 import 改回裸名 → 失败。
+
+### 实机验证（`28.9.1.14-r2`）
+- `ucode -S /etc/homeproxy/scripts/generate_client.uc`（**无 `-L`**，与 init.d 一致）→ 产出配置 ✓
+- 订阅按 cron 方式（shebang）导入 **4 个节点**（anytls / hysteria2 / shadowsocks / vless）✓
+- 服务启动：`running: true`、监听 5330/5331/5333(tcp) + 5332/5333(udp) ✓
+- **隧道建立**：设备到节点 `199.168.136.128:56976` 有 ESTABLISHED 连接 ✓
+- `reload` 走完 生成 → stop → start → 健康门 → known-good，日志 `Reload completed.` 无告警 ✓
+
+---
+
 ## 2. P0-6 生成器读错 UCI 路径 + 订阅更新器静默无效 —— 已完成✅
 
 **最严重的一项**：后端对抗性复核提出，我在**真机实测确认**。
