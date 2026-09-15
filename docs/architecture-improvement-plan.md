@@ -593,14 +593,41 @@ PR-04 推进过程中第一次在装有 ucode testbed 的机器上完整跑 `tes
 | `test_subscription_repository.uc` 用 `match(s, 'plain string')` | PR-03 `e88f7c7` | ucode 的 `match()` 只接受正则，字符串直接返回 `null`；断言恒假 | 改用正则字面量 |
 | sandbox 里没有 `config homeproxy 'config'` section | — | libuci 对不存在的 named section 会建匿名 section，`main_node` 断言读不回来 | seed 补上该 section |
 
-结果：`tests/ucode/run.sh` 的失败集合与基线 `19eb77c` **完全一致**（仅剩 4 项
-本机环境限制：grammar canary 用的是较宽松的 ucode 构建、`luci.sys` 在主机上不导出
-`init_action`、`firewall_post.ut` 渲染需要真机上下文），62 项 PASS，零回归。
+结果：`tests/ucode/run.sh` 的失败集合与基线 `19eb77c` **完全一致**
+（当时仅剩 4 项本机环境限制；其中 3 项在 §2.3.2 里被证明是真缺陷并修掉，
+只剩 grammar canary 一项属于"本机工具链比目标宽松"的正常提示），62 项 PASS，零回归。
 
 同时修掉了让 CI 长期失效的根因：`tests/toolchain/build-ucode-linux.sh` 构建
 liblucihttp 时没传 `-I$PREFIX/include`（ucode/module.h）和 `-L$PREFIX/lib`（bare `-lucode`），
 所以 "Build ucode toolchain" 一直在第一步就失败，`run.sh` 从未在 CI 里跑过。
 macOS 版本的脚本一直有这两个 flag。**这是 PR-01～03 的缺陷能一路推到 main 的直接原因。**
+
+### 2.3.2 目标方言（pinned ucode）下暴露的缺陷
+
+修好 CI 工具链之后，第一次在**按 pin 的 revision** 构建的 ucode 上跑完整套测试
+（本地另建一份 `~/.local/ucode-strict`，与 CI 的方言一致），又剥出一批
+**让包在真机上根本加载不了**的既有缺陷。它们全部早于 PR-04，且此前从未被任何一次
+CI 跑到（§2.3.1 已说明 CI 为何失效）。
+
+| 缺陷 | 规模 | 后果 | 修复 |
+|---|---|---|---|
+| `export function ... }` 缺结尾 `;` | 19 处：`homeproxy.uc`×2、`generator/{client,common×7,dns,inbound,outbound×3,route,ruleset×2,server}.uc`、`fetcher` mock×2 | 目标 ucode 直接 `Syntax error: Expecting ';'`。`homeproxy.uc` 是整条 import 链的根，**一个分号就能让客户端生成完全失效**；`generator/*` 同样整体不可加载 | 补齐 19 个 `;`（commit `4cd98d6`） |
+| `update_subscriptions.uc` 从 `luci.sys` import `init_action` | 1 处 | openwrt/luci 与 immortalwrt/luci 的 `modules/luci-base/ucode/sys.uc` 都**没有**这个导出（只有 `process_list`/`conntrack_list`/`init_list`/`init_index`/`init_enabled`）。import 解析失败 ⇒ **订阅更新在路由器上完全无法运行** | 改用 `executeCommand('/etc/init.d/homeproxy', 'reload')`，并检查退出码、把 stderr 写进日志（比原来只调用不检查更强） |
+| `#!` 在 module 模式下非法 | 2 个测试 harness | `firewall_pre.uc` / `migrate_config.uc` 生产上以 program 方式运行（`ucode <file>`），shebang 合法；但目标 ucode 在 **import** 时报 `Unexpected character`，随后引发一连串级联词法错误 | 测试 staging 时删掉 shebang，并加上与其他 staged 改写同样的 anchor guard |
+| `executeCommand()` 用 `>&N` 重定向到 mkstemp 的 fd | 1 处 | 子 shell 看不到那些 fd 时 `/bin/sh` 直接报 `Bad fd number`（dash）/ `Bad file descriptor`（bash），**命令根本没执行**，调用者拿到空 stdout + exit 2。CI 的 `/bin/sh` 是 dash，所以整套 executeCommand 断言失败 | 改成 `mkdtemp()` + 按**路径**重定向（`>dir/stdout 2>dir/stderr`），纯 POSIX，在 ash/dash/bash 下行为一致；保留 512 KiB 读取上限与返回值契约。顺带删掉只为那两个 fd 存在的 `closeFD()` |
+| `test_firewall_template.sh` 需要真机 `fw4` 模块 | 1 个测试 | 无法渲染，测试从基线起就一直失败。但**它要防的那个 bug 其实不需要 fw4**：`{%-` 会裁掉前面的空白，所以 `{%-` 之前有任何文本都会把第一条生成的语句粘成注释，于是所有 homeproxy chain/set 被静默丢弃 | 拆成两层：① 源码级断言（`{%-` 之前除 shebang 外必须为空）永远运行，用它精确复现该前置条件；② 渲染 + 结构断言在 `fw4` 可用时运行，否则诚实报 `NOT RUN` 并说明原因。**没有**用 fw4 stub —— 那会变成在断言一个真 fw4 从未产出的规则集 |
+
+**验证方式**：新建 `~/.local/ucode-strict`（`tests/toolchain/build-ucode-macos.sh`
+按 pin 构建，再用 `install_name_tool -add_rpath` 补上 macOS 脚本同样漏掉的
+`CMAKE_INSTALL_RPATH`），整套在**目标方言**下运行：
+
+```
+65 PASS, 0 FAIL, 1 NOT RUN（fw4 渲染，设备专属）
+```
+
+宽松工具链下的唯一失败仍是 grammar canary —— 那是它的职责（它在报告"这个
+toolchain 太宽松"），`tests/README.md` 已补充"遇到该提示应先重建工具链，
+而不是按 `HP_ALLOW_PERMISSIVE_UCODE=1`，否则 canary 的反向探针会因错误的原因通过"。
 
 ### 2.4 PHASE 4 — Generator 拆分 ~~（当前 0%，但收益最直接）~~ ✅ 已落地（commit `0c67d77`）
 

@@ -84,6 +84,17 @@ loudly instead of turning into a green run. Set
 `HP_ALLOW_PERMISSIVE_UCODE=1` to demote that to a warning while deliberately
 probing a newer ucode.
 
+**If the canary reports `exported_function_without_semicolon compiles, but the
+target ucode rejects it`, the problem is usually the local build, not the pin.**
+A testbed built before `UCODE_REV` was introduced tracks upstream HEAD and is
+too permissive; rebuild it with `tests/toolchain/build-ucode-macos.sh` (or
+`-linux.sh`) and the canary passes. This is worth doing rather than reaching
+for `HP_ALLOW_PERMISSIVE_UCODE=1`: on a permissive toolchain the canary's
+"rejected" probes pass for the wrong reason, and a real
+missing-`;`/destructuring regression would go unnoticed — which is precisely
+how the generator subtree shipped unloadable (see the `;` row in
+`docs/architecture-improvement-plan.md` §2.3.2).
+
 ### What the local testbed cannot cover
 
 Nothing is skipped any more. The suite used to report four checks as `SKIP` on
@@ -100,6 +111,15 @@ reach a device:
 
 A missing `utpl`, or any other gap in the toolchain, now FAILS instead of
 silently reducing coverage.
+
+The one remaining `NOT RUN` is honest rather than a skip: the render half of
+`tests/ucode/test_firewall_template.sh` needs the device-only `fw4` ucode
+module. Its source-level half always runs, and it checks the actual
+precondition of the bug that test exists for (nothing but the shebang may
+precede the `{%-` tag, otherwise the trimmed newline glues the first generated
+statement onto a comment). Stubbing `fw4` would let the render run everywhere,
+but the assertions would then be about a ruleset the real `fw4` never
+produced — see that script's header for the reasoning.
 
 Two further host differences are bridged so the remaining checks still run:
 
