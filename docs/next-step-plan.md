@@ -29,13 +29,13 @@
 | **P0-1** | **两个 XSS**：label→弹窗标题、订阅 URL fragment→tab 标题 | **P0** | 小 | 无 · 已完成✅ |
 | **P0-2** | `decodeURIComponent` 让节点页**整页渲染失败**（必现） | **P0** | 极小 | 无 · 已完成✅ |
 | P0-3 | 真机配置善后：抢救 + 重建 | **P0** | 小 | 你提供节点信息 |
-| P0-4 | ECH 上传修复（补后端含 ECH 专用校验 或 删按钮） | **P0** | 小 | 需求决策 A/B |
+| P0-4 | ECH 上传修复（补后端含 ECH 专用校验） | **P0** | 小 | 已按推荐方案 A 完成✅ |
 | P0-5 | README 把默认目标写成**生产路由器** | **P0** | 极小 | 无 · 已完成✅ |
 | P1-1 | Architecture Guard（PR-07），含契约闭合性守卫 | P1 | 中 | 无 |
 | P1-2 | 发布路径加测试门（tag 不再裸发布） | P1 | 小 | 无 |
 | P1-3 | mock 副本同步守卫 | P1 | 小 | 无 |
 | P1-4 | i18n 门补 source→pot | P1 | 小 | 无 |
-| P1-5 | `luci.homeproxy` 行为测试（含 `certificate_write` 全分支） | P1 | 中 | 与 P0-4 同批 |
+| P1-5 | `luci.homeproxy` 行为测试（含 `certificate_write` 全分支） | P1 | 中 | 无 · 已完成✅ |
 | P1-6 | ACL 收紧：删 6 条浏览器用不到的写路径 | P1 | 极小 | 无 |
 | P1-7 | RPC 失败回退不再断言假状态（含 `type` 静默改写） | P1 | 中 | 需先有可失败的测试 |
 | P1-8 | 真机 CI 作业（台账 §5 项 14） | P1 | 中 | P0-3 之后更有意义 |
@@ -201,19 +201,22 @@ Loader.load('/etc/config')           -> 真实配置的值
 
 ---
 
-## 6. P0-4 ECH 上传修复
+## 6. P0-4 ECH 上传修复 —— 已完成✅
 
 审计 §6。**复核补充了一条我漏掉的**：即使补上 case，
 `homeproxy.uc:597-598` 的 `isValidPEM(content,false)` 只认
 `-----BEGIN CERTIFICATE-----`，而 ECH config 是 `-----BEGIN ECH CONFIGS-----`。
 
-### 决策（需要你一句话）
-- **A（推荐）补后端**：新增 `case 'client_ech_conf'`，走**ECH 专用校验**
-  （不能复用 `isValidPEM`），并修掉错误路径不清理
-  `/tmp/homeproxy_cert_client_ech_conf.tmp` 的问题。
-- **B 删按钮**：同时删 `tls_ech`/`tls_ech_config_path`、ACL 两条、生成器引用。
-
-**倾向 A**：生成器与 UCI 模型已围绕 ECH 建好，删的面积远大于补一条分支。
+### 决策与实施
+按计划推荐的 **A（补后端）** 实施（你没干预，且 B 只是删功能；如你更想要 B，
+回退成本很低，告诉我即可）：
+- `luci.homeproxy` 新增 `case 'client_ech_conf'`；
+- **但只补 case 不够**：`isValidPEM` 只认 `CERTIFICATE` 与 `(RSA|EC) PRIVATE KEY`
+  标记，而 ECH config 是 `-----BEGIN ECH CONFIGS-----`，所以补了 case 也会被
+  以"does not look like a correct PEM file"拒掉。把共用的 body 规则抽成
+  `validatePEM()`，新增 `isValidECHConfig()` 提供自己的标记。
+- 四条路径都在 `writeCertificate()` 里清理 staging 文件，所以 ECH 的
+  `/tmp/homeproxy_cert_client_ech_conf.tmp` 不再残留。
 
 **验收**：四个文件名各一例成功 + 非法名仍被拒 + ECH 的 PEM 头校验生效 +
 tmp 文件在成功与失败路径上都被清理。**在 P1-5 的行为测试里写**，并先确认它能抓到当前 bug。
@@ -300,7 +303,7 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 12. P1-5 `luci.homeproxy` 行为测试
+## 12. P1-5 `luci.homeproxy` 行为测试 —— 已完成✅
 
 审计 §8.3 的结构性根因：`tests/ucode/run.sh:63` 把它单独 `-c` 编译、**从不执行**。
 
@@ -447,7 +450,7 @@ P0-2 decodeURIComponent 崩溃（必现，极小）            ✅ 已完成
   ▼
 P0-1 两个 XSS（两个 sink 两个转义 + 双解码不变量测试）  ✅ 已完成
   ▼
-P0-4 ECH（P1-5 先写行为测试 → 确认抓到 bug → 再修）
+P0-4 ECH + P1-5 行为测试（先写测试 → 确认抓到 bug → 再修）  ✅ 已完成
   ▼
 P1-6 ACL 收紧（极小）→ P1-1 Architecture Guard（第 3 条抓 ECH，第 7 条防 ACL 复发）
   ▼
