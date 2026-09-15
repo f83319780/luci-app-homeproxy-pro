@@ -50,8 +50,12 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           sudo -E apt-get update -qq
+          # gettext supplies msguniq, which luci's i18n-scan.pl calls; the
+          # "translation template is current" step regenerates the template
+          # and needs it. Without it the step fails with "exec of msguniq -s
+          # failed", which looks like a stale template but is a missing tool.
           sudo -E apt-get install -y --no-install-recommends \
-            build-essential ca-certificates cmake curl git \
+            build-essential ca-certificates cmake curl gettext git \
             libjson-c-dev libmd-dev libssl-dev meson ninja-build \
             pkg-config python3 zlib1g-dev
 
