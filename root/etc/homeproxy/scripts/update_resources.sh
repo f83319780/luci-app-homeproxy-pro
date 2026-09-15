@@ -35,18 +35,19 @@ check_list_update() {
 		return 2
 	fi
 
-	local github_header_file=""
-	if [ -n "$github_token" ]; then
-		github_header_file="$RUN_DIR/.gh_header_${listtype}"
-		( umask 077; printf 'Authorization: Bearer %s\n' "$github_token" > "$github_header_file" )
-		trap "[ -n \"$github_header_file\" ] && rm -f \"$github_header_file\"" EXIT INT TERM
-	fi
+	# The token travels in argv, which the previous form avoided by writing it
+	# to a 0600 file and passing --header-file - an option neither busybox nor
+	# GNU wget has, so it failed with "unrecognized option" and the version
+	# query never worked at all with a token configured. There is no
+	# file-based header option in either wget, so argv is the only way; on a
+	# single-user router that is the right trade for a feature that otherwise
+	# does not function. `wget` is invoked with the header only when a token
+	# is set, and nothing logs the command line.
+	local github_header=""
+	[ -n "$github_token" ] && github_header="Authorization: Bearer $github_token"
 
-	local list_info="$($wget ${github_header_file:+--header-file=$github_header_file} -O- "https://api.github.com/repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
+	local list_info="$($wget ${github_header:+--header "$github_header"} -O- "https://api.github.com/repos/$listrepo/commits?sha=$listref&path=$listname&per_page=1")"
 	local wget_exit=$?
-
-	[ -n "$github_header_file" ] && rm -f "$github_header_file"
-	trap - EXIT INT TERM
 
 	if [ $wget_exit -ne 0 ]; then
 		log "[$(to_upper "$listtype")] Failed to fetch version info (wget exit $wget_exit)."

@@ -172,5 +172,17 @@ expect_null('tuic-without-quic', parse_uri('tuic://u:p@s.example.com:443#NoQuic'
 expect_null('invalid-port', parse_uri('vless://u@t.example.com:99999?security=tls#BadPort', FEATURES, LOG));
 expect_null('unknown-scheme', parse_uri('unknown://u@t.example.com:443', FEATURES, LOG));
 
+/* A malformed shadowsocks userinfo must be rejected, not raise.
+ *
+ * ss:// carries its method:password base64-encoded in the userinfo.
+ * decodeBase64Str() returns null for anything that is not valid base64, and
+ * ucode's split(null, ...) is null, so indexing [0] raised a ReferenceError.
+ * parse_uri() does not catch it: the RPC import path happens to, but
+ * update_subscriptions.uc does not, so ONE bad link aborted the whole update
+ * and nothing was imported. A dot is not base64, so this is a realistic typo.
+ * A link with no usable userinfo is simply not a node we can build. */
+expect_null('ss-nonbase64-userinfo', parse_uri('ss://a.b@1.2.3.4:8388#x', FEATURES, LOG));
+expect_null('ss-empty-userinfo', parse_uri('ss://@1.2.3.4:8388#x', FEATURES, LOG));
+
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures === 0 ? 0 : 1);
