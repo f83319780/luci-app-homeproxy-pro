@@ -299,4 +299,4 @@ export function build_route(config, dm, ctx, direct_overrides) {
 		build_route_custom(config, dm, ctx, direct_overrides);
 
 	return config;
-}
+};

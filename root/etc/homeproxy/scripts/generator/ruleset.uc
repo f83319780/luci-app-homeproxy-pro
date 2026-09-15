@@ -88,7 +88,7 @@ export function build_user_rulesets(rule_set_array, dm, ctx) {
 			ruleset.initial_path = validateHomeProxyPath(cfg.initial_path) ? cfg.initial_path : null;
 		push(rule_set_array, ruleset);
 	}
-}
+};
 
 /* --- http_clients normalisation (every routing mode) ------------------ */
 
@@ -127,4 +127,4 @@ export function build_http_clients(rule_set_array, dm, ctx) {
 		}
 	}
 	return http_clients;
-}
+};

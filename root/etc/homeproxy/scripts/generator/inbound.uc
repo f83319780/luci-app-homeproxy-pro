@@ -92,4 +92,4 @@ export function build_inbounds(config, ctx) {
 
 	config.inbounds = inbounds;
 	return config;
-}
+};

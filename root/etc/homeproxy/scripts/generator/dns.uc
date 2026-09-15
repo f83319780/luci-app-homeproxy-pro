@@ -334,4 +334,4 @@ export function build_dns(config, dm, ctx) {
 		append_proxy_dns(config, dm, ctx);
 
 	return config;
-}
+};

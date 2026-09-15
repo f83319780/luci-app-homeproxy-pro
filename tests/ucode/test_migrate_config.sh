@@ -96,16 +96,28 @@ cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$STAGE/"
 cp "$ROOT/root/etc/homeproxy/scripts/migrate_config.uc" "$STAGE/"
 cp "$ROOT/tests/ucode/test_migrate_config.uc" "$STAGE/"
 
-sed 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
+# The shebang is dropped in the staged copy: migrate_config.uc is a
+# program in production (`ucode -S .../migrate_config.uc`, where the
+# shebang is fine), but this test *imports* it, and the target ucode
+# rejects a `#!` line in a module ("Unexpected character" at line 1,
+# followed by cascading lexer errors).
+sed -e '1{/^#!\/usr\/bin\/ucode$/d;}' \
+	-e 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
 	"$STAGE/migrate_config.uc" > "$STAGE/migrate_config.uc.new"
 
-# Hard guard: if the anchor ever stops matching (someone reformats the
-# line), the sed silently no-ops and the migration would then run
-# against the real /etc/config - which on a target would rewrite the
-# live configuration. Refuse to run instead.
+# Hard guard: if an anchor ever stops matching (someone reformats the
+# line), the sed silently no-ops. Losing the cursor redirect would make the
+# migration run against the real /etc/config - which on a target would
+# rewrite the live configuration; losing the shebang strip means the module
+# cannot be imported at all. Refuse to run instead.
 if ! grep -q 'cursor(ARGV\[0\])' "$STAGE/migrate_config.uc.new"; then
 	echo "FAIL: migrate_config regressions: could not redirect the UCI cursor"
 	echo "      (the 'const uci = cursor();' anchor no longer matches)"
+	exit 1
+fi
+if head -1 "$STAGE/migrate_config.uc.new" | grep -q '^#!'; then
+	echo "FAIL: migrate_config regressions: the shebang was not stripped"
+	echo "      (the '#!/usr/bin/ucode' anchor no longer matches)"
 	exit 1
 fi
 mv "$STAGE/migrate_config.uc.new" "$STAGE/migrate_config.uc"
