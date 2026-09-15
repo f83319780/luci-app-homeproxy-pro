@@ -51,6 +51,7 @@
 		"tag": "cfg-n_vmess_http-out",
 		"server": "l.example.com",
 		"server_port": 443,
+		"packet_encoding": "packetaddr",
 		"uuid": "66666666-7777-8888-9999-aaaaaaaaaaaa",
 		"security": "auto",
 		"global_padding": true,

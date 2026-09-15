@@ -168,6 +168,18 @@ function main() {
 				const node_canonical = normalize(flat);
 				node_canonical.grouphash = groupHash;
 
+				/* normalize() exposes the source label as `name`; the
+				 * Repository identifies a node by
+				 * md5(grouphash + label), so without this every node in
+				 * one subscription hashes to the SAME section name and
+				 * they overwrite each other - a 4-node subscription
+				 * collapsed into a single section carrying one protocol's
+				 * `type` with several protocols' options mixed in.
+				 * The cache is keyed by the same hash, so this also makes
+				 * an unchanged node match on the next run instead of
+				 * being deleted and re-added every time. */
+				node_canonical.label = flat.label;
+
 				push(node_result, []);
 				push(node_result[length(node_result)-1], node_canonical);
 				node_cache[groupHash][confHash] = node_canonical;

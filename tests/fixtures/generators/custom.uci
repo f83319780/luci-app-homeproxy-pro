@@ -40,6 +40,13 @@ config routing_node 'rn_direct'
 	option enabled '1'
 	option label 'rn-direct'
 	option node 'n_direct'
+	# domain_resolver is what makes the generator call get_resolver().  No
+	# fixture exercised it, so generator/outbound.uc using the function without
+	# importing it (from ./common.uc) went unnoticed: ucode raises "access to
+	# undeclared variable" and the whole generation dies, but only for a custom
+	# routing_node that has this option set - which the UI offers.
+	option domain_resolver 'default-dns'
+	option domain_strategy 'prefer_ipv4'
 
 config routing_rule 'rr_direct'
 	option enabled '1'

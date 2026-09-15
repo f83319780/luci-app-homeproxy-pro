@@ -100,7 +100,12 @@ export const PROTOCOL_TO_UCI = {
 		alter_id: 'vmess_alterid',
 		security: 'vmess_encrypt',
 		global_padding: 'vmess_global_padding',
-		auth_payload: 'vmess_auth_payload'
+		auth_payload: 'vmess_auth_payload',
+		/* packet_encoding was missing here, so a vmess node's UCI option
+		 * never reached protocol_options and the outbound had none - even
+		 * though the node form offers the option for vmess and the
+		 * subscription default is applied to it. vless declares it too. */
+		packet_encoding: 'packet_encoding'
 	},
 	ssh: {
 		client_version: 'ssh_client_version',

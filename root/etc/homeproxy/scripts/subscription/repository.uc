@@ -126,7 +126,14 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 			if (node.isExisting)
 				return null;
 
-			const nameHash = md5(node.grouphash + node.label);
+			/* normalize() exposes the source label as `name`; `label`
+			 * is only set when the orchestrator carries it over. Relying
+			 * on `label` alone hashed every node of a subscription to the
+			 * same section name, because undefined stringifies
+			 * identically - four nodes collapsed into one section mixing
+			 * several protocols' options. Accept either. */
+			const label = node.label || node.name;
+			const nameHash = md5(node.grouphash + label);
 			const flat = flatten(node);
 
 			uci.set(uciconfig, nameHash, 'node');
@@ -134,7 +141,7 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 				uci.set(uciconfig, nameHash, v, flat[v]);
 
 			added++;
-			log(sprintf('Adding node: %s.', node.label));
+			log(sprintf('Adding node: %s.', label));
 		});
 
 	uci.commit(uciconfig);
