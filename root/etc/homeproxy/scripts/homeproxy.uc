@@ -602,13 +602,14 @@ export function buildTransportObject(transport, is_server) {
  * with a base64 body in between. Kanged from luci-proto-openconnect; used by
  * the rpcd certificate upload and available for future certificate features.
  */
-export function isValidPEM(content, is_private_key) {
+/* Shared by the certificate, private-key and ECH-config validators: only the
+ * markers differ, the body rule does not (base64 lines - or a single 64
+ * character line - between a BEGIN and an END marker). */
+function validatePEM(content, beg, end) {
 	if (isEmpty(content))
 		return false;
 
-	const beg = is_private_key ? /^-----BEGIN (RSA|EC) PRIVATE KEY-----$/ : /^-----BEGIN CERTIFICATE-----$/,
-	      end = is_private_key ? /^-----END (RSA|EC) PRIVATE KEY-----$/ : /^-----END CERTIFICATE-----$/,
-	      lines = split(trim(content), /[\r\n]/);
+	const lines = split(trim(content), /[\r\n]/);
 	let start = false, i;
 
 	for (i = 0; i < length(lines); i++) {
@@ -622,5 +623,23 @@ export function isValidPEM(content, is_private_key) {
 		return false;
 
 	return true;
+};
+
+export function isValidPEM(content, is_private_key) {
+	const beg = is_private_key ? /^-----BEGIN (RSA|EC) PRIVATE KEY-----$/ : /^-----BEGIN CERTIFICATE-----$/,
+	      end = is_private_key ? /^-----END (RSA|EC) PRIVATE KEY-----$/ : /^-----END CERTIFICATE-----$/;
+
+	return validatePEM(content, beg, end);
+};
+
+/* A client ECH config list is neither a certificate nor a private key - it is
+ * wrapped in its own markers ("-----BEGIN ECH CONFIGS-----"), so isValidPEM()
+ * rejects it.  The node form's "Upload ECH config" button has always sent
+ * certificate_write('client_ech_conf'); the backend had no case for that name,
+ * and would have rejected the body here even with one. */
+export function isValidECHConfig(content) {
+	return validatePEM(content,
+		/^-----BEGIN ECH CONFIGS-----$/,
+		/^-----END ECH CONFIGS-----$/);
 };
 /* PEM validation end */

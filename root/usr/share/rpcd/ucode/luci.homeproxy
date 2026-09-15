@@ -9,7 +9,7 @@
 
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
-import { isBinary, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
+import { isBinary, isValidECHConfig, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
 import { parse_uri } from '/etc/homeproxy/scripts/parser/uri.uc';
 
 /* Kanged from ucode/luci */
@@ -100,7 +100,12 @@ const methods = {
 	certificate_write: {
 		args: { filename: 'filename' },
 		call: function(req) {
-			const writeCertificate = (filename, priv) => {
+			/* `kind` is 'cert', 'key' or 'ech'.  Each certificate button
+			 * has its own PEM shape; an ECH config list in particular is
+			 * neither a certificate nor a key, so reusing isValidPEM()
+			 * for it would reject every valid upload with a misleading
+			 * "does not look like a correct PEM file". */
+			const writeCertificate = (filename, kind) => {
 				/* Per-button staging path. The previous code used a
 				 * single /tmp/homeproxy_certificate.tmp shared by every
 				 * certificate button, which was a race: the second upload
@@ -124,7 +129,11 @@ const methods = {
 				}
 
 				/* Validate the PEM structure before storing it */
-				if (!isValidPEM(filecontent, priv)) {
+				const wellformed = kind === 'ech'
+					? isValidECHConfig(filecontent)
+					: isValidPEM(filecontent, kind === 'key');
+
+				if (!wellformed) {
 					system(`rm -f ${tmpcert}`);
 					return { result: false, error: 'this does not look like a correct PEM file' };
 				}
@@ -146,10 +155,18 @@ const methods = {
 			switch (filename) {
 			case 'client_ca':
 			case 'server_publickey':
-				return writeCertificate(filename, false);
+				return writeCertificate(filename, 'cert');
 				break;
 			case 'server_privatekey':
-				return writeCertificate(filename, true);
+				return writeCertificate(filename, 'key');
+				break;
+			/* The node form's fourth upload button. It was missing here
+			 * from the initial commit, so the button always failed with
+			 * "illegal cerificate filename" while the ACL granted the
+			 * two write paths - the frontend assumed the backend case
+			 * existed and nothing tested that it did. */
+			case 'client_ech_conf':
+				return writeCertificate(filename, 'ech');
 				break;
 			default:
 				return { result: false, error: 'illegal cerificate filename' };
