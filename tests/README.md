@@ -124,6 +124,10 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/luci-form-snapshot.js` | Dumps every option (name, kind, title, description, depends, values, datatype/default/…) of the node, client and server views. Diffs against `tests/snapshots/{node,client,server}.json`, so a refactor that changes a field or its visibility fails. |
 | `tests/ucode/test_homeproxy_utils.uc` | `executeCommand()` return shape, stderr/exit-code capture, binary detection, and a descriptor-leak check (200 calls). |
 | `tests/ucode/test_homeproxy_utils_inject.uc` | The failure path of `executeCommand()`: the script stages a copy of `homeproxy.uc` whose `system()` call is replaced by `die()`, then checks that the exception still propagates and that neither descriptor leaks. |
+| `tests/ucode/test_tls_transport.uc` | Direct calls into `buildTLSObject()` / `buildTransportObject()`: client-vs-server-only fields (no `insecure` on a server inbound, no `utls` on a server, `public_key` only on the client and `private_key` only on the server for reality), the ECH client/server split, and the `validateHomeProxyPath()` gate on `cert_path` / `key_path`. This is the boundary the generator fixtures only exercised end-to-end, so it is where the "server emitted insecure=true" and "reality key on the wrong side" classes of bug get named. |
+| `tests/ucode/test_subscription_fetcher.uc` | `subscription/fetcher.uc` against a shimmed `wGETVerbose`: empty content logs a **redacted** URL and returns `{content:null,error}`; non-empty content returns the body and logs nothing. The redaction assertion is what stops the subscription token from reappearing in `homeproxy.log`. |
+| `tests/ucode/test_migrate_config.sh` | Runs `migrate_config.uc` (36 checks) against a sandboxed UCI file that needs every migration step it can see at once — the 1.14 DNS renames, the legacy `dns_server.address` split, `rcode://` → predefined rule, `rule_set_ipcidr_match_source` rename, `block-out`/`block-dns` → `action='reject'`, `auto_firewall` redistribution, and the `block-dns` default-server replacement. The staged copy's cursor is redirected at the sandbox; the runner aborts if that rewrite stops matching rather than letting the migration touch the live `/etc/config`. |
+| `tests/ucode/test_firewall_pre.sh` | Behaviour tests for `firewall_pre.uc` (8 scenarios, one process each because the script has no exports): the tun accept pair, the per-server accept rules, the explicit-network narrowing, and — most importantly — that an invalid port or network skips the server with a WARN instead of interpolating garbage into an nft statement, which would make nft reject the entire ruleset. |
 | `tests/ucode/test_fw4_names.sh` | Keeps the fw4 chain/set inventory in `scripts/fw4_names.sh` (used by `init.d/homeproxy` to clean up on stop) in sync with the objects declared in `scripts/firewall_post.ut`. |
 | `tests/ucode/test_parse_uri.uc` | Per-scheme assertions on the `parse_uri()` result: anytls, http/https, hysteria, hysteria2/hy2, snell, socks(4/4a/5/5h), shadowsocks (SIP002 base64 + plain + plugin, Shadowrocket), trojan (ws/grpc), tuic, vless (reality/ws/http/httpupgrade), vmess (ws/h2/httpupgrade/grpc) and SIP008 objects, plus the rejection paths (unsupported kcp/quic, no QUIC support, invalid port, unknown scheme). |
 | `tests/ucode/test_generators.sh` | Runs `generate_client.uc`/`generate_server.uc` against the UCI fixtures in `tests/fixtures/generators/` inside a scratch directory (the `uci` cursor and `HP_DIR`/`RUN_DIR` are redirected) and validates each result with `sing-box check`. |
@@ -138,6 +142,35 @@ Two further host differences are bridged so the remaining checks still run:
 `tests/ucode/mocks/homeproxy.uc` is a test double for the real module: only
 `validation()` is stubbed (the real one runs `/sbin/validate_data`, which does
 not exist outside OpenWrt), everything else is a copy of the production code.
+
+Three further mocks exist because a test needs a narrower seam than the full
+module:
+
+* `tests/ucode/mocks/homeproxy_fetcher.uc` — replaces `wGETVerbose` with a
+  stub that reads the canned response from a global, so the fetcher test never
+  shells out to `wget`.
+* `tests/ucode/mocks/homeproxy_firewall.uc` — `isEmpty` / `validation` plus a
+  `RUN_DIR` read from a global, so `firewall_pre.uc` writes its nft fragments
+  into a scratch dir.
+* `tests/ucode/test_migrate_config.sh` rewrites the staged copy of
+  `migrate_config.uc` so its cursor points at the sandbox. Whenever a test
+  rewrites a staged copy, it must abort when the rewrite anchor stops
+  matching — otherwise the sed no-ops and the script under test operates on
+  the live `/etc/config`. Both `test_migrate_config.sh` and
+  `test_firewall_pre.sh` do this.
+
+### Files that still have no direct test
+
+Deliberately, because a meaningful test would need more than the off-target
+harness provides:
+
+| Path | Why |
+| --- | --- |
+| `scripts/update_resources.sh` | Its body is a GitHub API round-trip plus a jsdelivr download; only the `*)` usage branch is reachable offline. Covered by the shell syntax check. |
+| `scripts/update_crond.sh` | A fixed list of invocations against hard-coded `/etc/homeproxy/scripts` paths. Covered by the shell syntax check. |
+| `scripts/clean_log.sh` | `while true; do sleep 180; …` — testing the rotation needs the loop made injectable first. Covered by the shell syntax check. |
+| `htdocs/.../view/homeproxy/status.js` | A LuCI view; its behaviour is only observable in a browser. |
+| `init.d/homeproxy` | procd semantics need a real procd. `tests/runtime/test_config_transaction.sh` covers the transaction helpers it calls, and the shell syntax check covers the script itself. |
 
 ## Architecture regression coverage
 
