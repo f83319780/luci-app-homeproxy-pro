@@ -51,12 +51,13 @@ echo "== ucode syntax check =="
 for file in "$SCRIPTS_DIR"/*.uc \
            "$SCRIPTS_DIR"/subscription/*.uc \
            "$SCRIPTS_DIR"/config/*.uc \
+           "$SCRIPTS_DIR"/generator/*.uc \
            "$ROOT"/root/usr/share/rpcd/ucode/*; do
 	[ -f "$file" ] || continue
 	# Modules (with export statements) cannot be compiled as a program; they
 	# are loaded through `import` below instead.
 	case "$file" in
-	*homeproxy.uc|*parse_uri.uc|*/subscription/*.uc|*/config/*.uc) continue ;;
+	*homeproxy.uc|*parse_uri.uc|*/subscription/*.uc|*/config/*.uc|*/generator/*.uc) continue ;;
 	esac
 
 	# luci.homeproxy imports homeproxy.uc through an absolute /etc/... path
@@ -91,8 +92,14 @@ done
 # `config/*.uc` is imported through a relative `./config/*.uc` by both
 # generators, so a syntax error there only surfaces when a generator runs;
 # import it explicitly too so the failure names the module.
+#
+# `generator/*.uc` was added in PHASE 4: client.uc and server.uc are the
+# public entry points and pull every other generator module in transitively.
+# Loading them through `import` is the cheapest way to syntax-check the
+# whole subtree at once.
 for module in subscription/filter subscription/decoder subscription/fetcher subscription/repository \
-              config/loader config/model config/adapter; do
+              config/loader config/model config/adapter \
+              generator/client generator/server; do
 	if ! ucode -L "$SCRIPTS_DIR" -e "import * as m from \"$SCRIPTS_DIR/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"

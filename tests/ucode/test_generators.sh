@@ -7,6 +7,14 @@
 # is rewritten to point HP_DIR/RUN_DIR at a scratch directory, and the uci
 # cursor is pointed at the fixture config.
 #
+# Stage PHASE 4: the generators are now split into generator/*.uc modules
+# and the production entry points (scripts/generate_client.uc and
+# scripts/generate_server.uc) are 10-line CLI shells that just load the UCI,
+# call the module's generate(), and run the atomic write + sing-box check.
+# The testbed no longer needs to sed-substitute a `__LOADER_DIR__` token
+# because that mechanism is gone - the staged scripts/ subtree is a regular
+# directory and `Loader.load()` takes the path as an argument.
+#
 # Usage: sh tests/ucode/test_generators.sh <repo-root> [work-dir]
 
 ROOT="${1:-.}"
@@ -23,7 +31,7 @@ run_case() {
 	dir="$WORK/$name"
 
 	rm -rf "$dir"
-	mkdir -p "$dir/config" "$dir/run" "$dir/scripts" "$dir/resources" "$dir/ruleset"
+	mkdir -p "$dir/config" "$dir/run" "$dir/scripts" "$dir/scripts/config" "$dir/scripts/generator" "$dir/resources" "$dir/ruleset"
 	: > "$dir/resources/direct_list.txt"
 	: > "$dir/resources/proxy_list.txt"
 
@@ -49,24 +57,41 @@ run_case() {
 	    "$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$dir/scripts/homeproxy.uc"
 
 	# Stage the config/ subtree (Loader / Model / Adapter, imported via
-	# the relative path "./config/*.uc" in generate_client.uc).
-	mkdir -p "$dir/scripts/config"
+	# the relative path "../config/*.uc" by the generator modules).
 	cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$dir/scripts/config/"
 
-	# Substitute the testbed placeholder. The production generator has
-	# `Loader.load('__LOADER_DIR__')` - on a real device the string
-	# stays as `'__LOADER_DIR__'`, which Loader.load() interprets as
-	# the relative /etc/config path - but we want it to point at the
-	# staging dir on the dev host. The substitution is a normal sed.
-	sed_expr="s#'__LOADER_DIR__'#'$dir/config'#g"
-	if [ "$(uname -s)" = "Darwin" ]; then
-		sed_expr="$sed_expr;s#routing_mark: strToInt(self_mark)#routing_mark: null#"
-	fi
+	# Stage the generator/ subtree that PHASE 4 introduced. The CLI
+	# shells (scripts/generate_*.uc) import from generator/; the
+	# modules in turn import from common.uc, dns.uc, ... inside the
+	# same directory.
+	cp "$ROOT/root/etc/homeproxy/scripts/generator/"*.uc "$dir/scripts/generator/"
 
-	sed -e "$sed_expr" \
-	    "$ROOT/root/etc/homeproxy/scripts/$generator" > "$dir/scripts/$generator"
+	# Stage the CLI shells themselves. This is the entry point the
+	# production init.d runs (`ucode -S generate_client.uc`); the
+	# test exercises the same code path end-to-end, not a parallel
+	# test-only driver.
+	cp "$ROOT/root/etc/homeproxy/scripts/$generator" "$dir/scripts/$generator"
+
+	# On macOS, `sing-box check` rejects the SO_MARK-based routing_mark
+	# on direct outbounds (Linux-only). The test rewrites the
+	# generator copy to emit null instead, which removeBlankAttrs()
+	# drops, so the JSON is identical on every platform and the
+	# production generator is untouched.
+	#
+	# PHASE 4 split the generator across generator/*.uc modules;
+	# the `routing_mark: strToInt(self_mark)` literal now lives in
+	# generator/client.uc (orchestrator), not in the CLI shell. The
+	# patch is applied to the module, and the shell is left alone.
+	if [ "$(uname -s)" = "Darwin" ]; then
+		# The orchestrator's direct-out routing_mark literal moved to
+		# generator/client.uc after PHASE 4; the patch matches whatever
+		# receiver name the orchestrator uses (ctx.self_mark today, but
+		# matching bare `self_mark` keeps the patch forward-compatible).
+		sed -i '' "s#routing_mark: strToInt(.*self_mark)#routing_mark: null#" \
+			"$dir/scripts/generator/client.uc"
+	fi
 
 	# stderr is kept so a test can assert on warnings (e.g. a pruned urltest
 	# candidate) as well as on the generated JSON.
