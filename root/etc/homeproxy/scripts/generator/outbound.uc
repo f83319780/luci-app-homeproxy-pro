@@ -137,6 +137,15 @@ function emitNode(node, mark, tag, direct_overrides, ctx) {
 	}
 
 	const outbound = generate_outbound(node, mark, direct_overrides);
+
+	/* generate_outbound() returns null for an empty node, and a reference can
+	 * point at a section that no longer exists: main_node and main_udp_node
+	 * are stored by name, and deleting a node in the UI does not rewrite
+	 * them. Setting `.tag` on null raised "left-hand side expression is
+	 * null", which says nothing about which reference is stale. */
+	if (outbound == null)
+		die(sprintf("cannot build %s: the node it refers to does not exist (it may have been deleted, or the reference is stale).\n", tag));
+
 	outbound.tag = tag;
 	return { kind: 'outbound', object: outbound };
 }
@@ -241,8 +250,15 @@ function buildCustomOutbounds(dm, config, ctx, direct_overrides) {
 			});
 			urltest_nodes = [...urltest_nodes, ...filter(cfg_urltest_nodes, (l) => !~index(urltest_nodes, l))];
 		} else {
-			const outbound = ConfigQuery.node_by_id(dm, cfg.node) || {};
-			if (outbound && outbound.type === 'wireguard') {
+			const outbound = ConfigQuery.node_by_id(dm, cfg.node);
+
+			/* Same stale-reference case as emitNode(), but here the reference
+			 * comes from a routing_node. `|| {}` made it look non-null and the
+			 * failure surfaced as a null dereference two lines later. */
+			if (isEmpty(outbound))
+				die(sprintf("routing node '%s' refers to a node that does not exist.\n", cfg['.name']));
+
+			if (outbound.type === 'wireguard') {
 				/* WireGuard goes through generate_endpoint() which tags
 				 * the endpoint as cfg-<node_id>-out (same convention as
 				 * generate_outbound()). The routing_node section name is
@@ -259,6 +275,10 @@ function buildCustomOutbounds(dm, config, ctx, direct_overrides) {
 				push(endpoints, endpoint);
 			} else {
 				const ob = generate_outbound(outbound, mark, direct_overrides);
+
+				if (ob == null)
+					die(sprintf("routing node '%s' cannot be built from node '%s'.\n", cfg['.name'], cfg.node));
+
 				ob.bind_interface = cfg.bind_interface;
 				ob.detour = get_outbound(cfg.outbound, dm);
 				if (cfg.domain_resolver)
