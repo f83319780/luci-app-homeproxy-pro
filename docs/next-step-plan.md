@@ -684,6 +684,10 @@ diff 只含三处：逐路径 chown、少一次 dnsmasq 重启、新场景。两
 6. **要求 mock 的 `validation()` 与 `/sbin/validate_data` 等价**：做不到也不必要，
    它是**替身**，要求是"钉住并被审"（§9）。
 7. **把 LuCI 的 `stripTags` 换掉**：那会改框架契约。我们在自己的边界上修（§2）。
+8. **`node.js` 的 `renderSectionAdd` 并入共享实现**：它不是重复——除同样的 UCI 名校验，
+   它还多挂「Import share links」按钮与 handler。合并等于删功能（见 P2-7）。
+9. **13 处动态 `load` 回调去重**：没有测试调用 `.load(`，快照停在选项树，
+   零覆盖下改 13 处加载逻辑不可验证。要做先补守卫（见 P2-7）。
 
 ---
 
