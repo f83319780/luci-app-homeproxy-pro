@@ -791,9 +791,86 @@ return baseclass.extend({
 		}
 	},
 
+	/* Escape a value for an HTML sink that decodes exactly once - LuCI renders
+	 * a form tab's title as a bare string child of E('a', ...), and
+	 * dom.append() assigns a bare string straight to innerHTML.  Nothing
+	 * decodes it on the way, so one level of escaping is both necessary and
+	 * sufficient. */
+	escapeHtml(s) {
+		return String(s)
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	},
+
+	/* Sanitize a value that will become a *section title*, which is a different
+	 * path: LuCI's form.titleFn() runs it through stripTags(), and that
+	 * function's contract is "HTML tags removed, and HTML entities decoded" -
+	 * it parses `<div>${s}</div>` and returns textContent.  The decoded result
+	 * is then handed to the same innerHTML sink.
+	 *
+	 * So escaping alone is NOT enough, and would in fact make things worse:
+	 * `&lt;img onerror=...&gt;` would be decoded back into real markup by
+	 * stripTags, and a label that is safe today (a raw `<...>`, which
+	 * stripTags strips as a tag) would become an XSS.
+	 *
+	 * The invariant that actually holds after that single decode is therefore
+	 * "no literal '<' survives".  Removing the angle brackets and encoding '&'
+	 * gives exactly that: '&lt;' becomes '&amp;lt;', which decodes back to
+	 * '&lt;' - still text - and a raw '<' is simply dropped.  A name that
+	 * genuinely contained angle brackets loses them on display; that is the
+	 * deliberate cost of not letting them be re-decoded into markup. */
+	escapeTitleText(s) {
+		return String(s)
+			.replace(/&/g, '&amp;')
+			.replace(/[<>]/g, '');
+	},
+
 	loadModalTitle(title, addtitle, uciconfig, ucisection) {
 		let label = uci.get(uciconfig, ucisection, 'label');
-		return label ? title + ' » ' + label : addtitle;
+		return label ? title + ' » ' + this.escapeTitleText(label) : addtitle;
+	},
+
+	/* Hash and display title for one subscription URL entry.
+	 *
+	 * The fragment is attacker-controlled: it comes from a subscription URL
+	 * (which anyone can hand you), it is never sent to the server, and LuCI
+	 * renders the resulting tab title through the innerHTML path in
+	 * escapeHtml().  The decode is also a crash risk on its own - '%' or
+	 * '100%' are accepted by the form validator and make decodeURIComponent
+	 * throw, which aborted the whole Node Settings render - so both steps are
+	 * guarded and a malformed entry degrades to showing the raw text. */
+	subscriptionInfo(suburl) {
+		if (typeof(suburl) !== 'string' || suburl === '')
+			return null;
+
+		const hash = this.calcStringMD5(suburl.replace(/#.*$/, ''));
+		let title;
+
+		try {
+			const url = new URL(suburl);
+
+			if (url.hash) {
+				try {
+					title = decodeURIComponent(url.hash.slice(1));
+				}
+				catch (e) {
+					/* Malformed percent-escape: show it verbatim. */
+					title = url.hash.slice(1);
+				}
+			}
+			else {
+				title = url.hostname;
+			}
+		}
+		catch (e) {
+			/* Not a URL at all; any other package may have written this. */
+			title = suburl;
+		}
+
+		return { 'hash': hash, 'title': this.escapeHtml(title) };
 	},
 
 	renderSectionAdd(section, extra_class) {

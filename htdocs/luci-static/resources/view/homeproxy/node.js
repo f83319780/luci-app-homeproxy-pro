@@ -549,13 +549,17 @@ return view.extend({
 		let routing_mode = uci.get(data[0], 'config', 'routing_mode');
 		let features = data[1];
 
-		/* Cache subscription information, it will be called multiple times */
+		/* Cache subscription information, it will be called multiple times.
+		 * hp.subscriptionInfo() owns the URL parsing, the malformed-escape
+		 * fallback and the escaping of the fragment, all three of which used
+		 * to be inline here: decodeURIComponent threw on a fragment like
+		 * '#100%' and took the whole page render down with it, and the decoded
+		 * fragment went unescaped into a tab title. */
 		let subinfo = [];
 		for (let suburl of (uci.get(data[0], 'subscription', 'subscription_url') || [])) {
-			const url = new URL(suburl);
-			const urlhash = hp.calcStringMD5(suburl.replace(/#.*$/, ''));
-			const title = url.hash ? decodeURIComponent(url.hash.slice(1)) : url.hostname;
-			subinfo.push({ 'hash': urlhash, 'title': title });
+			const info = hp.subscriptionInfo(suburl);
+			if (info)
+				subinfo.push(info);
 		}
 
 		m = new form.Map('homeproxy', _('Edit nodes'));
