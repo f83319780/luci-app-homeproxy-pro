@@ -17,19 +17,22 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **80% ~ 85%**（PHASE 6 已接近完成，PHASE 9 到 95%，
+按文档的 9 个 PHASE 取平均，目前约 **85% ~ 90%**（PHASE 6 已接近完成，PHASE 9 到 95%，
 PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
 §4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
 防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
 PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、
 `migrate_config` 36 项、`firewall_pre` 8 场景 + CI 快照循环补 `client`，仅剩 on-target CI job，
-详见 §2.9）。
+详见 §2.9；
+**PHASE 1 Domain Model 收尾已落地** —— `load_sections()` 走 `normalize_section()`，
+5 个 `cfg.enabled !== '1'` 站点全改 `!cfg.enabled`，14 个 `cfg['.name']` 站点全改 `cfg.name`，
+`Node.raw` / `Config.endpoints` / 3 个 `ConfigQuery` 死 helper 删掉，详见 §2.1）。
 剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
 |---|---|---|---|
 | 0 | Baseline | ✅ 完成 | 文档化充分 |
-| 1 | Domain Model | 🟡 ~80% | `Node` 已建；`dns/routing/access_control/server` 仍是 raw UCI dict；`Node.raw` / `Config.raw` / `tls.raw` 全无人读；`ConfigQuery` 有 3 个死 helper |
+| 1 | Domain Model | ✅ ~95% | PR-01 已落地（commit `ca01141`）：`load_sections()` 走 `normalize_section()`，所有 list-section 形状统一（`.name`/`.index`/`.type` 已 drop、`name` 暴露、`enabled` 强制 boolean）；`Node.raw` / `Config.endpoints` / `ConfigQuery.{node_ids,main_node_id,endpoints}` 全删；剩余 = server inbound 领域化（PR-04） |
 | 2 | Parser | 🟡 ~50% | 已按协议拆成 `parse_<proto>_uri()`；无 `parser/` 目录、无 normalize/validator 层、输出仍是扁平 UCI 键 |
 | 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`generate_endpoint` 仍是独立函数，`direct_overrides` 已随 PHASE 4 改成显式参数 |
 | 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
@@ -41,9 +44,10 @@ PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`s
 
 **关键判断（已更新）**：文档"最终成功标准"里那条链
 `Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
-**已经成立**（§2.6 已实施）。**PHASE 4 Generator 拆分、§4 安全 8/9、PHASE 9 收尾 5/6 也已落地**，
-所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，而是纯粹的结构性债务：
-**可维护性**（PHASE 1/2/8）与**领域化收尾**（PHASE 3/5）。
+**已经成立**（§2.6 已实施）。**PHASE 4 Generator 拆分、§4 安全 8/9、PHASE 9 收尾 5/6、
+PHASE 1 Domain Model 收尾（PR-01）也已落地**（commit `ca01141`），所以剩下的不再是"能不能跑"，
+也不是"覆盖够不够"，而是纯粹的结构性债务：
+**可维护性**（PHASE 2/8）与**领域化收尾**（PHASE 3 server inbound / PHASE 5 normalizer）。
 
 ### 0.3 剩余大项与工时估算
 
@@ -55,19 +59,20 @@ PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`s
 | ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
 | B | PHASE 8 LuCI 模块化（协议 registry 单一真源 + `components/`+`shared/` + 去重） | 大 | 高（浏览器流程无法自动化验证） | 9 – 15 |
 | ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
-| D | PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码） | 中 | 中 | 4 – 7 |
+| ~~D~~ | ~~PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码）~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit `ca01141`，PR-01 §A + §B）；server inbound 领域化留在 H（PR-04） |
 | E | PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射 | 中 | 中 | 4 – 7 |
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
 | ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 | H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
 | I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（A / C / G 大部分已完成）** | | | **26 – 47** |
+| | **合计（A / C / D / G 已完成）** | | | **22 – 40** |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
 ~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
-`db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`）。原定的三步顺序已走完：
-A → C → G。**下一批从 D/E/H 开始**（结构与领域模型），再 F（等有 on-target CI 再做），
-最后 B（LuCI 模块化，必须配人工回归）。
+`db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`），**D 也已完成**（`ca01141`）。
+原定的三步顺序已走完：A → C → G → D。**下一批从 E/H 开始**（parser 目录化 +
+server inbound 领域化），再 F（等有 on-target CI 再做），最后 B（LuCI 模块化，
+必须配人工回归）。
 
 **无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
 - 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
@@ -318,23 +323,70 @@ outbound 包成一份配置交给 `sing-box check`。快照只能发现"变化"�
 
 ## 2. 架构改进（逐 PHASE）
 
-### 2.1 PHASE 1 — Domain Model 收尾
+### 2.1 PHASE 1 — Domain Model 收尾 ~~（PR-01）~~ ✅ 已落地（commit `ca01141`）
 
-现状：只有 `Node` 是真正的领域对象；`dm.dns.servers/rules`、`dm.routing.nodes/rules/rulesets`、
-`dm.server.inbounds` 都是**原样 UCI section dict**，generator 里到处是 `cfg.enabled !== '1'`、
-`cfg['.name']`、`cfg.groups` 这种 UCI 形状的判断（`generate_client.uc:520,551,797,1010,1096` 等），
-`ConfigQuery.find_by_name()` 也专门服务于这种扁平 dict（`model.uc:180-185`）。
+> ~~现状：只有 `Node` 是真正的领域对象；`dm.dns.servers/rules`、`dm.routing.nodes/rules/rulesets`、
+> `dm.server.inbounds` 都是**原样 UCI section dict**，generator 里到处是 `cfg.enabled !== '1'`、
+> `cfg['.name']`、`cfg.groups` 这种 UCI 形状的判断（`generate_client.uc:520,551,797,1010,1096` 等），
+> `ConfigQuery.find_by_name()` 也专门服务于这种扁平 dict（`model.uc:180-185`）。~~
+>
+> ~~建议：~~
+> ~~1. 为 `dns_server` / `dns_rule` / `routing_node` / `routing_rule` / `ruleset` 各建一个轻量领域对象
+>    （或在 Loader 中统一 `load_sections` 时归一化 `.enabled` 为布尔、保留 `.name` 为 `id`）。
+>    这一步做完，`generate_client.uc` 里的 `cfg.enabled !== '1'` 全部消失。~~
+> ~~2. **删掉 `Node.raw`**（`model.uc:114`，全仓无人读，只在注释里被引用），或者按 §1.2 用它修 WireGuard。
+>    留一个"无人读的 opaque bag"只会让下一个人以为里面是权威数据。~~
+> ~~3. 清理死代码：`ConfigQuery.node_ids`、`main_node_id`、`endpoints`（`model.uc:187-205`）全仓无调用点，
+>    而 `endpoints` 的注释说"A3/A4 填充"，A3/A4 早已落地。~~
+> ~~4. `Config.create` 的注释（`model.uc:68-72`）说 dns/routing/endpoints/access_control/server
+>    "the loader does not read these yet"——A1.2 之后已经不成立，属于**误导性注释**，必须更新。~~
 
-建议：
-1. 为 `dns_server` / `dns_rule` / `routing_node` / `routing_rule` / `ruleset` 各建一个轻量领域对象
-   （或在 Loader 中统一 `load_sections` 时归一化 `.enabled` 为布尔、保留 `.name` 为 `id`）。
-   这一步做完，`generate_client.uc` 里的 `cfg.enabled !== '1'` 全部消失。
-2. **删掉 `Node.raw`**（`model.uc:114`，全仓无人读，只在注释里被引用），或者按 §1.2 用它修 WireGuard。
-   留一个"无人读的 opaque bag"只会让下一个人以为里面是权威数据。
-3. 清理死代码：`ConfigQuery.node_ids`、`main_node_id`、`endpoints`（`model.uc:187-205`）全仓无调用点，
-   而 `endpoints` 的注释说"A3/A4 填充"，A3/A4 早已落地。
-4. `Config.create` 的注释（`model.uc:68-72`）说 dns/routing/endpoints/access_control/server
-   "the loader does not read these yet"——A1.2 之后已经不成立，属于**误导性注释**，必须更新。
+**落地形态**（commit `ca01141`）：
+
+§A — Loader 归一化。`config/loader.uc` 新增 `normalize_section(cfg)`：
+* 丢弃 UCI 伪字段（`.name` / `.index` / `.type`），避免下层继续读裸 UCI 形状。
+* 把 section name 暴露为 `name`（等同原 `.name` 的字符串值）。
+* 若存在 `enabled`，强制转为布尔；缺省保持缺省（与原先 `cfg.enabled !== '1'` 的"缺省即禁"语义一致）。
+
+`load_sections()` 走 `normalize_section()`，于是
+`dm.dns.servers/rules`、`dm.routing.nodes/rules/rulesets`、`dm.server.inbounds` 全部变成统一形状。
+`ConfigQuery.find_by_name()` 改为按 `it.name === name` 查。
+
+Generator 侧所有 `cfg['.name']` / `cfg.enabled !== '1'` 都改了：
+* `generator/dns.uc` ×3（tag / eval_tag / dns.rules 入口）
+* `generator/route.uc` ×1
+* `generator/outbound.uc` ×2（enabled + tag）
+* `generator/ruleset.uc` ×4（enabled + tag + 两条 warn）
+* `generator/server.uc` ×4（snell tag + generic tag + user.name + enabled）
+
+行为不变：`'cfg-' + cfg.name + '-...'` 等同 `'cfg-' + cfg['.name'] + '-...'`；
+`!cfg.enabled` 等同 `cfg.enabled !== '1'`（`null !== '1'` 与 `!undefined` 都是 truthy）。
+Generator golden 字节级一致（client / custom / wireguard / partial_invalid，
+路径差异除外），待目标设备 `tests/ucode/run.sh` 实跑复证。
+
+§B — 删死代码：
+* `Node.raw` 全部移除：definition、`loader.uc` 的 `raw: section`、以及 `adapter.uc` /
+  `loader.uc` 残留的"Adapter 不读 `node.raw`"注释（comment 重写为"PR-01 删掉了 legacy opaque bag"）。
+* `Config.endpoints` placeholder + `ConfigQuery.endpoints()` 一起删：A3/A4 早就落地，
+  placeholder 从未被填充，helper 永远返回 `[]`，只服务于"断言为空"的测试。
+* `ConfigQuery.node_ids` / `ConfigQuery.main_node_id` 删：零生产调用点；保留
+  `node_by_id` / `find_by_name` / `main_udp_node_id` 三个仍在用的。
+* `Config.create` 注释重写为"`Loader` 从 UCI 填充这五个子对象"。
+
+**防回归**：`tests/ucode/test_domain_model_skeleton.uc` 现在跑 17 项新断言：
+* 4 个 `*.name` 显式等于 fixture 的 section name（`ds_main` / `dr_hijack` / `rr_sniff` /
+  `rs_cn` / `rn_main` / `s_vless`）。
+* `dns.rules[0].enabled === true`（fixture 写 `'1'`，loader 必须 coerce 成 boolean）。
+* 5 段循环断言 `.name` / `.index` / `.type` 都**不在**归一化后的 shape 里。
+* `enabled`（若存在）必须是 boolean。
+* `find_by_name(routing.nodes, 'rn_main')` 返回的 node 字段为 `urltest`。
+
+`Config.endpoints` / `ConfigQuery.endpoints / node_ids / main_node_id` 的断言已删。
+本机 `python3 tests/i18n-coverage.py` 724/724 PASS；
+`node tests/luci-form-snapshot.js` node / client / server 三份快照一致。
+
+不在本 PR 范围：server inbound 仍读扁平 UCI（`generator/server.uc`）—— 那是 PR-04
+（Protocol Adapter Completion）的范围，不动。
 
 ### 2.2 PHASE 2 — Parser 目录化 + 归一化 + 校验分离
 
@@ -718,9 +770,16 @@ P2（结构）
 25. ✅ test: subscription fetcher unit tests (+ fix a missing import)         # §2.9   (`b23f9c3`)
 26. ✅ test: migrate_config regressions                                       # §2.9   (`e17b75d`)
 27. ✅ test: firewall_pre behaviour + client snapshot in the CI job           # §2.9   (`b0e4a33`)
+28. ✅ refactor(domain): PR-01 Domain Model Completion                        # §2.1   (`ca01141`)
+      load_sections() 归一化（drop UCI pseudo-fields / coerce `enabled` to bool），
+      5 × `cfg.enabled !== '1'` + 14 × `cfg['.name']` 改写，删 Node.raw /
+      Config.endpoints / 三个 ConfigQuery 死 helper
 
-**下一步（D/E/H）**：17 → 19 → 18 → 20，即先做结构（parser 目录化、
-runtime 抽离、server inbound 领域化），最后做 LuCI 模块化（必须配人工回归）。
+**下一步（PR-02 / PR-04 / F / B）**：17 → 18 → 19 → 20，按指导文档 §七的 PR 路线，
+先做 PR-02 Parser Normalization（统一 Parse → Normalize → Validate 三层 + 唯一
+字段映射表），再做 PR-04 Server Inbound 走 Domain Model（修 PR-01 §B 留给 §2.3
+的 server inbound 领域化），再 F（等有 on-target CI 再做），最后 B（LuCI 模块化，
+必须配人工回归）。
 ```
 
 ---
