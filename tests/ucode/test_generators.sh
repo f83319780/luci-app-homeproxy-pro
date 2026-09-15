@@ -60,9 +60,17 @@ run_case() {
 
 	# HP_VALIDATE_DATA lets a development host replace /sbin/validate_data
 	# (see tests/README.md); on a target the production path is kept.
+	#
+	# UCICONFIG_DIR is the UCI confdir the Loader hands to cursor().  On a
+	# target it is /etc/config; here it has to point at the fixture staged
+	# below as $dir/config/homeproxy.  Rewriting the constant is what keeps
+	# the staging seam out of the source files - staging it as
+	# HP_DIR + '/config' instead would silently diverge from production,
+	# which is exactly the bug this constant replaced.
 	VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
 	sed -e "s#^export const HP_DIR = '/etc/homeproxy';#export const HP_DIR = '$dir';#" \
 	    -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$dir/run';#" \
+	    -e "s#^export const UCICONFIG_DIR = '/etc/config';#export const UCICONFIG_DIR = '$dir/config';#" \
 	    -e "s#/sbin/validate_data#${VALIDATE_DATA}#" \
 	    "$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$dir/scripts/homeproxy.uc"
 

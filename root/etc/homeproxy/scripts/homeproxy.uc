@@ -10,6 +10,18 @@ import { urldecode_params } from 'luci.http';
 /* Global variables start */
 export const HP_DIR = '/etc/homeproxy';
 export const RUN_DIR = '/var/run/homeproxy';
+/* Where the UCI configuration lives. This is /etc/config - NOT HP_DIR/config.
+ * The package ships its config as the conffile /etc/config/homeproxy, and
+ * ucode's `cursor(dir)` treats `dir` as the *confdir*, so
+ * cursor(HP_DIR + '/config') would read /etc/homeproxy/config/homeproxy, a
+ * path that exists nowhere.  uci.load() then returns null, every uci.get()
+ * returns null, and the Loader silently yields pure defaults: no main-out,
+ * no route/direct final, none of the user's ports or nodes.
+ * Verified on a device: cursor('/etc/homeproxy/config').get(...) is empty
+ * while cursor().get(...) returns the configured value.
+ * The test suite stages a rewritten copy of this constant instead of the
+ * old `__LOADER_DIR__` source sed. */
+export const UCICONFIG_DIR = '/etc/config';
 /* Global variables end */
 
 /* Utilities start */
