@@ -253,14 +253,14 @@ function buildCustomOutbounds(dm, config, ctx, direct_overrides) {
 	    routing_nodes = [];
 
 	for (let cfg in dm.routing.nodes) {
-		if (cfg.enabled !== '1')
+		if (!cfg.enabled)
 			continue;
 
 		if (cfg.node === 'urltest') {
 			const cfg_urltest_nodes = buildable_candidates(dm, cfg.urltest_nodes);
 			push(outbounds, {
 				type: 'urltest',
-				tag: 'cfg-' + cfg['.name'] + '-out',
+				tag: 'cfg-' + cfg.name + '-out',
 				outbounds: map(cfg_urltest_nodes, (k) => `cfg-${k}-out`),
 				url: cfg.urltest_url,
 				interval: strToTime(cfg.urltest_interval),

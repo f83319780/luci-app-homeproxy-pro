@@ -125,9 +125,9 @@ function resolve(spec, node) {
 /* Fields every protocol emits. Each is null when absent, and nulls are
  * stripped once, at the end, by removeBlankAttrs(). Cross-protocol common
  * fields live in node.common (Loader's load_common); protocol-specific
- * canonical names live in node.protocol_options. The Adapter never reads
- * from node.raw - that bag is kept only for the Loader's not-yet-modelled
- * tail and is opaque to this layer. */
+ * canonical names live in node.protocol_options. PR-01 dropped the
+ * legacy `node.raw` opaque bag - the Adapter reads only the explicit
+ * sub-objects, so no escape hatch exists. */
 const COMMON_FIELDS = {
 	server: (node) => node.address,
 	server_port: (node) => strToInt(node.port),
@@ -189,7 +189,7 @@ function CLAIM_FIELDS(node) {
 /* Per-protocol option fields, keyed by the same canonical names the model
  * exposes. Anything not modelled here is still in node.protocol_options
  * (which is itself populated from the protocol's PROTOCOL_OPTIONS row in
- * the Loader), so the Adapter never has to reach into `node.raw`. */
+ * the Loader). */
 export const OPTION_FIELDS = {
 	vless: {
 		flow: (node) => node.protocol_options.flow
