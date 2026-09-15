@@ -345,6 +345,40 @@ return baseclass.extend({
 	   two forms from drifting: they used to carry a hand-written value list
 	   each, which is how `snell` ended up with a complete form block (and a
 	   place in the credential lists) but no way to select it. */
+	/* The view-level status poll, registered exactly once.
+	 *
+	 * The "registered" flag is module state shared by every render of a view:
+	 * without it each re-render added another poll handler and LuCI keeps them
+	 * all, so every UCI write scheduled one more. The flag used to live in
+	 * client.js and server.js separately - two copies of the same state, free
+	 * to drift.
+	 *
+	 * It takes its collaborators as arguments and returns the registrar, so
+	 * "exactly once" can be asserted without a DOM or a browser. The form
+	 * snapshots never reach this code at all, which is why it was left alone
+	 * until there was something that could fail.
+	 *
+	 * paint() owns its element lookup: by the time the promise settles LuCI
+	 * may have swapped the DOM, and getElementById returns null then. */
+	statusPoller(options) {
+		const poll = options.poll;
+		const read = options.read;
+		const paint = options.paint;
+		let registered = false;
+
+		return function registerStatusPoll() {
+			if (registered)
+				return false;
+
+			registered = true;
+			poll.add(function () {
+				return read().then(paint);
+			});
+
+			return true;
+		};
+	},
+
 	/* The service status has three states, not two.
 	 *
 	 * `null` means the status query did not come back - rpcCall() resolves to

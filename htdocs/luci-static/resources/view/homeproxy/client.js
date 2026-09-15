@@ -22,7 +22,10 @@
  * poll.add() inside a section render() handler leaks a fresh handler
  * on every render and the status bar starts updating multiple times
  * per tick. */
-let client_status_poll_registered = false;
+/* Built on the first render, so the poll closure captures that render's
+ * features.version. The "have we registered" state lives inside
+ * hp.statusPoller(), shared with the other view. */
+let ensureStatusPoll = null;
 
 function getServiceStatus() {
 	/* The fallback is `null`, not `{}`: that is what lets the caller tell
@@ -665,21 +668,18 @@ return view.extend({
 		 * inside a section's render() handler. getElementById may return
 		 * null when LuCI swaps the DOM tree between renders - guard
 		 * against it instead of throwing. */
-		if (!client_status_poll_registered) {
-			client_status_poll_registered = true;
-			poll.add(function () {
-				/* getServiceStatus() already never rejects - it resolves to null
-				 * when the query did not answer - so wrapping it in
-				 * L.resolveDefault() is a no-op. Worse, L.resolveDefault
-				 * substitutes for a null *result*, which would turn that
-				 * meaningful null back into undefined. */
-				return getServiceStatus().then((res) => {
+		if (ensureStatusPoll === null)
+			ensureStatusPoll = hp.statusPoller({
+				poll: poll,
+				read: getServiceStatus,
+				paint: function(res) {
 					let view = document.getElementById('service_status');
 					if (view)
 						view.innerHTML = renderStatus(res, features.version);
-				});
+				}
 			});
-		}
+
+		ensureStatusPoll();
 
 		s = m.section(form.NamedSection, 'config', 'homeproxy');
 

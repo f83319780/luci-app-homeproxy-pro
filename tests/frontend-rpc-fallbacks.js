@@ -138,5 +138,43 @@ check('a missing status argument is treated as unknown',
 check('the three states are three distinct texts',
 	new Set([String(running.text), String(stopped.text), String(unknown.text)]).size === 3);
 
+/* --- the status poll registers exactly once ----------------------------- */
+
+/* The flag that makes this true used to live in client.js and server.js as two
+ * separate booleans. Every re-render that got past it added another poll
+ * handler, and LuCI keeps them all. The form snapshots never reach this code,
+ * so nothing could fail until the state moved somewhere testable. */
+function makePoll() {
+	const added = [];
+	return {
+		added: added,
+		poll: { add: (fn) => { added.push(fn); return added.length; } }
+	};
+}
+
+{
+	const h = makePoll();
+	let reads = 0;
+	const register = hp.statusPoller({
+		poll: h.poll,
+		read: () => { reads++; return Promise.resolve('v'); },
+		paint: () => {}
+	});
+
+	check('the first registration reports that it registered', register() === true);
+	check('a second registration reports that it did not', register() === false);
+	check('a third registration reports that it did not', register() === false);
+	check('exactly one poll handler was added', h.added.length === 1, `${h.added.length} added`);
+
+	/* The handler has to actually do something - a registrar that registered an
+	 * empty function would satisfy the count above. read() is called
+	 * synchronously inside the handler, so this needs no awaiting (and a
+	 * top-level `return` is not allowed in a CommonJS module anyway - the first
+	 * version of this used one and the whole file failed to load, printing
+	 * nothing at all). */
+	h.added[0]();
+	check('the registered handler calls read() when invoked', reads === 1, `${reads} reads`);
+}
+
 console.log(`frontend rpc fallbacks: ${checks} checks, ${failures} failures`);
 process.exit(failures ? 1 : 0);
