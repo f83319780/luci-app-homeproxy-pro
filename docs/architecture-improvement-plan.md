@@ -47,6 +47,7 @@
 | PHASE 8 第一批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **70** | 95 | **90.5%** |
 | PHASE 8 第二批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **75** | 95 | **91.0%** |
 | PHASE 8 第三批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **85** | 95 | **92.0%** |
+| PHASE 8 第四批之后 | 100 | 95 | 90 | 95 | 95 | 95 | 90 | 80 | **92** | 95 | **92.7%** |
 
 > PHASE 6 在 PR-05 之后一度下调到 **65**：§2.14 的 P0 说明「回滚安全网」在运行时这一段
 > 并不可靠（该缺陷早于 PR-05）。§2.14.6 修好并真机验证之后回到 **90**。
@@ -54,7 +55,7 @@
 > **口径修正**：本文件此前写"约 95%"，与它自己的 PHASE 表对不上。按表计算 PR-05 之前是
 > **81.5%**，落在指导建议"整体架构成熟度 80–85%"的区间内 —— 两份文档本来就没有分歧，
 > 是这里的叙述数字写飘了。PR-05 之后 **85.5%**，P0 修复之后 **88.0%**，
-> PHASE 8 第一批之后 **90.5%**，第二批之后 **91.0%**，第三批之后 **92.0%**。
+> PHASE 8 第一批之后 **90.5%**，第二批 **91.0%**，第三批 **92.0%**，第四批 **92.7%**。
 
 已落地的部分（PHASE 1/2/3/4/5 收尾、§4 安全 8/9、PHASE 9 收尾 5/6、PHASE 7 抽离）：
 
@@ -95,8 +96,8 @@
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
 | 6 | Candidate Config | 🟢 ~90% | 生成期失败链成立；运行期的 P0（§2.14）**已修复并真机验证**（commit `bb4e216`）：门改为 procd 视角 + 监听归属 + 连续稳定采样，known-good 只在门通过后写入，回滚被真实触发并成功。剩余 = 回滚路径尚无自动化 on-target job |
 | 7 | Runtime | ✅ ~80% | **PR-05 已落地**：`init.d/homeproxy` 517 → 253 行，dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 实例注册 / 生成事务全部搬到 `scripts/runtime/{service,dns,firewall,net}.sh`（+ 既有 `config.sh`/`health.sh`）。剩余 = 观点 18 的健康分级（listener / functional）与观点 21 的显式状态机，见 §2.10.3 与 §2.10.5 |
-| 8 | LuCI | 🟢 ~85% | **PR-06 三批已落地**（9 个 commit，见 §2.11.8）：① 协议收敛为**一张有序表**，`snell` 重新可选、`chacha20` 移除；② **快照覆盖率修复**（node 13→117、client 29→206，此前两个表单的快照形同虚设）；③ mux / TUIC / hysteria / password 校验体抽成共享渲染器，其中 **TUIC 顺带统一了拥塞控制标签、password 校验体顺带补上了 node 表单缺失的 2022-blake3 密钥长度校验**；④ **RPC 单一入口 `rpcCall()`**，12 处 declare → 1 处；⑤ 删死代码 `decodeBase64Str`；⑥ 三条前端不变量测试（协议 83 项 / RPC 21 项 / 校验器 29 项，均反向验证过）+ 共享模块加载器。剩余 = client.js 内部 `routing_rule`↔`dns_rule` 去重（≈184 行，最大一块）、GridSection 脚手架 ×5 与动态 load ×13、TLS 证书块、跨文件状态三件套 |
-| 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
+| 8 | LuCI | 🟢 ~85% | **PR-06 三批已落地**（9 个 commit，见 §2.11.8）：① 协议收敛为**一张有序表**，`snell` 重新可选、`chacha20` 移除；② **快照覆盖率修复**（node 13→117、client 29→206，此前两个表单的快照形同虚设）；③ mux / TUIC / hysteria / password 校验体抽成共享渲染器，其中 **TUIC 顺带统一了拥塞控制标签、password 校验体顺带补上了 node 表单缺失的 2022-blake3 密钥长度校验**；④ **RPC 单一入口 `rpcCall()`**，12 处 declare → 1 处；⑤ 删死代码 `decodeBase64Str`；⑥ 三条前端不变量测试（协议 83 项 / RPC 21 项 / 校验器 29 项，均反向验证过）+ 共享模块加载器。⑦ **client.js 的 `routing_rule`↔`dns_rule` 合并成一个 builder**（两块共 674 行、其中 184 行逐字节相同 → 1671 行，净减 121，client 快照逐字节未变）。剩余 = GridSection 脚手架 ×5 与动态 load ×13 的样板、`proxy_list`↔`direct_list` 表单块（≈32 行）、跨文件状态三件套（`getServiceStatus`/`renderStatus`/poll 守卫）。**浏览器人工回归始终未做**，这是唯一 agent 做不到的部分 |
+| 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI）。**2026-09 手工 on-target 实测已全绿**：`tests/ucode/run.sh` 在 192.168.1.102 上 `rc=0`、`FAIL` 0 行、`NOT RUN` 0 行（含 `firewall_post.ut` 的真实 fw4 渲染——该项在离机环境永远是 NOT RUN），见 §2.10.4 |
 
 **关键判断（已修正）**：文档"最终成功标准"里那条链
 `Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
@@ -120,7 +121,7 @@ f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖�
 |---|---|---|---|---|
 | ~~A~~ | ~~PHASE 4 Generator 拆分（`generator/*.uc` + 去掉 sed 注入）~~ | ~~大~~ | ~~中（回归面大，但有 golden 快照兜底）~~ | ~~6 – 10~~ ✅ 已落地（commit `0c67d77`） |
 | ~~J~~ | ~~§2.14 的 P0：健康门判据（稳定存活 + listener 健康 + known-good 刷新时机）~~ | ~~中~~ | ~~高~~ | ~~3 – 6~~ ✅ 已落地（commit `bb4e216`，见 §2.14.6–§2.14.8）：离机故障注入回归 + 真机 192.168.1.102 完整闭环 |
-| B | PHASE 8 LuCI 模块化（~~协议真源~~ ✅ ~~RPC 单一入口~~ ✅ ~~node↔server 大块去重~~ ✅ + client.js 内部去重 + 状态三件套） | 中 | 高（浏览器流程无法自动化验证） | ~~9 – 15~~ **2 – 4**（剩 client.js 规则段落 ≈184 行 + 脚手架样板 + TLS 证书块 + 状态三件套） |
+| B | PHASE 8 LuCI 模块化（~~协议真源~~ ✅ ~~RPC 单一入口~~ ✅ ~~node↔server 大块去重~~ ✅ ~~client.js 规则段落~~ ✅） | 小 | 高（浏览器流程无法自动化验证） | ~~9 – 15~~ **1 – 2**（剩脚手架样板与状态三件套） |
 | ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
 | ~~D~~ | ~~PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码）~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit `ca01141`，PR-01 §A + §B）；server inbound 领域化留在 H（PR-04） |
 | ~~E~~ | ~~PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit 33994fa，PR-02）；Repository 切换到 canonical Node 写留在 H（PR-03）；validator 扩展（missing_credential / invalid_tls）留作后续 PR |
@@ -1561,7 +1562,11 @@ ImmortalWrt **主路由**；SSH 回退分支会把整个 checkout `tar` 上传�
 **已就地更正那一份的这两处事实**（只改事实描述，不动它的任何优先级判断）；
 更正处也回指本文的 §2.3.2，两份文档的编号因此可以互相追踪。
 
-#### 2.13.5 其它文档漂移（建议随 PR-06/PR-07 一起清）
+#### 2.13.5 ~~其它文档漂移（建议随 PR-06/PR-07 一起清）~~ ✅ 已清
+
+`tests/ucode/test_protocol_inventory.sh` 的头注释已改为 `parser/uri.uc` / `parser/mapping.uc`
+（并指向 `tests/frontend-protocol-inventory.js` 覆盖它看不到的方向）；§2.8 已标注为
+"PR-06 开工前的分析、行号已过期"。原始清单如下，作为记录：
 
 - `tests/ucode/test_protocol_inventory.sh:8-10` 的头注释仍写 `parse_uri.uc` 与
   "`loader.uc` PROTOCOL_OPTIONS"，而正文已经改成 `parser/mapping.uc`。
@@ -1737,7 +1742,12 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 
 - ~~`test_subscription_repository.uc:138-144` 断言"新增字段不写入"（见 §1.4）。~~
   **已改**：现在断言 `cfg.port == '443'`，与 §1.4 的修复同一个 commit。
-- `test_subscription_decoder.uc:44-53` 断言 `{servers:[...]}` / URI-array JSON 解码为 0 节点（"quirk"）——**仍未处理**。
+- ~~`test_subscription_decoder.uc:44-53` 断言 `{servers:[...]}` / URI-array JSON 解码为 0 节点（"quirk"）——**仍未处理**。~~
+  ✅ **已修**（commit `1c327f2`）：那个"quirk"是真 bug —— SIP008 探针直接读 `nodes[0].server`，
+  当首元素是字符串时 ucode 抛 `left-hand side expression is not an array or object`，抛出被 JSON 的
+  try/catch 吞掉后走 base64 回退、再失败，于是 `{"servers":["vless://…"]}` 与 `["vless://…"]`
+  两种**合法订阅形状被整份丢弃**。现在先判 `type(...) === 'object'`，混合列表也逐项守卫。
+  三条 "quirk" 断言按本节规矩改成断言正确行为，并补了混合列表用例；目标机实测 29 项 0 失败。
 
 修 bug 时这些测试会红——请在同一 commit 里改成断言正确行为，而不是保留 quirk。
 
@@ -1875,6 +1885,15 @@ P2（结构）
 46. ✅ refactor(luci): share the Hysteria block between both forms                # §2.11.8 (`b9146b0`)
       两个渲染器（带宽对、auth/obfs 簇）分别在不同位置调用，以复现两侧原有顺序；
       三份快照逐字节未变——纯抽离
+48. ✅ refactor(luci): one builder for the routing and DNS rule sections         # §2.11.8 (`0cd789d`)
+      client.js 1792 → 1671 行（净减 121）；184 行逐字节重复只留一份；client 快照逐字节未变
+49. ✅ fix(subscription): stop discarding JSON subscriptions of share links        # §3.2 (`1c327f2`)
+      SIP008 探针读字符串属性抛错并被吞 → 两种合法订阅形状整份丢失；三条 "quirk" 断言改为正确行为
+50. ✅ fix(runtime): edit the crontab without `sed -i`                            # §2.10.8 (`9f4e613`)
+      裸 `sed -i` 是 busybox/GNU 扩展，BSD sed 上直接失败且只留一条 warning（陈旧 cron 项被留下）
+51. ✅ test(runtime): make the extraction trace test host-independent             # §2.10.4 (`cbf98df`)
+      busybox 无 `diff` → 改用 `cmp` 决策；绝对 `/etc/init.d/*` 与 `/etc/crontabs/root` 进沙箱；
+      golden 重采（830 行）；macOS 与目标机一致
 47. ✅ refactor(luci): share the password validator; fix the client's 2022 check  # §2.11.8 (`17428c7`)
       顺带补上 node 表单缺失的 2022-blake3 密钥长度校验（服务端本来就有），
       并抽出 tests/lib/luci-module.js；新增 tests/frontend-validators.js（29 项，反向验证）
