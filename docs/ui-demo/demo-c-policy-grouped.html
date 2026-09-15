@@ -636,8 +636,8 @@ function show(t){
   const el=document.getElementById('c-'+t); if(el) el.classList.add('on');
   window.scrollTo(0,0);
 }
-document.querySelectorAll('.nav a').forEach(a=>a.onclick=()=>show(a.dataset.t));
-document.querySelectorAll('[data-t]').forEach(e=>{ if(e.tagName!=='A'||!e.classList.contains('nav')) e.onclick=()=>show(e.dataset.t); });
+// 所有带 data-t 的入口都能跳转；侧栏链接与内容区入口同一套行为
+document.querySelectorAll('[data-t]').forEach(e=>{ e.onclick=()=>show(e.dataset.t); });
 
 // 规则筛选
 document.querySelectorAll('.chip').forEach(ch=>ch.onclick=()=>{
