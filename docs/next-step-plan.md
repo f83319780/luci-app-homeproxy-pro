@@ -44,7 +44,7 @@
 | P2-1 | 真空检查修复（含我本会话那条正则） | P2 | 小 | 无 · 已完成✅ |
 | P2-2 | fw4 渲染层（改为在目标机上强制，而非 stub） | P2 | 中 | 无 · 已完成✅ |
 | P2-3 | 低危安全项 + 后端复核遗留（#3-#6 已完成✅，余 #7-#12） | P2 | 小 | 无 |
-| P2-4 | 测试确定性（固定 `/tmp`→`mktemp`、`rm -rf` 引号、ssh `BatchMode`） | P2 | 小 | 无 |
+| P2-4 | 测试确定性（并发两套套件互不干扰） | P2 | 小 | 无 · 已完成✅ |
 | P2-5 | JSON 资产校验 + 出厂配置解析 | P2 | 小 | 无 · 已完成✅ |
 | P2-3a | 后端复核 #8 订阅更新加锁 + 原子回滚 | P2 | 中 | 无 · 已完成✅ |
 | P2-3b | 后端复核 #10 `tun_name` 未校验就进 nft | P2 | 小 | 无 · 已完成✅ |
@@ -548,11 +548,26 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 - `certificate_write` 暂存改到 root-only 0700 目录（如 `/etc/homeproxy/tmp/`），或用单 fd 读，
   消除 TOCTOU 与 /tmp 中的私钥暴露。
 
-### P2-4 测试确定性
-固定 `/tmp` → `mktemp -d`（`test_runtime_extraction.sh:51` 等；
-`test_config_transaction.sh`/`test_ucode_grammar.sh` 已是对范例）；
-`tests/run.sh:86-87` 的 `$REMOTE_DIR` 在远端 `rm -rf` 里加引号 + `ssh -o BatchMode=yes -o ConnectTimeout=10`。
-验收：两个测试进程并行不再互相踩（当前实测两次并行均退出 1）。
+### P2-4 测试确定性 —— 已完成✅
+**已完成，并且跑了验收**：同时启动两套 `tests/run.sh`，**两边都 exit 0、都 ALL TESTS PASSED**。
+修复前每次至少一边失败，而且失败点会变——一共暴露了**五处共享路径**：
+
+1. 子套件默认用固定工作目录（`/tmp/hp-ucode-tests`、`/tmp/hp-runtime-trace`）→ 互相删暂存。
+   现在 `run.sh` 建一个 `mktemp -d` 工作根往下传，并在退出时清理。
+2. ssh 暂存目录固定 `/tmp/hp-tests` → 一边把另一边的 checkout 删掉（"could not stage the tests"）。
+   现在由工作根派生，`HP_TEST_DIR` 仍可覆盖，远端目录也在同一个 trap 里清理。
+3. **远端调用没传工作目录** → 即使暂存目录独立，设备上的 `/tmp/hp-ucode-tests` 仍是共享的。
+4. `test_runtime_extraction.sh` 现在默认 `mktemp -d` 并用 trap 清理（它有两个调用方，其中一个不传参数）。
+   —— 我第一次把清理语句插进了某个提前退出分支的中间；trap 覆盖所有路径。
+5. `test_firewall_template.sh` 每次运行泄漏一个 `mktemp -d`——测试机上已累积 **50 个**。
+
+顺带：`ucode/run.sh` 的语法错误输出写死 `/tmp` 名字，两次运行会互相覆盖。
+`$REMOTE_DIR` 在远端 `rm -rf` 里加了引号，ssh 加了 `BatchMode`/`ConnectTimeout`（否则主机密钥或密码提示会永久挂住）。
+
+**剩下一个无法消除的共享资源**：`/tmp/etc/dnsmasq.conf.hp_test`。
+它的**路径本身是语义的一部分**（dnsmasq 的 section 名由文件名派生），不能挪进工作目录
+——我试过，trace 立刻变了，测试正确地失败了。现在并发运行通过**原子 `mkdir` 锁 + 有限等待**排队；
+不用 `flock` 是因为 macOS 没有，而这套件也要能在开发机上跑。
 
 ### P2-5 JSON 资产与出厂配置校验 —— 已完成✅
 **已完成**：
@@ -618,7 +633,7 @@ P1-7 回退假状态（先补可失败的测试）  ✅ 已完成
   ▼
 P2-1 真空检查 ✅ → P2-5 JSON 校验 ✅
   ▼
-P1-10 crontab ✅ → P2-3 后端复核 #7-#12 大部分 ✅ → P2-4 确定性
+P1-10 crontab ✅ → P2-3 后端复核 #7-#12 大部分 ✅ → P2-4 确定性 ✅
   ▼
 P1-9 stage 策略 → P1-8 真机 CI 作业
   ▼
