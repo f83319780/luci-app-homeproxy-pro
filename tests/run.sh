@@ -42,6 +42,11 @@ for target in node client server; do
 	fi
 done
 
+echo "== frontend protocol inventory =="
+# Node-only, no ucode/sing-box needed: the frontend's protocol table must agree
+# with the backend tables that decide what the generators can build.
+node "$ROOT/tests/frontend-protocol-inventory.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init

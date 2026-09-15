@@ -65,6 +65,89 @@ return baseclass.extend({
 		'2022-blake3-chacha20-poly1305'
 	],
 
+	/* Legacy stream ciphers.  Every entry here was checked against the target
+	   `sing-box 1.14.1` with `sing-box check`; `chacha20` (the non-IETF
+	   variant) is NOT in the list because sing-box rejects it outright
+	   ("unknown method: chacha20") - offering it let a user pick a method
+	   that made the generated configuration fail to validate.  The IETF
+	   variant is accepted and is kept.
+	   The server form does not offer these; that asymmetry is deliberate and
+	   recorded in docs/architecture-improvement-plan.md 2.11 - it is data
+	   here rather than two hand-maintained lists, so changing it is one line
+	   rather than a hunt for a second copy. */
+	shadowsocks_stream_methods: [
+		'aes-128-ctr',
+		'aes-192-ctr',
+		'aes-256-ctr',
+		'aes-128-cfb',
+		'aes-192-cfb',
+		'aes-256-cfb',
+		'chacha20-ietf',
+		'rc4-md5'
+	],
+
+	/* Single source of truth for the protocol surface the forms offer.
+	   `sides` says which form lists the protocol, `feature` names the
+	   capability that gates it (an array means every entry must be present).
+	   The ORDER matters: filtering this table by side has to reproduce the
+	   order the forms used to hard-code, so adding an entry changes the form.
+	   Every `type` here must exist in the backend's parser/mapping.uc
+	   PROTOCOL_TO_UCI table - tests/i18n-coverage.py's sibling check
+	   tests/frontend-protocol-inventory.js enforces it.
+	   `shadowtls` is client-only on purpose: the backend models the inbound
+	   side (INBOUND_CREDENTIALS, REQUIRED_INBOUND_CREDENTIALS) but the inbound
+	   generation path has no fixture/golden coverage yet, so the server form
+	   must not offer it until that coverage exists. */
+	protocols: [
+		{ type: 'direct',      label: 'Direct',        sides: ['client'] },
+		{ type: 'anytls',      label: 'AnyTLS',        sides: ['client', 'server'] },
+		{ type: 'http',        label: 'HTTP',          sides: ['client', 'server'] },
+		{ type: 'hysteria',    label: 'Hysteria',      sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'hysteria2',   label: 'Hysteria2',     sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'naive',       label: 'NaïveProxy',    sides: ['server'],           feature: 'with_quic' },
+		{ type: 'mixed',       label: 'Mixed',         sides: ['server'] },
+		{ type: 'shadowsocks', label: 'Shadowsocks',   sides: ['client', 'server'] },
+		{ type: 'shadowtls',   label: 'ShadowTLS',     sides: ['client'] },
+		{ type: 'snell',       label: 'Snell (1.14)',  sides: ['client', 'server'] },
+		{ type: 'socks',       label: 'Socks',         sides: ['client', 'server'] },
+		{ type: 'ssh',         label: 'SSH',           sides: ['client'] },
+		{ type: 'trojan',      label: 'Trojan',        sides: ['client', 'server'] },
+		{ type: 'tuic',        label: 'Tuic',          sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'wireguard',   label: 'WireGuard',     sides: ['client'],           feature: ['with_wireguard', 'with_gvisor'] },
+		{ type: 'vless',       label: 'VLESS',         sides: ['client', 'server'] },
+		{ type: 'vmess',       label: 'VMess',         sides: ['client', 'server'] }
+	],
+
+	/* Render the protocol picker from `protocols`.  This is what keeps the
+	   two forms from drifting: they used to carry a hand-written value list
+	   each, which is how `snell` ended up with a complete form block (and a
+	   place in the credential lists) but no way to select it. */
+	renderProtocolOptions(section, options) {
+		const features = options.features || {},
+		      side = options.side || 'client';
+		const o = section.option(form.ListValue, 'type', _('Type'));
+
+		for (const p of this.protocols) {
+			if (p.sides.indexOf(side) === -1)
+				continue;
+
+			if (typeof p.feature === 'string') {
+				if (!features[p.feature])
+					continue;
+			}
+			else if (Array.isArray(p.feature)) {
+				if (!p.feature.every(f => features[f]))
+					continue;
+			}
+
+			o.value(p.type, _(p.label));
+		}
+
+		o.rmempty = false;
+
+		return o;
+	},
+
 	tls_cipher_suites: [
 		'TLS_RSA_WITH_AES_128_CBC_SHA',
 		'TLS_RSA_WITH_AES_256_CBC_SHA',

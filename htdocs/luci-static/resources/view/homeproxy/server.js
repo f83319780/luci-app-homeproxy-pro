@@ -194,24 +194,7 @@ return view.extend({
 			_('Allow access from the Internet.'));
 		o.editable = true;
 
-		o = s.option(form.ListValue, 'type', _('Type'));
-		o.value('anytls', _('AnyTLS'));
-		o.value('http', _('HTTP'));
-		if (features.with_quic) {
-			o.value('hysteria', _('Hysteria'));
-			o.value('hysteria2', _('Hysteria2'));
-			o.value('naive', _('NaïveProxy'));
-		}
-		o.value('mixed', _('Mixed'));
-		o.value('shadowsocks', _('Shadowsocks'));
-		o.value('snell', _('Snell (1.14)'));
-		o.value('socks', _('Socks'));
-		o.value('trojan', _('Trojan'));
-		if (features.with_quic)
-			o.value('tuic', _('Tuic'));
-		o.value('vless', _('VLESS'));
-		o.value('vmess', _('VMess'));
-		o.rmempty = false;
+		o = hp.renderProtocolOptions(s, { features: features, side: 'server' });
 
 		o = s.option(form.Value, 'address', _('Listen address'));
 		o.placeholder = '::';
@@ -368,6 +351,8 @@ return view.extend({
 		o = s.option(form.ListValue, 'shadowsocks_encrypt_method', _('Encrypt method'));
 		for (let i of hp.shadowsocks_encrypt_methods)
 			o.value(i);
+		/* The legacy stream ciphers are client-only; see homeproxy.js's
+		   shadowsocks_stream_methods for why, and the plan's 2.11. */
 		o.default = 'aes-128-gcm';
 		o.depends('type', 'shadowsocks');
 		o.modalonly = true;
