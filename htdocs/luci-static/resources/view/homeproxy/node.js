@@ -55,26 +55,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.validate = L.bind(hp.validateUniqueValue, this, data[0], 'node', 'label');
 	o.modalonly = true;
 
-	o = s.option(form.ListValue, 'type', _('Type'));
-	o.value('direct', _('Direct'));
-	o.value('anytls', _('AnyTLS'));
-	o.value('http', _('HTTP'));
-	if (features.with_quic) {
-		o.value('hysteria', _('Hysteria'));
-		o.value('hysteria2', _('Hysteria2'));
-	}
-	o.value('shadowsocks', _('Shadowsocks'));
-	o.value('shadowtls', _('ShadowTLS'));
-	o.value('socks', _('Socks'));
-	o.value('ssh', _('SSH'));
-	o.value('trojan', _('Trojan'));
-	if (features.with_quic)
-		o.value('tuic', _('Tuic'));
-	if (features.with_wireguard && features.with_gvisor)
-		o.value('wireguard', _('WireGuard'));
-	o.value('vless', _('VLESS'));
-	o.value('vmess', _('VMess'));
-	o.rmempty = false;
+	o = hp.renderProtocolOptions(s, { features: features, side: 'client' });
 
 	o = s.option(form.Value, 'address', _('Address'));
 	o.datatype = 'host';
@@ -262,16 +243,8 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o = s.option(form.ListValue, 'shadowsocks_encrypt_method', _('Encrypt method'));
 	for (let i of hp.shadowsocks_encrypt_methods)
 		o.value(i);
-	/* Stream ciphers */
-	o.value('aes-128-ctr');
-	o.value('aes-192-ctr');
-	o.value('aes-256-ctr');
-	o.value('aes-128-cfb');
-	o.value('aes-192-cfb');
-	o.value('aes-256-cfb');
-	o.value('chacha20');
-	o.value('chacha20-ietf');
-	o.value('rc4-md5');
+	for (let i of hp.shadowsocks_stream_methods)
+		o.value(i);
 	o.default = 'aes-128-gcm';
 	o.depends('type', 'shadowsocks');
 	o.rmempty = false;

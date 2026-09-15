@@ -162,8 +162,27 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/ucode/test_golden_inbounds.sh` | PR-04: the server-side counterpart. Builds one inbound per protocol from `tests/fixtures/generators/server.uci` and diffs the result against `tests/snapshots/generator/inbounds.json`. The ACME `data_directory` is normalised to `<HP_DIR>/certs` so the snapshot is portable across hosts. Before this existed the server path had no snapshot at all, which is how the fixture's unused `listen_port` option survived. Regenerate with `HP_UPDATE_SNAPSHOTS=1`. |
 | `tests/ucode/test_inbound_adapter.uc` | PR-04: `InboundFactory`'s protocol-shape decisions — snell / shadowsocks must get no `users[]` block (a snell users entry is read as an extra user key and makes sing-box reject the section), vless / vmess keep `flow` / `alterId` per-user, the snell listener set omits `udp_fragment` / `udp_timeout` / `network`, the server-only TLS tail (key material, ECH key, REALITY private key + handshake, ACME) reaches `buildTLSObject()`, hysteria v1 emits `obfs` as a string while hysteria2 emits the object, and the per-protocol credential requirements are enforced. |
 | `tests/ucode/test_protocol_inventory.sh` | Cross-checks the protocol surface: every type named by `parse_uri.uc`, `CREDENTIALS`, `PROTOCOL_OPTIONS`, `REQUIRED_CREDENTIALS`, `OPTION_FIELDS` and the golden snapshot must agree. This is the check that catches "added a protocol to one table and forgot another". |
+| `tests/frontend-protocol-inventory.js` | The frontend's single ordered protocol table (`homeproxy.js`'s `protocols`) against the backend tables that decide what the generators can build: every offered type must be modelled (`PROTOCOL_TO_UCI` on the client side, `INBOUND_CREDENTIALS` on the server side), every outbound-capable protocol (`OPTION_FIELDS`, `REQUIRED_CREDENTIALS`) must be selectable in the node form, both rendered orders are pinned, and protocols the backend models but no form offers must be listed as deliberate decisions. This is the check that would have caught `snell`: it had a form block, a credentials row and a golden outbound, but was missing from the node form's value list so it could not be selected. Node-only, no ucode needed. |
 | `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
 | `tests/runtime/test_runtime_extraction.sh` | Drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci` / `netstat`, fake procd and jsonfilter state, fixture UCI) across four scenarios and diffs the resulting command + file trace against a baseline. Two baselines exist and are captured with the SAME harness, so the diff between them is exactly the intentional change: `tests/fixtures/runtime/trace.pre-pr05.txt` (the 517-line init script before PHASE 7 moved the plumbing out — the record that the extraction was behaviour-preserving) and `tests/fixtures/runtime/trace.golden.txt` (after the health-gate fix). Scenario D is the P0 regression: a candidate whose `mixed_port` is already taken must be rejected by the health gate, the previous known-good must survive, and the reload must roll back onto it. Pure shell, no ucode needed. Regenerate with `HP_UPDATE_GOLDEN=1` (optionally `HP_GOLDEN=` / `HP_INITD=` to target another baseline or revision). |
+
+### What the LuCI form snapshots do not cover
+
+Worth knowing before trusting them: a snapshot records an option's name, kind,
+title, dependency and default, and (for the options it reaches) its value list.
+Two gaps were measured while building the protocol registry:
+
+| Target | Options captured | Note |
+|---|---|---|
+| `node.json` | 14 | The node form's options live in the subsection of a
+`taboption(..., form.SectionValue, ...)`, and the node form's picker is not in
+the dump — so most of `node.js` is not guarded by its snapshot at all. |
+| `client.json` | 30 | — |
+| `server.json` | 97 | Includes the `type` picker and its 13 values. |
+
+That asymmetry is why `tests/frontend-protocol-inventory.js` exists: a change to
+the protocol list, the kind of change PHASE 8 is about, is invisible to three of
+the four snapshots as they are currently dumped.
 
 `tests/ucode/mocks/homeproxy.uc` is a test double for the real module: only
 `validation()` is stubbed (the real one runs `/sbin/validate_data`, which does

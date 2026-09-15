@@ -76,6 +76,13 @@ jobs:
           done
           echo "PASS: LuCI form snapshots (node, client, server)"
 
+      - name: Check the frontend protocol inventory
+        # The frontend keeps one ordered protocol table (homeproxy.js) and both
+        # forms render from it; this asserts it agrees with the backend tables.
+        # The form snapshots cannot see this - they do not record a picker's
+        # value set, and the node form's picker is not in the dump at all.
+        run: node tests/frontend-protocol-inventory.js .
+
       - name: Check zh_Hans translation coverage
         # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
         # coverage fails here even when i18n.yml is still queued.
