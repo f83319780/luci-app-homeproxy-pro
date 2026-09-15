@@ -67,9 +67,26 @@ for (const f of files) {
 }
 
 /* 2. The swallowing pattern: a call wrapped in resolveDefault, which reads like
- *    error handling and is not. */
+ *    error handling and is not.
+ *
+ * The pattern used to be `L\.resolveDefault\(\s*call[A-Za-z0-9_]*\s*\(`, which only
+ * matched a callee whose name begins with `call` - the spelling the old code
+ * happened to use. `L.resolveDefault(hp.rpcCall(...))` passed it, so the check
+ * was almost vacuous, and my own reverse verification missed that because it
+ * restored the very spelling the regex hardcodes (a circular proof: the
+ * pattern was tested against the only form it recognises).
+ *
+ * Any resolveDefault wrapping is now flagged, and the pattern is self-tested
+ * below so it cannot quietly stop matching. */
+const SWALLOW = /L\.resolveDefault\s*\(/g;
+
+check('the resolveDefault pattern matches the real-world spelling',
+	'L.resolveDefault(hp.rpcCall("list")).then()'.match(SWALLOW)?.length === 1);
+check('the resolveDefault pattern matches the historical spelling',
+	'L.resolveDefault(call()).then()'.match(SWALLOW)?.length === 1);
+
 for (const f of files) {
-	const m = sources[f].match(/L\.resolveDefault\(\s*call[A-Za-z0-9_]*\s*\(/g) || [];
+	const m = sources[f].match(SWALLOW) || [];
 	check(`${f} does not wrap an RPC call in L.resolveDefault`, m.length === 0, m.join(', '));
 }
 
