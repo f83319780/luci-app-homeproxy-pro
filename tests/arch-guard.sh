@@ -38,6 +38,7 @@ SCRIPTS="$ROOT/root/etc/homeproxy/scripts"
 RPC="$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy"
 ACL="$ROOT/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json"
 VIEWS="$ROOT/htdocs/luci-static/resources"
+RUNTIME="$SCRIPTS/runtime"
 
 FAILED=0
 checks=0
@@ -368,6 +369,34 @@ for g in generate_client.uc generate_server.uc; do
 		printf '      %s\n' "$SHARED"
 	fi
 done
+
+echo
+echo "== guard 9: the pgrep fallback still matches the procd command =="
+
+# hp_instance_running falls back to `pgrep -f` only when ubus cannot be asked at
+# all, and the pattern it matches has to stay in step with the command procd is
+# told to run. Change either alone and the fallback silently stops matching -
+# and then the health gate degrades to "always times out", which rolls back a
+# perfectly good configuration. A wrong pattern would look like a bad config.
+# ^[^#]* keeps this to code: health.sh's header comment mentions `pgrep -f`
+# while explaining why the procd answer wins, and the first version of this
+# guard matched that instead of the pattern.
+PGREP_LINE="$(grep -nE '^[^#]*pgrep -f' "$RUNTIME/health.sh" | head -1)"
+PROCD_LINE="$(grep -nE '^[^#]*procd_append_param command run' "$RUNTIME/service.sh" | head -1)"
+
+if printf '%s' "$PGREP_LINE" | grep -q 'pgrep -f "run --config '; then
+	pass "the pgrep fallback matches 'run --config <config>'"
+else
+	fail "the pgrep fallback no longer matches 'run --config <config>':"
+	printf '      %s\n' "$PGREP_LINE"
+fi
+
+if printf '%s' "$PROCD_LINE" | grep -q 'procd_append_param command run --config '; then
+	pass "procd is told to run 'run --config <config>'"
+else
+	fail "the procd command no longer starts with 'run --config':"
+	printf '      %s\n' "$PROCD_LINE"
+fi
 
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"

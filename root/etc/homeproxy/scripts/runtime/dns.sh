@@ -100,8 +100,17 @@ hp_dnsmasq_write_snippets() {
 # pre-existing state, so there is no original to put back.
 hp_dnsmasq_remove_snippets() {
 	local dnsmasq_dir="$1"
+	local include="$dnsmasq_dir/../dnsmasq-homeproxy.conf"
 
-	rm -rf "$dnsmasq_dir/../dnsmasq-homeproxy.conf" "$dnsmasq_dir"
+	# Nothing to undo when nothing was written - which is the normal case on a
+	# router whose outbound node is 'nil', or one that never started. Removing
+	# paths that do not exist is not an error, and restarting dnsmasq for it is
+	# pure noise (it drops every client's DNS cache for no reason).
+	if [ ! -e "$include" ] && [ ! -d "$dnsmasq_dir" ]; then
+		return 0
+	fi
+
+	rm -rf "$include" "$dnsmasq_dir"
 	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1 \
 		|| log "Warning: failed to restart dnsmasq after removing the homeproxy snippets."
 }
