@@ -421,12 +421,12 @@ return baseclass.extend({
 		return L.resolveDefault(callGetSingBoxFeatures(), {});
 	},
 
-	/* Parse one share link through the backend parser (parse_uri.uc), the
+	/* Parse one share link through the backend parser (parser/uri.uc), the
 	 * same code the subscription pipeline runs, so the browser cannot
 	 * disagree with the backend about what a URI means.  Resolves to the
 	 * parsed node object, or null when the backend rejects the link.
 	 *
-	 * This replaced a 388-line JavaScript re-implementation of parse_uri.uc
+	 * This replaced a 388-line JavaScript re-implementation of the parser
 	 * that had already drifted (its vmess branch lost vmess_global_padding)
 	 * and that validated nothing before writing the node into UCI. */
 	parseShareLink(uri) {

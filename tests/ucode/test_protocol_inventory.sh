@@ -31,15 +31,23 @@ rm -rf "$WORK"
 mkdir -p "$WORK/parser" "$WORK/inventory/config"
 
 # --- stage 1: what does the parser produce? ------------------------------
-# parse_uri.uc is staged with the test double for homeproxy.uc (the real one
-# needs /sbin/validate_data), exactly like test_parse_uri.uc.
+# PR-02 moved the parsers to scripts/parser/{uri,protocols,validator,
+# normalize,mapping}.uc; stage the whole tree plus the homeproxy mock
+# so the share-link importer can find every import it needs.
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/parser/homeproxy.uc"
-cp "$SCRIPTS/parse_uri.uc" "$WORK/parser/parse_uri.uc"
+cp "$SCRIPTS/parser/"*.uc "$WORK/parser/"
+# The Loader imports PROTOCOL_OPTIONS from '../parser/mapping.uc'.
+# After staging, the loader lives at $WORK/inventory/config/loader.uc,
+# so the parser tree must also live at $WORK/inventory/parser/ for the
+# import to resolve.  Mirror it once now so inventory.uc below can use
+# the loader as-is.
+mkdir -p "$WORK/inventory/parser"
+cp "$SCRIPTS/parser/"*.uc "$WORK/inventory/parser/"
 
 cat > "$WORK/parser/types.uc" <<'EOF'
 'use strict';
 
-import { parse_uri } from 'parse_uri';
+import { parse_uri } from 'parser/uri.uc';
 
 const FEATURES = { with_quic: true, with_utls: true };
 const LOG = function() {};

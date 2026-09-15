@@ -57,7 +57,7 @@ for file in "$SCRIPTS_DIR"/*.uc \
 	# Modules (with export statements) cannot be compiled as a program; they
 	# are loaded through `import` below instead.
 	case "$file" in
-	*homeproxy.uc|*parse_uri.uc|*/subscription/*.uc|*/config/*.uc|*/generator/*.uc) continue ;;
+	*homeproxy.uc|*/parser/*.uc|*/subscription/*.uc|*/config/*.uc|*/generator/*.uc) continue ;;
 	esac
 
 	# luci.homeproxy imports homeproxy.uc through an absolute /etc/... path
@@ -82,7 +82,7 @@ done
 # subdirectories, so they need an explicit `.uc` path that ucode's
 # resolver can follow (bare `subscription/filter` is not searched
 # in the -L tree, only top-level module names are).
-for module in homeproxy parse_uri; do
+for module in homeproxy parser/uri parser/protocols parser/validator parser/normalize parser/mapping; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
@@ -148,9 +148,13 @@ echo "== firewall_pre generator behaviour =="
 sh "$ROOT/tests/ucode/test_firewall_pre.sh" "$ROOT" "$WORK/firewall_pre" || FAILED=1
 
 echo "== parse_uri unit tests =="
+# PR-02 moved the share-link parsers from parse_uri.uc to
+# scripts/parser/{uri,protocols,validator,normalize,mapping}.uc.
+# Stage the whole parser/ tree so test_parse_uri.uc can `import` from
+# it the same way the production orchestrator does.
 rm -rf "$WORK/parse_uri"
-mkdir -p "$WORK/parse_uri"
-cp "$ROOT/root/etc/homeproxy/scripts/parse_uri.uc" "$WORK/parse_uri/"
+mkdir -p "$WORK/parse_uri/parser"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$WORK/parse_uri/parser/"
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/parse_uri/"
 cp "$ROOT/tests/ucode/test_parse_uri.uc" "$WORK/parse_uri/"
 
@@ -158,6 +162,19 @@ if ( cd "$WORK/parse_uri" && ucode test_parse_uri.uc ); then
 	echo "PASS: parse_uri unit tests"
 else
 	echo "FAIL: parse_uri unit tests"
+	FAILED=1
+fi
+
+echo "== parser/normalize unit tests =="
+# PR-02: parser/normalize.uc turns the parser's flat UCI-key output
+# into the canonical Node shape the Adapter reads. The staged
+# $WORK/parse_uri/ already has parser/ and the homeproxy mock, so we
+# just drop the test next to test_parse_uri.uc.
+cp "$ROOT/tests/ucode/test_parser_normalize.uc" "$WORK/parse_uri/"
+if ( cd "$WORK/parse_uri" && ucode test_parser_normalize.uc ); then
+	echo "PASS: parser/normalize unit tests"
+else
+	echo "FAIL: parser/normalize unit tests"
 	FAILED=1
 fi
 

@@ -22,6 +22,8 @@ import { cursor } from 'uci';
 
 import { Config, Node, CREDENTIALS } from './model.uc';
 
+import { PROTOCOL_TO_UCI as PROTOCOL_OPTIONS } from '../parser/mapping.uc';
+
 const UCICONFIG = 'homeproxy';
 
 const SECTION = {
@@ -153,136 +155,14 @@ function load_common(get) {
 
 /* --- protocol options --------------------------------------------------- */
 
-/* Maps canonical option name -> UCI option name. Anything not listed is not
- * part of the domain contract for that protocol. `raw` still carries the
- * unlisted tail, so the migration can stay incremental without losing data. */
-export const PROTOCOL_OPTIONS = {
-	vless: {
-		flow: 'vless_flow',
-		packet_encoding: 'packet_encoding'
-		/* tcp_fast_open / tcp_multi_path / udp_fragment used to live here
-		 * but they are common to every protocol, not vless-specific; they
-		 * are now in node.common via load_common() above.
-		 *
-		 * udp_over_tcp used to be here too.  It is a shadowsocks/socks
-		 * option: sing-box 1.14 rejects it on a vless outbound, so mapping
-		 * it here turned a stale UCI option into an unusable config. */
-	},
-	snell: {
-		version: 'snell_version',
-		reuse: 'snell_reuse',
-		obfs_mode: 'snell_obfs_mode',
-		obfs_host: 'snell_obfs_host'
-		/* snell_mode is not mapped: sing-box 1.14 has no `mode` field on a
-		 * snell outbound (or inbound).  It was v6-only in the form, and v6
-		 * is not supported by the target sing-box. */
-	},
-	/* A4.1: shadowsocks uses shadowsocks_* UCI option names (matching the
-	 * generator's pre-refactor reads). */
-	shadowsocks: {
-		plugin: 'shadowsocks_plugin',
-		plugin_opts: 'shadowsocks_plugin_opts',
-		udp_over_tcp: 'udp_over_tcp',
-		udp_over_tcp_version: 'udp_over_tcp_version'
-	},
-	/* A4.2: anytls idle session tuning. */
-	anytls: {
-		idle_session_check_interval: 'anytls_idle_session_check_interval',
-		idle_session_timeout: 'anytls_idle_session_timeout',
-		min_idle_session: 'anytls_min_idle_session'
-	},
-	/* A4.3: http */
-	http: {},
-	/* A4.4: socks */
-	socks: {
-		version: 'socks_version',
-		udp_over_tcp: 'udp_over_tcp',
-		udp_over_tcp_version: 'udp_over_tcp_version'
-	},
-	/* A4.5: tuic */
-	tuic: {
-		congestion_control: 'tuic_congestion_control',
-		udp_relay_mode: 'tuic_udp_relay_mode',
-		udp_over_stream: 'tuic_udp_over_stream',
-		zero_rtt_handshake: 'tuic_enable_zero_rtt',
-		heartbeat: 'tuic_heartbeat'
-	},
-	/* A4.6: trojan / vmess share no protocol-specific UCI keys beyond
-	 * what the shared TLS/transport/multiplex builders already read. */
-	trojan: {},
-	/* A4.7: shadowtls */
-	shadowtls: {
-		version: 'shadowtls_version'
-	},
-	/* A4.8 / A4.9: hysteria + hysteria2.
-	 *
-	 * hysteria (v1) has no obfs *type*: its obfs is the plain password
-	 * string, and the node form only offers hysteria_obfs_type for
-	 * hysteria2.  Mapping the type here turned a stale option (left behind
-	 * by switching a node from hysteria2 to hysteria) into an
-	 * `obfs: {type, password}` object that sing-box rejects. */
-	hysteria: {
-		auth_type: 'hysteria_auth_type',
-		auth_payload: 'hysteria_auth_payload',
-		up_mbps: 'hysteria_up_mbps',
-		down_mbps: 'hysteria_down_mbps',
-		obfs_password: 'hysteria_obfs_password',
-		hopping_port: 'hysteria_hopping_port',
-		hop_interval: 'hysteria_hop_interval'
-	},
-	hysteria2: {
-		obfs_type: 'hysteria_obfs_type',
-		obfs_password: 'hysteria_obfs_password',
-		up_mbps: 'hysteria_up_mbps',
-		down_mbps: 'hysteria_down_mbps',
-		hop_interval: 'hysteria_hop_interval',
-		hop_interval_max: 'hysteria_hop_interval_max',
-		hopping_port: 'hysteria_hopping_port',
-		auth_payload: 'hysteria_auth_payload',
-		bbr_profile: 'hysteria_bbr_profile',
-		disable_chrome_parrot: 'hysteria_disable_chrome_parrot'
-	},
-	/* A4.10: vmess */
-	vmess: {
-		alter_id: 'vmess_alterid',
-		security: 'vmess_encrypt',
-		global_padding: 'vmess_global_padding',
-		auth_payload: 'vmess_auth_payload'
-	},
-	/* SSH: selectable in the node form since the beginning (and accepted by
-	 * sing-box), but there was no row here, so every ssh_* option the form
-	 * writes was invisible to the model.  The key material itself comes
-	 * from CREDENTIALS.ssh. */
-	ssh: {
-		client_version: 'ssh_client_version',
-		host_key: 'ssh_host_key',
-		host_key_algorithms: 'ssh_host_key_algo'
-	},
-	/* WireGuard is emitted as a sing-box *endpoint*, not an outbound, and
-	 * generate_endpoint() is its only consumer.  The keys still belong in
-	 * the Node: the A2/A3 stages converted every generator call site to
-	 * pass a Node, so the flat wireguard_* UCI options are no longer
-	 * reachable from the endpoint builder.  Without this row a WireGuard
-	 * main/UDP/urltest node silently emitted a null private key and a peer
-	 * without a public key, which sing-box check then rejected. */
-	wireguard: {
-		local_address: 'wireguard_local_address',
-		private_key: 'wireguard_private_key',
-		peer_public_key: 'wireguard_peer_public_key',
-		pre_shared_key: 'wireguard_pre_shared_key',
-		reserved: 'wireguard_reserved',
-		mtu: 'wireguard_mtu',
-		persistent_keepalive_interval: 'wireguard_persistent_keepalive_interval'
-	},
-	/* P3-E: direct nodes carry override_address/override_port, which the
-	 * Generator uses to populate the direct_overrides table for the
-	 * routing path. Reading them from node.protocol_options keeps the
-	 * Adapter (and the Generator) off the legacy `node.raw` bag. */
-	direct: {
-		override_address: 'override_address',
-		override_port: 'override_port'
-	}
-};
+/* PR-02 (Parser Normalization): the canonical <-> UCI mapping table
+ * moved to scripts/parser/mapping.uc and is imported as PROTOCOL_OPTIONS
+ * above. The Loader no longer maintains its own copy, so the parser,
+ * the Loader, the parser's normalize(), and (in a future PR) the
+ * Repository all read from the same source. Anything not listed in
+ * parser/mapping.uc for a given protocol is not part of the domain
+ * contract; a stale UCI option is now dropped at the parser side too.
+ */
 
 function load_protocol_options(get, type) {
 	const mapping = PROTOCOL_OPTIONS[type] || {};

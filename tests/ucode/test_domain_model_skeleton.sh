@@ -37,7 +37,11 @@ sed -e "s#/sbin/validate_data#${VALIDATE_DATA}#" \
 cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$WORK/scripts/config/"
 cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$WORK/scripts/config/"
 cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$WORK/scripts/config/"
-cp "$ROOT/root/etc/homeproxy/scripts/parse_uri.uc"      "$WORK/scripts/"
+# PR-02: parse_uri.uc moved into scripts/parser/.  Stage the whole
+# tree so the Loader's '../parser/mapping.uc' import resolves inside
+# the sandbox.
+mkdir -p "$WORK/scripts/parser"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc       "$WORK/scripts/parser/"
 
 cp "$ROOT/tests/ucode/test_domain_model_skeleton.uc" "$WORK/scripts/"
 

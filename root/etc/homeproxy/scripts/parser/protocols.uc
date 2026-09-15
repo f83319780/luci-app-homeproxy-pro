@@ -1,24 +1,30 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Copyright (C) 2023-2025 ImmortalWrt.org
+ * PR-02 (Parser Normalization): every protocol's parse_<scheme>_uri()
+ * used to live in the top-level parse_uri.uc. They are now grouped
+ * here so the dispatch (parser/uri.uc), the validation
+ * (parser/validator.uc), and the canonical normalisation
+ * (parser/normalize.uc) can each be edited in isolation.
+ *
+ * Each parser returns a FLAT UCI-key dict - same shape the Repository
+ * writes to /etc/config/homeproxy. This is deliberate for PR-02: the
+ * mapping table (parser/mapping.uc) is the single source of truth for
+ * what the canonical name <-> UCI name mapping looks like, but the
+ * parser still writes UCI directly so the Repository contract does
+ * not change. A later PR will flip the parser to canonical output and
+ * teach the Repository to flatten.
+ *
+ * `features` is the sing-box feature map (with_quic / with_utls / ...),
+ * `log` a logging callback, both injected so the parsers stay free of
+ * ubus / uci.
  */
 
 'use strict';
 
 import { urldecode, urlencode } from 'luci.http';
 
-import { decodeBase64Str, parseURL, isEmpty, validation } from 'homeproxy';
-
-/*
- * Share-link parsers. Every protocol has its own parse_<scheme>_uri() so the
- * branches can be read, changed and unit-tested in isolation; parse_uri() only
- * dispatches on the scheme and applies the common address/port validation and
- * label fallback afterwards.
- *
- * `features` is the sing-box feature map (with_quic/with_utls/...), `log` is a
- * logging callback, both injected so the parsers stay free of ubus/uci.
- */
+import { decodeBase64Str, parseURL } from 'homeproxy';
 
 /* https://shadowsocks.org/guide/sip008.html */
 export function parse_sip008_uri(uri) {
@@ -47,13 +53,15 @@ export function parse_anytls_uri(uri) {
 		address: url.hostname,
 		port: url.port,
 		password: urldecode(url.username),
+		/* anytls always uses ALPN h2 / h3 if the user did not set it;
+		 * the form defaults are the same shape. */
 		tls: '1',
-		tls_sni: params.sni,
-		tls_insecure: (params.insecure === '1') ? '1' : '0'
+		tls_sni: params.sni || params.peer,
+		tls_alpn: params.alpn ? split(urldecode(params.alpn), ',') : null,
 	};
 };
 
-export function parse_http_uri(uri) {
+export function parse_http_uri(uri, features, log) {
 	uri = split(trim(uri), '://');
 
 	const url = parseURL('http://' + uri[1]) || {};
@@ -65,11 +73,15 @@ export function parse_http_uri(uri) {
 		port: url.port,
 		username: url.username ? urldecode(url.username) : null,
 		password: url.password ? urldecode(url.password) : null,
-		tls: (uri[0] === 'https') ? '1' : '0'
+		tls: (uri[0] === 'https') ? '1' : '0',
+		tls_sni: url.hostname,
+		/* HTTP/HTTPS does not carry transport; the generator still
+		 * works without one.  Setting tls_alpn to null lets the
+		 * shared TLS builder skip the field entirely. */
+		tls_alpn: null
 	};
 };
 
-/* https://github.com/HyNetwork/hysteria/wiki/URI-Scheme */
 export function parse_hysteria_uri(uri, features, log) {
 	uri = split(trim(uri), '://');
 
@@ -426,74 +438,6 @@ export function parse_vmess_uri(uri, features, log) {
 			config.ws_path = split(config.ws_path, '?ed=')[0];
 		}
 		break;
-	}
-
-	return config;
-};
-
-export function parse_uri(uri, features, log) {
-	if (!features) features = {};
-	if (!log) log = function() {};
-
-	let config;
-
-	if (type(uri) === 'object') {
-		if (uri.nodetype === 'sip008')
-			config = parse_sip008_uri(uri);
-	} else if (type(uri) === 'string') {
-		switch (split(trim(uri), '://')[0]) {
-		case 'anytls':
-			config = parse_anytls_uri(uri, features, log);
-			break;
-		case 'http':
-		case 'https':
-			config = parse_http_uri(uri, features, log);
-			break;
-		case 'hysteria':
-			config = parse_hysteria_uri(uri, features, log);
-			break;
-		case 'hysteria2':
-		case 'hy2':
-			config = parse_hysteria2_uri(uri, features, log);
-			break;
-		case 'snell':
-			config = parse_snell_uri(uri, features, log);
-			break;
-		case 'socks':
-		case 'socks4':
-		case 'socks4a':
-		case 'socks5':
-		case 'socks5h':
-			config = parse_socks_uri(uri, features, log);
-			break;
-		case 'ss':
-			config = parse_ss_uri(uri, features, log);
-			break;
-		case 'trojan':
-			config = parse_trojan_uri(uri, features, log);
-			break;
-		case 'tuic':
-			config = parse_tuic_uri(uri, features, log);
-			break;
-		case 'vless':
-			config = parse_vless_uri(uri, features, log);
-			break;
-		case 'vmess':
-			config = parse_vmess_uri(uri, features, log);
-			break;
-		}
-	}
-
-	if (!isEmpty(config)) {
-		if (config.address)
-			config.address = replace(config.address, /\[|\]/g, '');
-
-		if (!validation('host', config.address) || !validation('port', config.port)) {
-			log(sprintf('Skipping invalid %s node: %s.', config.type, config.label || 'NULL'));
-			return null;
-		} else if (!config.label)
-			config.label = (validation('ip6addr', config.address) ?
-				`[${config.address}]` : config.address) + ':' + config.port;
 	}
 
 	return config;

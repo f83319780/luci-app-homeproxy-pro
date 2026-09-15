@@ -10,7 +10,7 @@
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
 import { isBinary, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
-import { parse_uri } from '/etc/homeproxy/scripts/parse_uri.uc';
+import { parse_uri } from '/etc/homeproxy/scripts/parser/uri.uc';
 
 /* Kanged from ucode/luci */
 function shellquote(s) {

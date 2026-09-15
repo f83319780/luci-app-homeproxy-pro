@@ -4,14 +4,20 @@
  *
  * Copyright (C) 2025 ImmortalWrt.org
  *
- * Unit tests for the share-link parsers in parse_uri.uc. Run through
- * tests/ucode/run.sh, which stages parse_uri.uc next to the mocked
- * homeproxy.uc.
+ * Unit tests for the share-link parsers in scripts/parser/. Run
+ * through tests/ucode/run.sh, which stages the whole parser/ tree
+ * next to the mocked homeproxy.uc.
+ *
+ * PR-02: parse_uri() now dispatches from scripts/parser/uri.uc,
+ * pulling the per-scheme branches from parser/protocols.uc and the
+ * categorised post-parse checks from parser/validator.uc. The import
+ * below is left as `from 'parser/uri.uc'` so the staged work dir
+ * (where parser/ is a sibling of the test) resolves identically.
  */
 
 'use strict';
 
-import { parse_uri } from 'parse_uri';
+import { parse_uri } from 'parser/uri.uc';
 
 const FEATURES = { with_quic: true, with_utls: true };
 const NO_QUIC = { with_quic: false, with_utls: true };
