@@ -314,14 +314,35 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ---
 
-## 11. P1-4 i18n 门补 source→pot
+## 11. P1-4 i18n 门补 source→pot —— 已完成✅
 
 `i18n-coverage.py:106-117` 只做 `.pot`→`.po`；**没有东西重新生成 `.pot` 与源码比对**。
 加一条全新未翻译的 `_()`，门禁仍 724/724 退出 0。
 `.github/rescan-translation.sh` **已存在但未被任何 workflow 引用**。
 
-**计划**：CI 跑 rescan，断言 `po/templates/homeproxy.pot` 无变化。
-**验收**：加新文案 → CI 红；文案 + 同步 `.pot`/`.po` → 绿。顺手修正 `README:143` 的措辞。
+**实施**：CI 跑 `.github/rescan-translation.sh` 并断言 `po/` 无 diff。
+**验收通过**：①当前树再跑一次 rescan → 无 diff（不会误报）；
+②新增一条未翻译 `_()` → `po/` 变化 → 步骤失败，且 coverage 降到 99.9%。
+
+**过程中发现两件必须先修的事**：
+
+1. **`rescan-translation.sh` 会毁掉模板。** 它只判断 `[ -d "$LUCI_DIR" ]`，
+   而本机的 `/Users/wjp/Downloads/luci`（luci 软件包 feed）**没有 `build/` 目录** →
+   perl 失败 → 而 stdout 直接重定向进模板 → **`homeproxy.pot` 被清空**，
+   而 coverage 门会高兴地报 `0/0 = 100%`。（我实际触发了一次，已 `git checkout` 还原。）
+   现在：两个脚本都存在才用本地 checkout、扫到临时文件、空结果拒绝安装、
+   从仓库根目录扫描（不再取决于调用者 cwd）、清理临时文件。
+
+2. **协议名在 PHASE 8 重构中失去了可翻译性。** 表格里是 `label: 'Shadowsocks'`，
+   而 `renderProtocolOptions` 用 `_(p.label)`（变量，扫描器看不见）→ 这些词条
+   从模板里消失。13 个里 12 个的中文与原文相同（等于没翻译），但
+   `Snell (1.14)` → `Snell（1.14）`（全角括号）**是真的翻译**，而且趋势是全部会慢慢失去翻译。
+   现在改为在表格里 `_()` 包裹、使用点不再二次翻译；清单测试的 label 断言改为接受
+   被翻译的 String 对象；**三个表单快照逐字节未变**。
+
+**顺带说明**：`Traffic shaping mode`、`unsafe-raw`、`unshaped`、`v6 only.` 也离开了模板，
+但这是**正确的**——它们由 `8cdf713` 从源码里删掉（sing-box 1.14 不接受那些拥塞控制值），不是丢失。
+两条新文案已翻译。
 
 ---
 
@@ -484,7 +505,7 @@ P1-6 ACL 收紧 ✅ → P1-1 Architecture Guard（7 组 / 33 项，全部反向�
   ▼
 P1-6 ACL 收紧（浏览器会话 vs 后端 root）                ✅ 已完成
   ▼
-P1-2 发布测试门 ✅ → P1-3 mock 同步 ✅ → P1-4 i18n 源扫描 → P2-2 fw4 stub
+P1-2 发布测试门 ✅ → P1-3 mock 同步 ✅ → P1-4 i18n 源扫描 ✅ → P2-2 fw4 stub
   ▼
 P1-7 回退假状态（先补可失败的测试）→ P2-1 真空检查 → P2-5 JSON 校验
   ▼
