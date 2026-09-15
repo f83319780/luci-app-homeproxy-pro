@@ -98,7 +98,12 @@ else
 	echo "(no local ucode/sing-box, executing on $HOST)"
 	if tar czf - -C "$ROOT" --exclude .git --exclude node_modules . \
 		| ssh "$HOST" "rm -rf $REMOTE_DIR && mkdir -p $REMOTE_DIR && tar xzf - -C $REMOTE_DIR"; then
-		ssh "$HOST" "sh $REMOTE_DIR/tests/ucode/run.sh $REMOTE_DIR" || FAILED=1
+		# HP_REQUIRE_FW4: a target always has firewall4, so the fw4 render
+		# layer in test_firewall_template.sh must actually run there. Without
+		# this, a target missing it would report NOT RUN and the suite would
+		# still pass, which is how a device-only layer quietly stops being
+		# exercised at all.
+		ssh "$HOST" "HP_REQUIRE_FW4=1 sh $REMOTE_DIR/tests/ucode/run.sh $REMOTE_DIR" || FAILED=1
 	else
 		echo "FAIL: could not stage the tests on $HOST"
 		FAILED=1

@@ -125,6 +125,11 @@ statement onto a comment). Stubbing `fw4` would let the render run everywhere,
 but the assertions would then be about a ruleset the real `fw4` never
 produced — see that script's header for the reasoning.
 
+It is not left as a bare skip, though: `HP_REQUIRE_FW4=1` turns the skip into a
+failure, and `tests/run.sh` sets it in the ssh branch. A target always has
+firewall4, so the one environment able to run the render must run it — and a
+target that somehow cannot now fails instead of quietly reporting `NOT RUN`.
+
 Two further host differences are bridged so the remaining checks still run:
 
 * **`/sbin/validate_data`** — `homeproxy.uc` shells out to this OpenWrt helper

@@ -18,7 +18,15 @@
 #   2. the render + structural assertions, run whenever `fw4` is resolvable,
 #      skipped with an explicit NOT RUN otherwise. A stub fw4 would make this
 #      layer run everywhere, but it would also mean asserting on a ruleset the
-#      real fw4 never produced.
+#      real fw4 never produced, so the skip is kept and made *enforceable*
+#      instead: HP_REQUIRE_FW4=1 turns it into a failure. tests/run.sh sets that
+#      in its ssh branch, because a target always has firewall4 - so the one
+#      environment that can run this layer must run it, and a target that
+#      somehow cannot is a failure rather than a quiet NOT RUN.
+#
+#      `utpl` is not the blocker: it ships with ucode, which
+#      tests/toolchain/build-ucode-linux.sh builds. The missing piece is
+#      firewall4's /usr/share/ucode/fw4.uc.
 #
 # Usage: sh tests/ucode/test_firewall_template.sh <repo-root>
 
@@ -57,6 +65,22 @@ STAGED="$STAGE/firewall_post.ut"
 # argument as template text and always succeeds.
 if ! ucode -e 'require("fw4");' > "/dev/null" 2>&1; then
 	echo "NOT RUN: the 'fw4' ucode module is not available (device-only), render skipped"
+
+	# A skipped layer must not be able to hide a broken template. Firewall4 is
+	# always installed where homeproxy runs, so the on-target suite sets
+	# HP_REQUIRE_FW4=1 (tests/run.sh does it in the ssh branch) and a skip there
+	# is a failure: it means the render stopped being exercised in the one
+	# environment that can exercise it. `utpl` itself is not the blocker - it
+	# ships with ucode, which the toolchain builds - the missing piece is
+	# firewall4's /usr/share/ucode/fw4.uc, and stubbing that would mean
+	# asserting on a ruleset the real fw4 never produced.
+	if [ "${HP_REQUIRE_FW4:-0}" = "1" ]; then
+		echo "FAIL: HP_REQUIRE_FW4=1 but 'fw4' is not resolvable, so the render"
+		echo "      layer cannot run here and the template is unverified"
+		rm -f "$OUT"
+		exit 1
+	fi
+
 	[ "$FAILED" -eq 0 ] && echo "PASS: firewall_post.ut keeps '{%-' directly after the shebang"
 	rm -f "$OUT"
 	exit $FAILED
