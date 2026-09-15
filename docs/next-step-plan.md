@@ -38,7 +38,7 @@
 | P1-5 | `luci.homeproxy` 行为测试（含 `certificate_write` 全分支） | P1 | 中 | 无 · 已完成✅ |
 | P1-6 | ACL 收紧：删 6 条浏览器用不到的写路径 | P1 | 极小 | 无 · 已完成✅ |
 | P1-7 | RPC 失败回退不再断言假状态（含 `type` 静默改写） | P1 | 中 | 无 · 已完成✅ |
-| P1-8 | 真机 CI 作业（台账 §5 项 14） | P1 | 中 | P0-3 之后更有意义 |
+| P1-8 | 真机 CI 作业（台账 §5 项 14） | P1 | 中 | 已建好；**需你加 `HP_SSH_KEY` secret** 才能真跑 |
 | P1-9 | 版本对齐 / "只 stage 不安装" 策略落地 | P1 | 小 | 无 · 已完成✅ |
 | P1-10 | crontab `sed -i` 不对称修复 | P1 | 极小 | 无 · 已完成✅ |
 | P2-1 | 真空检查修复（含我本会话那条正则） | P2 | 小 | 无 · 已完成✅ |
@@ -407,10 +407,20 @@ arch-test 只在 `push: [main]` 和 PR 上跑。分支保护不可用（`gh api`
 
 ## 15. P1-8 ~ P1-10
 
-### P1-8 真机 CI 作业
-`workflow_dispatch` 或带 label 触发，SSH 到 `.102`，走 `tests/runtime/` 的 stage + drive 模式。
-**前提**：P1-9 的策略先落地，且**绝不在真机上执行 `apk` 写操作**（见审计 §0）。
-密钥走 GitHub Secrets。验收：能手动跑通并在日志里看到真实结果；失败不破坏设备配置。
+### P1-8 真机 CI 作业 —— 已完成✅（代码侧；真跑需你加 secret）
+**已完成（代码侧）**：新增 `.github/workflows/on-target.yml`，仅 `workflow_dispatch`：
+- 先有一道**拒绝生产路由**的硬失败闸（`192.168.1.1` 与 `192.168.1.1:22` 都拒，`.102`/`.10` 放行）——
+  因为 staging 会把整份 checkout 解包到目标机上，而这套件绝不该落在路由器上；
+- 密钥从 `secrets.HP_SSH_KEY` 读，`BatchMode` 下主机密钥用 `ssh-keyscan` 预热；
+- 只调用 `tests/run.sh`（本 runner 没有 ucode/sing-box，自然走 ssh 分支）；
+- **不含任何 `apk`/`opkg` 写操作**，并由 **guard 10** 保证以后也不会有人加进去
+  （反向验证：往测试里塞一行 `apk add` → guard 指名文件与行号；注释行排除，
+  否则 guard 会命中它自己那段解释）。
+
+**未做端到端验证，而且在这里做不到**：作业需要一个仓库 secret `HP_SSH_KEY`，只有你能加。
+它由三部分组成，三部分都各自验证过（YAML 可解析、路由闸真的拒绝、
+`HP_TEST_HOST=… tests/run.sh` 就是本会话一直在对真机跑的那条命令）。
+在 secret 存在之前，这个作业会在 "Set up the SSH key" 步停下并明确说明原因。
 
 ### P1-9 版本 / stage 策略 —— 已完成✅
 设备 `26.236.50544~cb5d434` vs 仓库 `28.9.1.14-r1`；`/usr/bin/sing-box` 是 1.14.1。
@@ -665,7 +675,7 @@ P2-1 真空检查 ✅ → P2-5 JSON 校验 ✅
   ▼
 P1-10 crontab ✅ → P2-3 后端复核 #7-#12 大部分 ✅ → P2-4 确定性 ✅
   ▼
-P1-9 stage 策略 ✅ → P1-8 真机 CI 作业
+P1-9 stage 策略 ✅ → P1-8 真机 CI 作业 ✅（待 secret）
   ▼
 P2-6 状态三件套 → P2-7 样板去重 → P2-8 代码卫生
 ```
