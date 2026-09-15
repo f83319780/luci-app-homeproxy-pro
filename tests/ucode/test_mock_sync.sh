@@ -33,8 +33,25 @@ if ! command -v ucode > "/dev/null" 2>&1; then
 	exit 2
 fi
 
+
 rm -rf "$WORK"
 mkdir -p "$WORK"
+
+# production parseURL() validates the hostname by shelling out to the hardcoded
+# /sbin/validate_data. On a device that binary exists; off-target it does not,
+# and production then returns null for every URL while the mock - which carries
+# its own pure-ucode validation() - parses them happily. An environment variable
+# would not help: the path is a literal in the source, so the staged copy has to
+# be rewritten, exactly as tests/ucode/test_generators.sh does it. Without this
+# the test passed on the device and failed in CI, which is how it was found.
+VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
+if [ ! -x "$VALIDATE_DATA" ] && [ -x "$ROOT/tests/toolchain/validate-data.sh" ]; then
+	VALIDATE_DATA="$ROOT/tests/toolchain/validate-data.sh"
+fi
+
+mkdir -p "$WORK/scripts"
+sed -e "s#/sbin/validate_data#$VALIDATE_DATA#" \
+	"$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/scripts/homeproxy.uc"
 
 cat > "$WORK/sync.uc" <<'DRIVER'
 import {
@@ -119,7 +136,7 @@ printf('mock sync: %d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);
 DRIVER
 
-sed -e "s#@@SCRIPTS@@#$ROOT/root/etc/homeproxy/scripts#" \
+sed -e "s#@@SCRIPTS@@#$WORK/scripts#" \
     -e "s#@@MOCK-HP@@#$ROOT/tests/ucode/mocks/homeproxy.uc#" \
     -e "s#@@MOCK-FETCHER@@#$ROOT/tests/ucode/mocks/homeproxy_fetcher.uc#" \
     "$WORK/sync.uc" > "$WORK/sync.uc.new"
