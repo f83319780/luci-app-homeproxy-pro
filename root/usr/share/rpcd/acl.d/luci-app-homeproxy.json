@@ -22,12 +22,6 @@
 		},
 		"write": {
 			"file": {
-				"/etc/homeproxy/resources/direct_list.txt": [ "write" ],
-				"/etc/homeproxy/resources/proxy_list.txt": [ "write" ],
-				"/etc/homeproxy/certs/server_publickey.pem": [ "write" ],
-				"/etc/homeproxy/certs/server_privatekey.pem": [ "write" ],
-				"/etc/homeproxy/certs/client_ca.pem": [ "write" ],
-				"/etc/homeproxy/certs/client_ech_conf.pem": [ "write" ],
 				"/tmp/homeproxy_cert_server_publickey.tmp": [ "write" ],
 				"/tmp/homeproxy_cert_server_privatekey.tmp": [ "write" ],
 				"/tmp/homeproxy_cert_client_ca.tmp": [ "write" ],
