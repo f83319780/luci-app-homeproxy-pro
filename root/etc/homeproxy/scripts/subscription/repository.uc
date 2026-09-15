@@ -31,7 +31,7 @@
 
 import { md5 } from 'digest';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty } from '../homeproxy.uc';
 
 /* Relative, like config/loader.uc's '../parser/mapping.uc': ucode's
  * resolver only searches top-level module names in the -L tree, so a

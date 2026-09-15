@@ -26,7 +26,7 @@
 
 'use strict';
 
-import { isEmpty, decodeBase64Str } from 'homeproxy';
+import { isEmpty, decodeBase64Str } from '../homeproxy.uc';
 
 export function decode(content, log, url) {
 	if (isEmpty(content))

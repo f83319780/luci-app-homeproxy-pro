@@ -207,21 +207,27 @@ echo "== subscription filter unit tests =="
 # the work dir top level (drop the subscription/ prefix) and let the
 # test files import them as bare names.
 rm -rf "$WORK/subscription"
+# Mirror the production layout: the module under test lives in subscription/ and
+# reaches homeproxy.uc one level up (a relative import - production cannot rely on
+# a module search path, see the note above the syntax check). The tests are the
+# entry scripts and import the module under test by name, so -L points at
+# subscription/.
+rm -rf "$WORK/subscription"
 mkdir -p "$WORK/subscription"
-cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/subscription/"
+cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/homeproxy.uc"
 cp "$ROOT/root/etc/homeproxy/scripts/subscription/filter.uc" "$WORK/subscription/filter.uc"
 cp "$ROOT/root/etc/homeproxy/scripts/subscription/decoder.uc" "$WORK/subscription/decoder.uc"
-cp "$ROOT/tests/ucode/test_subscription_filter.uc" "$WORK/subscription/"
-cp "$ROOT/tests/ucode/test_subscription_decoder.uc" "$WORK/subscription/"
+cp "$ROOT/tests/ucode/test_subscription_filter.uc" "$WORK/"
+cp "$ROOT/tests/ucode/test_subscription_decoder.uc" "$WORK/"
 
-if ( cd "$WORK/subscription" && ucode -L "$WORK/subscription" test_subscription_filter.uc ); then
+if ( cd "$WORK" && ucode -L "$WORK/subscription" test_subscription_filter.uc ); then
 	echo "PASS: subscription filter unit tests"
 else
 	echo "FAIL: subscription filter unit tests"
 	FAILED=1
 fi
 
-if ( cd "$WORK/subscription" && ucode -L "$WORK/subscription" test_subscription_decoder.uc ); then
+if ( cd "$WORK" && ucode -L "$WORK/subscription" test_subscription_decoder.uc ); then
 	echo "PASS: subscription decoder unit tests"
 else
 	echo "FAIL: subscription decoder unit tests"
@@ -247,6 +253,57 @@ echo "== rpcd method behaviour =="
 # certificate_write('client_ech_conf') stayed broken from the initial commit:
 # the frontend called it, the ACL granted it, and the backend had no case.
 sh "$ROOT/tests/ucode/test_rpc_methods.sh" "$ROOT" "$WORK/rpc_methods" || FAILED=1
+
+echo "== the scripts run the way production runs them =="
+# init.d/homeproxy calls `ucode -S "$HP_DIR/scripts/generate_client.uc"` and the
+# cron entry runs update_subscriptions.uc through its shebang - neither passes a
+# module search path. Everything else in this suite passes -L (the harness has
+# to, to reach the staged tree), which is exactly why a bare
+# `import ... from 'homeproxy'` inside a subdirectory compiled here for months
+# and failed on the first real install: ucode resolves a bare specifier relative
+# to the IMPORTING module's directory, so config/model.uc looked in config/.
+#
+# This runs the real script with no -L at all. Only the runtime paths are
+# redirected, the same way the generator cases do it.
+PROD="$WORK/prod-invocation"
+rm -rf "$PROD"
+mkdir -p "$PROD/scripts" "$PROD/cfg" "$PROD/run" "$PROD/resources"
+cp -R "$ROOT/root/etc/homeproxy/scripts/." "$PROD/scripts/"
+sed -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$PROD/run';#" \
+    -e "s#^export const HP_DIR = '/etc/homeproxy';#export const HP_DIR = '$PROD';#" \
+    -e "s#^export const UCICONFIG_DIR = '/etc/config';#export const UCICONFIG_DIR = '$PROD/cfg';#" \
+    "$PROD/scripts/homeproxy.uc" > "$PROD/scripts/homeproxy.uc.new"
+mv -f "$PROD/scripts/homeproxy.uc.new" "$PROD/scripts/homeproxy.uc"
+cat > "$PROD/cfg/homeproxy" <<'PRODCFG'
+config homeproxy 'config'
+	option routing_mode 'bypass_mainland_china'
+	option proxy_mode 'tun'
+	option main_node 'nil'
+	option ipv6_support '0'
+PRODCFG
+
+# The assertion is about module resolution specifically: whether the generated
+# config then satisfies `sing-box check` is what the generator cases cover, and
+# this fixture is deliberately too small for that.
+( cd "$PROD" && ucode -S scripts/generate_client.uc ) > "$PROD/out.txt" 2>&1
+if grep -q "Unable to resolve path for module" "$PROD/out.txt"; then
+	echo "FAIL: generate_client.uc cannot resolve its modules without -L:"
+	grep -m2 "Unable to resolve path for module" "$PROD/out.txt"
+	FAILED=1
+else
+	echo "PASS: generate_client.uc resolves its modules with no search path"
+fi
+
+# The syntax check above imports every module with -L, so it cannot see this;
+# and neither can the updater test, which also passes -L.
+( cd "$PROD" && ucode -S scripts/update_subscriptions.uc ) > "$PROD/out2.txt" 2>&1
+if grep -q "Unable to resolve path for module" "$PROD/out2.txt"; then
+	echo "FAIL: update_subscriptions.uc cannot resolve its modules without -L:"
+	grep -m2 "Unable to resolve path for module" "$PROD/out2.txt"
+	FAILED=1
+else
+	echo "PASS: update_subscriptions.uc resolves its modules with no search path"
+fi
 
 echo "== test doubles still match production =="
 # The mocks copy isEmpty/decodeBase64Str/parseURL/redactUrl from production and
@@ -286,11 +343,11 @@ fi
 
 echo "== subscription fetcher tests =="
 rm -rf "$WORK/fetcher"
-mkdir -p "$WORK/fetcher"
-cp "$ROOT/root/etc/homeproxy/scripts/subscription/fetcher.uc" "$WORK/fetcher/fetcher.uc"
+mkdir -p "$WORK/fetcher/subscription"
 cp "$ROOT/tests/ucode/mocks/homeproxy_fetcher.uc" "$WORK/fetcher/homeproxy.uc"
+cp "$ROOT/root/etc/homeproxy/scripts/subscription/fetcher.uc" "$WORK/fetcher/subscription/fetcher.uc"
 cp "$ROOT/tests/ucode/test_subscription_fetcher.uc" "$WORK/fetcher/"
-if ( cd "$WORK/fetcher" && ucode -L "$WORK/fetcher" test_subscription_fetcher.uc ); then
+if ( cd "$WORK/fetcher" && ucode -L "$WORK/fetcher/subscription" test_subscription_fetcher.uc ); then
 	echo "PASS: subscription fetcher tests"
 else
 	echo "FAIL: subscription fetcher tests"

@@ -16,7 +16,7 @@
 
 'use strict';
 
-import { isEmpty, validation } from 'homeproxy';
+import { isEmpty, validation } from '../homeproxy.uc';
 
 import {
 	parse_sip008_uri, parse_anytls_uri, parse_http_uri,

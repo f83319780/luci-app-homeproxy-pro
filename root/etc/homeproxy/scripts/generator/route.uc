@@ -29,7 +29,7 @@
 
 'use strict';
 
-import { isEmpty, strToInt, strToTime, strToBool, parse_port } from 'homeproxy';
+import { isEmpty, strToInt, strToTime, strToBool, parse_port } from '../homeproxy.uc';
 
 
 import { get_outbound, get_resolver, get_ruleset, get_direct_override } from './common.uc';

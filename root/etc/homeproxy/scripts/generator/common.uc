@@ -21,14 +21,14 @@
 
 'use strict';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty } from '../homeproxy.uc';
 
 import { ConfigQuery } from '../config/model.uc';
 
 /* PR-04: parse_port() moved to homeproxy.uc. The Adapter layer needs it
  * too (EndpointFactory builds the WireGuard endpoint) and an adapter must
  * not import from generator/, so the util moved to the module both layers
- * already share. Callers import it from 'homeproxy' now. */
+ * already share. Callers import it from '../homeproxy.uc' now. */
 
 /* Resolve a UCI outbound-style reference (string or array of strings)
  * into the sing-box tag the generator should emit. The arrays carry

@@ -4,7 +4,7 @@
 
 import { writefile } from 'fs';
 import { cursor } from 'uci';
-import { isEmpty, RUN_DIR, validation } from 'homeproxy';
+import { isEmpty, RUN_DIR, validation } from './homeproxy.uc';
 
 const cfgname = 'homeproxy';
 const uci = cursor();

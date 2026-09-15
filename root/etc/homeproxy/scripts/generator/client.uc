@@ -39,7 +39,7 @@
 import { connect } from 'ubus';
 import { readfile } from 'fs';
 
-import { isEmpty, strToInt, RUN_DIR, HP_DIR } from 'homeproxy';
+import { isEmpty, strToInt, RUN_DIR, HP_DIR } from '../homeproxy.uc';
 
 import { build_dns } from './dns.uc';
 import { build_inbounds } from './inbound.uc';

@@ -20,7 +20,7 @@
 
 'use strict';
 
-import { isEmpty, redactUrl, wGETVerbose } from 'homeproxy';
+import { isEmpty, redactUrl, wGETVerbose } from '../homeproxy.uc';
 
 export function fetch(url, user_agent, log) {
 	const result = wGETVerbose(url, user_agent);

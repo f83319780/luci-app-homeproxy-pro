@@ -21,7 +21,7 @@
 
 'use strict';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty } from '../homeproxy.uc';
 
 /* Canonical credential multiplexing for a Node. The current generator picks
  * these apart with ternaries per field (`username` vs `user` vs `password` vs

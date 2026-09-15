@@ -31,7 +31,7 @@
 import {
 	isEmpty, strToBool, strToInt, strToTime, removeBlankAttrs,
 	buildTLSObject, buildTransportObject, parse_port
-} from 'homeproxy';
+} from '../homeproxy.uc';
 
 import { Node, Inbound, INBOUND_TLS_SERVER } from './model.uc';
 

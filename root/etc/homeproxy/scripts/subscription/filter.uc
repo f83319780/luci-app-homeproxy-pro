@@ -18,7 +18,7 @@
 
 'use strict';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty } from '../homeproxy.uc';
 
 /* Decide whether a node named `name` should be dropped. `mode` is
  * one of:
