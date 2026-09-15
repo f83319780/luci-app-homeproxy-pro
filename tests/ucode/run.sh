@@ -140,6 +140,13 @@ else
 	sh "$ROOT/tests/ucode/test_firewall_template.sh" "$ROOT" || FAILED=1
 fi
 
+echo "== firewall_pre generator behaviour =="
+# Covers the generator that decides *which* nft statements exist, not just
+# whether the template renders.  Its two validation guards are the reason a
+# malformed server section cannot take the whole fw4 ruleset down with it,
+# so they get asserted directly rather than only through a golden file.
+sh "$ROOT/tests/ucode/test_firewall_pre.sh" "$ROOT" "$WORK/firewall_pre" || FAILED=1
+
 echo "== parse_uri unit tests =="
 rm -rf "$WORK/parse_uri"
 mkdir -p "$WORK/parse_uri"

@@ -60,9 +60,13 @@ jobs:
         # The snapshot renderer is a plain node script; it just re-renders
         # the CBI form definitions through a LuCI mock and diffs the
         # result. No build / no ucode required.
+        #
+        # Keep this list in sync with tests/run.sh: a target that is added
+        # there but not here would be snapshot-tested locally and silently
+        # skipped in CI, which is where the protection actually matters.
         run: |
           set -e
-          for target in node server; do
+          for target in node client server; do
             node tests/luci-form-snapshot.js . "$target" > "/tmp/snap-$target.json"
             if ! diff -q "tests/snapshots/$target.json" "/tmp/snap-$target.json" > /dev/null; then
               echo "::error::LuCI form snapshot for $target changed:"
@@ -70,7 +74,7 @@ jobs:
               exit 1
             fi
           done
-          echo "PASS: LuCI form snapshots (node, server)"
+          echo "PASS: LuCI form snapshots (node, client, server)"
 
       - name: Check zh_Hans translation coverage
         # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
