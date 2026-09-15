@@ -245,6 +245,13 @@ echo "== rpcd method behaviour =="
 # the frontend called it, the ACL granted it, and the backend had no case.
 sh "$ROOT/tests/ucode/test_rpc_methods.sh" "$ROOT" "$WORK/rpc_methods" || FAILED=1
 
+echo "== test doubles still match production =="
+# The mocks copy isEmpty/decodeBase64Str/parseURL/redactUrl from production and
+# their headers say to keep them in sync; nothing enforced it, and the fetcher's
+# redaction security assertion is made against the copy.  Compared on a shared
+# corpus, so the mock may be reformatted but not changed in behaviour.
+sh "$ROOT/tests/ucode/test_mock_sync.sh" "$ROOT" "$WORK/mock_sync" || FAILED=1
+
 echo "== homeproxy helper tests =="
 rm -rf "$WORK/homeproxy"
 mkdir -p "$WORK/homeproxy"
