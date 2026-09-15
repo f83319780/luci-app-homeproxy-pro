@@ -345,6 +345,31 @@ assert_nonempty "the Loader is still the one that owns the cursor" \
 	grep -rn "cursor(" "$SCRIPTS/config/loader.uc"
 
 echo
+echo "== guard 8: the generators write through a private scratch dir =="
+
+# reload_service generates the client and start_service generates it again, so
+# two runs can overlap. A fixed `<out>.tmp` name in RUN_DIR meant both wrote the
+# same file, and `sing-box check` could validate a file the other run was still
+# writing - the winner then installed a half-written config. mkdtemp() gives each
+# run its own 0700 directory.
+for g in generate_client.uc generate_server.uc; do
+	if grep -q "mkdtemp()" "$SCRIPTS/$g"; then
+		pass "$g uses mkdtemp() for its scratch dir"
+	else
+		fail "$g does not use mkdtemp() - its scratch path is shared between runs"
+	fi
+
+	# The specific shape that was wrong: a temp path built from RUN_DIR.
+	SHARED="$(grep -n "RUN_DIR + '/sing-box-.*\.tmp'" "$SCRIPTS/$g" || true)"
+	if [ -z "$SHARED" ]; then
+		pass "$g does not build a fixed temp path under RUN_DIR"
+	else
+		fail "$g builds a shared temp path under RUN_DIR:"
+		printf '      %s\n' "$SHARED"
+	fi
+done
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
