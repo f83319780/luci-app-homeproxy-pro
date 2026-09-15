@@ -48,6 +48,25 @@ hp_require_singbox() {
 	return 0
 }
 
+# hp_crontab_drop <crontab>
+# Remove the auto-update entry from <crontab>.
+#
+# Not `sed -i`: the bare `-i` form is a busybox/GNU extension, and on a host with
+# BSD sed it fails ("invalid command code"), which silently left the stale entry
+# behind with only a warning in the log.  Editing through a temporary file
+# behaves identically on busybox, GNU and BSD sed, and it is what lets this
+# module be exercised off-target at all
+# (tests/runtime/test_runtime_extraction.sh stages and drives it).
+hp_crontab_drop() {
+	local crontab="$1"
+	local tmp="${crontab}.hp-new"
+
+	sed "/#${CONF}_autosetup/d" "$crontab" > "$tmp" 2>"/dev/null" || { rm -f "$tmp"; return 1; }
+	mv -f "$tmp" "$crontab" 2>"/dev/null" || { rm -f "$tmp"; return 1; }
+
+	return 0
+}
+
 # hp_sync_autoupdate_cron <enabled> <hour>
 # Install (or drop) the subscription auto-update cron entry.  <enabled> is a
 # config_get_bool result; the entry is only touched when it is "1".
@@ -57,7 +76,7 @@ hp_sync_autoupdate_cron() {
 
 	[ "$auto_update" = "1" ] || return 0
 
-	sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null" \
+	hp_crontab_drop "/etc/crontabs/root" \
 		|| log "Warning: failed to drop the previous auto-update cron entry."
 	echo -e "0 $auto_update_time * * * $HP_DIR/scripts/update_crond.sh #${CONF}_autosetup" >> "/etc/crontabs/root" \
 		|| log "Warning: failed to install the auto-update cron entry."
@@ -67,7 +86,7 @@ hp_sync_autoupdate_cron() {
 # hp_clear_autoupdate_cron
 # Drop the auto-update cron entry and restart cron.  Used by stop_service.
 hp_clear_autoupdate_cron() {
-	sed -i "/#${CONF}_autosetup/d" "/etc/crontabs/root" 2>"/dev/null" \
+	hp_crontab_drop "/etc/crontabs/root" \
 		|| log "Warning: failed to drop the auto-update cron entry."
 	/etc/init.d/cron restart >"/dev/null" 2>&1 || log "Warning: failed to restart cron."
 }
