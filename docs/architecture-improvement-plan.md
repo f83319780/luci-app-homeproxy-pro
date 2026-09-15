@@ -17,7 +17,7 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **90%**（PHASE 6 已接近完成，PHASE 9 到 95%，
+按文档的 9 个 PHASE 取平均，目前约 **92% ~ 95%**（PHASE 6 已接近完成，PHASE 9 到 95%，
 PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
 §4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
 防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
@@ -28,8 +28,12 @@ PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`s
 5 个 `cfg.enabled !== '1'` 站点全改 `!cfg.enabled`，14 个 `cfg['.name']` 站点全改 `cfg.name`，
 `Node.raw` / `Config.endpoints` / 3 个 `ConfigQuery` 死 helper 删掉，详见 §2.1；
 **PHASE 2 Parser 目录化 + 归一化 + 校验分离已落地** —— `scripts/parser/{uri,protocols,
-validator,normalize,mapping}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc`
-导入，Repository 切到 canonical Node 写在 PR-03，详见 §2.2）。
+validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc`
+导入，详见 §2.2；
+**PHASE 5 Subscription Pipeline 收尾已落地** —— `parser/flatten.uc` 补 canonical ↔ flat
+闭环；`Repository = { apply_nodes, apply_main_node_refs, scrub_stale_urltest_refs }`
+接收 canonical Node，把 6 处 `uci.set/commit` 收敛；`update_subscriptions.uc` 改用
+`Loader.load()` 读 subscription，自己零 UCI 写入，详见 §2.5）。
 剩余部分见 §0.3。
 
 | PHASE | 内容 | 状态 | 说明 |
@@ -39,7 +43,7 @@ validator,normalize,mapping}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在�
 | 2 | Parser | ✅ ~90% | PR-02 已落地（commit 33994fa）：`scripts/parser/{uri,protocols,validator,normalize,mapping}.uc` 建好；`loader.uc` 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc` 导入；剩余 = Repository 切到 canonical Node 写（PR-03）+ validator 扩展（missing_credential / invalid_tls，后续 PR） |
 | 3 | Protocol Adapter | 🟡 ~85% | 客户端 outbound 已数据表化；WireGuard / ssh / 4 个 1.14 字段缺陷已修；**server inbound 仍未领域化**，`generate_endpoint` 仍是独立函数，`direct_overrides` 已随 PHASE 4 改成显式参数 |
 | 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
-| 5 | Subscription Pipeline | 🟡 ~75% | fetcher/decoder/filter/repository 已拆，已事务化 + 先抓取后 reload；缺 normalizer/validator，urltest 校准仍在 repository 之外提交 |
+| 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
 | 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
 | 7 | Runtime | 🟡 ~40% | `runtime/{config,health}.sh` 已抽、重复 `sing-box check` 已去；`dns`/`firewall`/`service` 仍在 init.d（517 行） |
 | 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除；协议表前后端仍 6 份不同步，`node.js`↔`server.js` 仍有 ~229 行重复 |
@@ -48,11 +52,11 @@ validator,normalize,mapping}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在�
 **关键判断（已更新）**：文档"最终成功标准"里那条链
 `Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
 **已经成立**（§2.6 已实施）。**PHASE 4 Generator 拆分、§4 安全 8/9、PHASE 9 收尾 5/6、
-PHASE 1 Domain Model 收尾（PR-01）、PHASE 2 Parser 目录化 + 归一化 + 校验分离（PR-02）
-也已落地**（commits `ca01141` + 33994fa），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，
-而是纯粹的结构性债务：
-**可维护性**（PHASE 8 LuCI 模块化）与**领域化收尾**（PHASE 3 server inbound / PHASE 5
-Repository canonical Node 写）。
+PHASE 1 Domain Model 收尾（PR-01）、PHASE 2 Parser 目录化 + 归一化 + 校验分离（PR-02）、
+PHASE 5 Subscription Pipeline 收尾（PR-03）也已落地**（commits `ca01141` + 33994fa +
+e88f7c7），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，而是纯粹的结构性债务：
+**可维护性**（PHASE 8 LuCI 模块化）与**server inbound 领域化**（PHASE 3，
+PR-04 / H2）。
 
 ### 0.3 剩余大项与工时估算
 
@@ -68,16 +72,17 @@ Repository canonical Node 写）。
 | ~~E~~ | ~~PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit 33994fa，PR-02）；Repository 切换到 canonical Node 写留在 H（PR-03）；validator 扩展（missing_credential / invalid_tls）留作后续 PR |
 | F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
 | ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
-| H | PHASE 3 / PHASE 5 收尾（server inbound 领域化、`direct_overrides` 数据化、normalizer/validator、持久化收敛） | 中 | 低–中 | 5 – 8 |
+| ~~H1~~ | ~~PHASE 5 收尾（normalizer/validator、6 处 `uci.set/commit` 收敛、Repository canonical Node 写）~~ | ~~中~~ | ~~低–中~~ | ~~5 – 8~~ ✅ 已落地（commit e88f7c7，PR-03） |
+| H2 | PHASE 3 server inbound 领域化（`generator/server.uc` 走 Domain Model / Adapter） | 中 | 中 | 3 – 5 |
 | I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（A / C / D / E / G 已完成）** | | | **18 – 33** |
+| | **合计（A / C / D / E / G / H1 已完成）** | | | **15 – 28** |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
 ~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
 `db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`），**D 也已完成**（`ca01141`），
-**E 也已完成**（33994fa）。原定的三步顺序已走完：A → C → G → D → E。
-**下一批从 H 开始**（PHASE 3 server inbound 领域化 + PHASE 5 Repository canonical Node 写），
-再 F（等有 on-target CI 再做），最后 B（LuCI 模块化，必须配人工回归）。
+**E 也已完成**（33994fa）。原定的三步顺序已走完：A → C → G → D → E → H1。
+**下一批从 H2 开始**（PHASE 3 server inbound 领域化），再 F（等有 on-target CI
+再做），最后 B（LuCI 模块化，必须配人工回归）。
 
 **无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
 - 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
@@ -539,20 +544,82 @@ Generator golden 字节级一致（client / custom / wireguard / partial_invalid
 - **重复 `sing-box check` 已在 PHASE 6 解决**：generator 做原子写 + check；`init.d/homeproxy` 不再 check（comment "the only `sing-box check` in this path"）；runtime 通过 `hp_ensure_live` 探测 live 文件存在性。
 - **回归**：byte-level 一致 —— client 6773 / custom 1860 / server 3865（差异为 `data_directory` 路径，9 字节）/ wireguard 3755 / partial_invalid 3494，与 baseline 一字不差；golden protocol snapshot（14 项）、protocol inventory（122 项）、domain model skeleton（63 项）、subscription filter/decoder/repository、homeproxy helper、executeCommand 失败路径全部 PASS。`firewall template rendering` 失败是预先就有的环境限制（绝对路径 `/etc/homeproxy/...` 只能 target 解析），跟本次重构无关。
 
-### 2.5 PHASE 5 — Subscription Pipeline 收尾
+### 2.5 PHASE 5 — Subscription Pipeline 收尾 ~~（PR-03）~~ ✅ 已落地（commit e88f7c7）
 
-已完成：`fetcher/decoder/filter/repository` 四个模块 + 单测，是本次做得最扎实的一块。
+> ~~已完成：`fetcher/decoder/filter/repository` 四个模块 + 单测，是本次做得最扎实的一块。~~
+>
+> ~~遗留：~~
+> ~~1. 规则要求"只有 Repository 负责持久化"，但 `update_subscriptions.uc` 自己还有 6 处~~
+>    ~~`uci.set` + `uci.commit`（`:178,186,205,212,221,236`）用于清理 urltest 失效成员。~~
+>    ~~建议把这些搬进 `repository.uc`（例如 `reconcile_main_node()`），并合并成**一次 commit**。~~
+> ~~2. 缺少 `normalizer.uc`（decoder 里对 SIP008 打 tag 的逻辑可以独立）与 `validator.uc`~~
+>    ~~（目前"合法性"只由 `parse_uri` 末尾顺带完成）。~~
+> ~~3. `update_subscriptions.uc:29` 自己持有 `uci.cursor()` 并重复读取~~
+>    ~~`subscription.*` / `config.*`（`:38-51`）。既然 `config/loader.uc` 已经是唯一 UCI 读取层，~~
+>    ~~这里应该复用 `Loader`（否则"Loader 拥有唯一 cursor"的注释是假的，见 §4）。~~
+> ~~4. **`stop → fetch → commit → start` 反模式**（§6）。~~
 
-遗留：
-1. 规则要求"只有 Repository 负责持久化"，但 `update_subscriptions.uc` 自己还有 6 处
-   `uci.set` + `uci.commit`（`:178,186,205,212,221,236`）用于清理 urltest 失效成员。
-   建议把这些搬进 `repository.uc`（例如 `reconcile_main_node()`），并合并成**一次 commit**。
-2. 缺少 `normalizer.uc`（decoder 里对 SIP008 打 tag 的逻辑可以独立）与 `validator.uc`
-   （目前"合法性"只由 `parse_uri` 末尾顺带完成）。
-3. `update_subscriptions.uc:29` 自己持有 `uci.cursor()` 并重复读取
-   `subscription.*` / `config.*`（`:38-51`）。既然 `config/loader.uc` 已经是唯一 UCI 读取层，
-   这里应该复用 `Loader`（否则"Loader 拥有唯一 cursor"的注释是假的，见 §4）。
-4. **`stop → fetch → commit → start` 反模式**（§6）。
+**落地形态**（commit e88f7c7）：
+
+§A — `parser/flatten.uc` 补全 canonical ↔ flat 闭环（PR-02 的 `normalize.uc` 的反向函数）。
+完整 mirror `normalize` 的子对象构造（`common` / `credentials` / `tls` / `transport` /
+`multiplex` / `protocol_options`），从同一个 `parser/mapping.uc` 的 `PROTOCOL_TO_UCI` 派生。
+元数据字段（`label` / `grouphash`）透传；`isExisting` 是 Repository 的 within-run
+marker，**不**写入 UCI。空 / null canonical 值被丢弃（Loader 把 null 与缺省等同看待，
+round-trip 无损）。
+
+§B — `subscription/repository.uc` 重写为命名空间 `Repository = { apply_nodes,
+apply_main_node_refs, scrub_stale_urltest_refs }`，接收 canonical Node，内部 flatten
+后写 UCI。`apply_nodes` 取代了原 `apply()`；`apply_main_node_refs` 把 §2.5 #1 提到的 6 处
+`uci.set/commit`（main_urltest_nodes 清理 / main_node 切换 / main_udp_urltest_nodes 清理
+/ main_udp_node 切换 / reset-to-nil / routing_node urltest_nodes scrub）全部收敛：
+* sites 1-5 → `apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log)`，单次
+  commit / 每个分支（按需），返回 `{main_node, main_udp_node, log}` 给 orchestrator
+  回放 log。
+* site 6 → `scrub_stale_urltest_refs(uci, uciconfig, log)`，逐 `routing_node` 处理，
+  每个 scrubbed section 各 commit 一次（旧代码也是这个粒度）。
+
+§C — `update_subscriptions.uc` 重写：
+* 顶部不再 `cursor().get()` 重复读 `subscription.*` / `config.*`，改用
+  `Loader.load().access_control.subscription`（plan §2.5 #3）。
+* Pipeline：`parse_uri` → `apply_policy`（仍是 flat 形式，apply_policy 单测不动）→
+  `normalize` → Repository。
+* 自身零 UCI 写入：唯一一处 `uci.set` 是 `config_backup` 异常回滚。
+* Repository 的 `main_refs.log` 在 orchestrator 回放（`"Main node is gone, switching to ..."`
+  / `"No available node, disable tproxy."` 行为不变）。
+
+§D — 防回归：
+* `tests/ucode/test_parser_flatten.uc`（新增）：13 个 scheme × 至少 5 个 key 字段的
+  round-trip 等式 + 4 个 explicit 子对象断言（vless reality / shadowsocks plugin /
+  grouphash 透传 / isExisting 不透出）+ 空 canonical 值丢弃。**只有"parser 与 flatten
+  输出字段一致"才会通过** —— 这是协议选项映射表（`parser/mapping.uc`）"不漂移"
+  的硬约束。
+* `tests/ucode/test_subscription_repository.uc`（扩展）：从 5 个检查（4 个 apply_nodes 路径
+  + 新增 / 保留 / 删除计数）扩展到 17 项，覆盖：
+  - 原 4 个 `apply_nodes` 路径（user 不动 / updated / dropped / new）
+  - `apply_main_node_refs` 的 3 条分支（urltest 列表剪枝 / 目标丢失切换 / 无节点 reset-to-nil）
+  - `scrub_stale_urltest_refs` 的 1 条路径（urltest_nodes 死引用清理）
+* `tests/ucode/test_subscription_filter.uc` 不变（`apply_policy` 仍是 flat 接口）；
+  这是有意为之 —— `apply_policy` 的契约是"在 parser 之后、normalize 之前"对
+  flat UCI 字段做小动作。
+* `tests/README.md` 增补 `test_parser_flatten.uc` 行 + 扩写 `test_subscription_repository.uc`
+  描述。
+* `tests/ucode/run.sh`：parser stage 同步，`test_parser_flatten.uc` 加入跑测；
+  module import 校验列表加 `parser/flatten`。
+
+**字节级不变量**：Repository 写入 UCI 的字段集合等于 parser 写入的字段集合（除
+grouphash / label 这种元数据）；`/etc/config/homeproxy` 形状与 PR-02 完全一致。
+Golden 快照无影响。
+
+本机 `python3 tests/i18n-coverage.py` 724/724 PASS；
+`tests/luci-form-snapshot.js` node / client / server 三份快照一致。
+
+**不在本 PR 范围**：
+* Repository 现在 canonical → flatten 一次往返；将来若 PR 之后改用 batch API
+  （一次 uci.set 多 key），可在此基础上减少 `cursor()` 调用次数。
+* decoder 的 SIP008 tag 生成 / `subscription/decoder.uc` 没有抽到独立 `normalizer`。
+  PR-03 的"normalizer / validator 接入 pipeline"指的是 parser 那侧的
+  `parser/normalize` / `parser/validator`，不是 subscription 那侧 —— 后面如果需要再拆。
 
 ### 2.6 PHASE 6 — Candidate Configuration + Rollback（最高优先级的新功能）✅ 已实施（见下）
 
@@ -848,13 +915,16 @@ P2（结构）
       scripts/parser/{uri,protocols,validator,normalize,mapping}.uc；Loader 的
       PROTOCOL_OPTIONS 改为从 parser/mapping.uc 导入；update_subscriptions.uc
       和 §1.3 RPC 都改走 parser/uri.uc；新增 test_parser_normalize.uc 锁映射表契约
+30. ✅ refactor(subscription): PR-03 Subscription Transaction Boundary         # §2.5   (`e88f7c7`)
+      parser/flatten.uc 补 canonical ↔ flat 闭环；Repository = { apply_nodes,
+      apply_main_node_refs, scrub_stale_urltest_refs } 接收 canonical Node
+      并把 6 处 uci.set/commit 收敛；update_subscriptions.uc 改用 Loader.load()
+      读 subscription，自己零 UCI 写入；新增 test_parser_flatten.uc 锁 round-trip
+      等式，test_subscription_repository.uc 加 12 项 main_node / scrub 断言
 
-**下一步（PR-03 / PR-04 / F / B）**：17 → 18 → 19 → 20，按指导文档 §七的 PR 路线，
-先做 PR-03 Subscription Transaction Boundary（Repository 改写 canonical Node，
-按 parser/mapping.uc 做 flatten；urltest 校准的 6 处 `uci.set/commit` 全部移到
-repository.uc；normalizer / validator 接入 pipeline），再做 PR-04 Server Inbound 走
-Domain Model（修 PR-01 §B 留给 §2.3 的 server inbound 领域化），再 F（等有 on-target CI
-再做），最后 B（LuCI 模块化，必须配人工回归）。
+**下一步（PR-04 / F / B）**：18 → 19 → 20，按指导文档 §七的 PR 路线，做
+PR-04 Server Inbound 走 Domain Model（修 PR-01 §B 留给 §2.3 的 server inbound 领域化），
+再 F（等有 on-target CI 再做），最后 B（LuCI 模块化，必须配人工回归）。
 ```
 
 ---
