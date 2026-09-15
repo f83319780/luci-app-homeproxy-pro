@@ -122,7 +122,10 @@ check('model.uc INBOUND_CREDENTIALS parsed', inboundCredentials.length > 0, `${i
  *    and mixed legitimately have no outbound mapping at all. */
 for (const p of protocols) {
 	check(`'${p.type}' declares at least one side`, p.sides.length > 0);
-	check(`'${p.type}' has a label`, typeof p.label === 'string' && p.label.length > 0);
+	/* A label is now wrapped in _() at the table, so it is a translated
+	 * String object rather than a primitive when a translation exists.  The
+	 * property under test is that it is present and non-empty. */
+	check(`'${p.type}' has a label`, p.label != null && String(p.label).length > 0);
 
 	if (p.sides.includes('client'))
 		check(`client '${p.type}' is modelled by the backend (PROTOCOL_TO_UCI)`, mapped.includes(p.type));

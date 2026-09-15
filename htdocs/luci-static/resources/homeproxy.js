@@ -103,24 +103,23 @@ return baseclass.extend({
 	   generation path has no fixture/golden coverage yet, so the server form
 	   must not offer it until that coverage exists. */
 	protocols: [
-		{ type: 'direct',      label: 'Direct',        sides: ['client'] },
-		{ type: 'anytls',      label: 'AnyTLS',        sides: ['client', 'server'] },
-		{ type: 'http',        label: 'HTTP',          sides: ['client', 'server'] },
-		{ type: 'hysteria',    label: 'Hysteria',      sides: ['client', 'server'], feature: 'with_quic' },
-		{ type: 'hysteria2',   label: 'Hysteria2',     sides: ['client', 'server'], feature: 'with_quic' },
-		{ type: 'naive',       label: 'NaïveProxy',    sides: ['server'],           feature: 'with_quic' },
-		{ type: 'mixed',       label: 'Mixed',         sides: ['server'] },
-		{ type: 'shadowsocks', label: 'Shadowsocks',   sides: ['client', 'server'] },
-		{ type: 'shadowtls',   label: 'ShadowTLS',     sides: ['client'] },
-		{ type: 'snell',       label: 'Snell (1.14)',  sides: ['client', 'server'] },
-		{ type: 'socks',       label: 'Socks',         sides: ['client', 'server'] },
-		{ type: 'ssh',         label: 'SSH',           sides: ['client'] },
-		{ type: 'trojan',      label: 'Trojan',        sides: ['client', 'server'] },
-		{ type: 'tuic',        label: 'Tuic',          sides: ['client', 'server'], feature: 'with_quic' },
-		{ type: 'wireguard',   label: 'WireGuard',     sides: ['client'],           feature: ['with_wireguard', 'with_gvisor'] },
-		{ type: 'vless',       label: 'VLESS',         sides: ['client', 'server'] },
-		{ type: 'vmess',       label: 'VMess',         sides: ['client', 'server'] }
-	],
+		{ type: 'direct',      label: _('Direct'),        sides: ['client'] },
+		{ type: 'anytls',      label: _('AnyTLS'),        sides: ['client', 'server'] },
+		{ type: 'http',        label: _('HTTP'),          sides: ['client', 'server'] },
+		{ type: 'hysteria',    label: _('Hysteria'),      sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'hysteria2',   label: _('Hysteria2'),     sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'naive',       label: _('NaïveProxy'),    sides: ['server'],           feature: 'with_quic' },
+		{ type: 'mixed',       label: _('Mixed'),         sides: ['server'] },
+		{ type: 'shadowsocks', label: _('Shadowsocks'),   sides: ['client', 'server'] },
+		{ type: 'shadowtls',   label: _('ShadowTLS'),     sides: ['client'] },
+		{ type: 'snell',       label: _('Snell (1.14)'),  sides: ['client', 'server'] },
+		{ type: 'socks',       label: _('Socks'),         sides: ['client', 'server'] },
+		{ type: 'ssh',         label: _('SSH'),           sides: ['client'] },
+		{ type: 'trojan',      label: _('Trojan'),        sides: ['client', 'server'] },
+		{ type: 'tuic',        label: _('Tuic'),          sides: ['client', 'server'], feature: 'with_quic' },
+		{ type: 'wireguard',   label: _('WireGuard'),     sides: ['client'],           feature: ['with_wireguard', 'with_gvisor'] },
+		{ type: 'vless',       label: _('VLESS'),         sides: ['client', 'server'] },
+		{ type: 'vmess',       label: _('VMess'),         sides: ['client', 'server'] }	],
 
 	/* Multiplexing is configured the same way on both sides: the flag and its
 	   dependency set, padding, and the TCP Brutal group.  The client form adds
@@ -364,7 +363,7 @@ return baseclass.extend({
 					continue;
 			}
 
-			o.value(p.type, _(p.label));
+			o.value(p.type, p.label);
 		}
 
 		o.rmempty = false;
