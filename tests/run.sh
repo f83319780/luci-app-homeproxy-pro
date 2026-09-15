@@ -60,6 +60,12 @@ echo "== frontend validators =="
 # with a fake form context instead.
 node "$ROOT/tests/frontend-validators.js" "$ROOT" || FAILED=1
 
+echo "== package JSON and UCI assets =="
+# A malformed acl.d makes rpcd refuse the whole ACL, so every RPC is denied;
+# a menu.d action pointing at a renamed view drops the page from the menu.
+# Nothing else looks at these files.
+node "$ROOT/tests/json-assets.js" "$ROOT" || FAILED=1
+
 echo "== frontend RPC fallbacks =="
 # What the UI claims when an RPC does not answer: the protocol list must not
 # shrink (a saved node's type would be silently rewritten on the next save),
