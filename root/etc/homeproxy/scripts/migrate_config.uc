@@ -8,7 +8,7 @@
 'use strict';
 
 import { cursor } from 'uci';
-import { isEmpty, parseURL, validation } from 'homeproxy';
+import { isEmpty, parseURL, shellQuote, validation } from 'homeproxy';
 
 const uci = cursor();
 
@@ -61,11 +61,29 @@ if (!isEmpty(uci.get(uciconfig, uciinfra, 'tun_gso')))
 if (!uci.get(uciconfig, ucimigration))
 	uci.set(uciconfig, ucimigration, uciconfig);
 
-/* delete old crontab command */
+/* delete old crontab command.
+ *
+ * Not `sed -i`: the bare `-i` form is a busybox/GNU extension, and on a host
+ * with BSD sed it fails with "invalid command code".  The old form sent stderr
+ * to /dev/null as well, so the failure was invisible and the stale entry stayed
+ * behind - which is exactly what the shell twin (hp_crontab_drop in
+ * runtime/service.sh) documents and avoids.  Editing through a temporary file
+ * behaves the same on busybox, GNU and BSD sed, and lets the failure be seen. */
 const migration_crontab = uci.get(uciconfig, ucimigration, 'crontab');
 if (!migration_crontab) {
-	system('sed -i "/update_crond.sh/d" "/etc/crontabs/root" 2>/dev/null');
-	uci.set(uciconfig, ucimigration, 'crontab', '1');
+	const crontab = '/etc/crontabs/root';
+	const tmp = crontab + '.hp-new';
+
+	if (system(sprintf('sed "/update_crond.sh/d" %s > %s', shellQuote(crontab), shellQuote(tmp))) === 0
+	    && system(sprintf('mv -f %s %s', shellQuote(tmp), shellQuote(crontab))) === 0) {
+		uci.set(uciconfig, ucimigration, 'crontab', '1');
+	}
+	else {
+		/* Leave a trace instead of a silent no-op; the marker is not set, so
+		 * the next run tries again. */
+		system(sprintf('rm -f %s', shellQuote(tmp)));
+		warn('migrate_config: could not drop the legacy update_crond.sh crontab entry\n');
+	}
 }
 
 /* log_level was introduced */

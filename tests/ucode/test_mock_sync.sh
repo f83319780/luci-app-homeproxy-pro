@@ -41,12 +41,14 @@ import {
 	isEmpty as p_isEmpty,
 	decodeBase64Str as p_decodeBase64Str,
 	redactUrl as p_redactUrl,
-	parseURL as p_parseURL
+	parseURL as p_parseURL,
+	shellQuote as p_shellQuote
 } from '@@SCRIPTS@@/homeproxy.uc';
 import {
 	isEmpty as m_isEmpty,
 	decodeBase64Str as m_decodeBase64Str,
-	parseURL as m_parseURL
+	parseURL as m_parseURL,
+	shellQuote as m_shellQuote
 } from '@@MOCK-HP@@';
 import { redactUrl as f_redactUrl } from '@@MOCK-FETCHER@@';
 
@@ -71,6 +73,14 @@ const b64_corpus = [
 ];
 for (let v in b64_corpus)
 	same(sprintf('decodeBase64Str(%J)', v), p_decodeBase64Str(v), m_decodeBase64Str(v));
+
+/* --- shellQuote --------------------------------------------------------- */
+const quote_corpus = [
+	'', 'plain', "it's", "a'b'c", 'has space', '"double"', '$var', '`cmd`',
+	'; rm -rf /', 'a\\b', "mix'\"$`"
+];
+for (let v in quote_corpus)
+	same(sprintf('shellQuote(%J)', v), p_shellQuote(v), m_shellQuote(v));
 
 /* --- redactUrl: the fetcher mock's copy -------------------------------- */
 const url_corpus = [

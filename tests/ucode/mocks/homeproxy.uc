@@ -14,6 +14,13 @@
 
 import { urldecode_params } from 'luci.http';
 
+/* Verbatim copy of homeproxy.uc:shellQuote - migrate_config.uc imports it to
+ * build the crontab rewrite, so it has to exist here too. Compared against
+ * production by tests/ucode/test_mock_sync.sh. */
+export function shellQuote(s) {
+	return `'${replace(s, "'", "'\\''")}'`;
+};
+
 export function isEmpty(res) {
 	return !res || res === 'nil' || (type(res) in ['array', 'object'] && length(res) === 0);
 };
