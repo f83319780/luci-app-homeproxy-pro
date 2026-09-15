@@ -98,7 +98,9 @@ jobs:
       - name: Check zh_Hans translation coverage
         # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
         # coverage fails here even when i18n.yml is still queued.
-        run: python3 tests/i18n-coverage.py --warn-below 100
+        # --fail-below: the comment above claims a PR that breaks translation
+        # coverage fails here, and with --warn-below it never could.
+        run: python3 tests/i18n-coverage.py --fail-below 100
 
       - name: Run ucode test suite
         env:

@@ -1531,18 +1531,23 @@ ImmortalWrt **主路由**；SSH 回退分支会把整个 checkout `tar` 上传�
 把测试物料铺到生产路由器上是不该有的默认值。**本轮改为 `root@192.168.1.102`（测试机）**，
 并在注释里写清为什么。这是 §4 之外的一个"默认值即安全隐患"的例子。
 
-#### 2.13.3 i18n 这道 CI 门**永远不可能失败**
+#### 2.13.3 ~~i18n 这道 CI 门**永远不可能失败**~~ ✅ 已修复
 
 `tests/i18n-coverage.py` 只在 `--fail-below` 时 `return 1`；`--warn-below` 只打印
-`::warning` 并 **`return 0`**（`i18n-coverage.py:144-148`）。而两处 CI 用的都是 `--warn-below`：
+`::warning` 并 **`return 0`**。而四处调用用的都是 `--warn-below`，所以覆盖率的下降**不会被任何
+地方拦住**。这属于 §3.1 同一类问题（"不可能失败的检查"）。
 
-- `.github/workflows/arch-test.yml:82`
-- `.github/workflows/i18n.yml:28`（该 workflow 只有这一条命令）
+**已修复**，按"该拦的拦、不该拦的写明理由"分开处理：
 
-实测：`python3 tests/i18n-coverage.py --warn-below 99.99; echo $?` → `0`。
-也就是说覆盖率的**下降不会被 CI 拦住**，只会留一条 warning。当前 724/724 是 100%，
-所以问题还没暴露。这属于 §3.1 同一类问题（"不可能失败的检查"），建议改成
-`--fail-below 100`（或明确写下"故意只告警"的理由）。
+| 调用点 | 现在 | 理由 |
+|---|---|---|
+| `.github/workflows/i18n.yml` | `--fail-below 100` | 它就是那道门 |
+| `.github/workflows/arch-test.yml` | `--fail-below 100` | 该步骤的注释本来就写着"即使 i18n.yml 还在排队，这里也会失败"，而它做不到 |
+| `tests/run.sh` | `--fail-below 100` + `FAILED=1` | 本地套件对快照是硬失败，对 i18n 不该例外 |
+| `.github/workflows/build.yml` | 仍 `--warn-below 100` | **有意**：发布打包不该被翻译缺口卡住，PR 门已经拦了；这一步留着是为了记录数字 |
+
+机制已验证：`--fail-below 100` → 当前 100% 时 exit 0；`--fail-below 100.01` → exit 1
+（证明它现在能失败）；`--warn-below 100.01` → exit 0（证明旧的形状不能）。
 
 #### 2.13.4 指导建议第 27 项有两处已经过期
 

@@ -22,7 +22,10 @@ REMOTE_DIR="${HP_TEST_DIR:-/tmp/hp-tests}"
 FAILED=0
 
 echo "== zh_Hans translation coverage =="
-python3 "$ROOT/tests/i18n-coverage.py" --warn-below 100
+if ! python3 "$ROOT/tests/i18n-coverage.py" --fail-below 100; then
+	echo "FAIL: zh_Hans translation coverage is below 100%"
+	FAILED=1
+fi
 
 echo "== LuCI form snapshots =="
 for target in node client server; do
