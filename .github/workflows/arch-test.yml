@@ -122,11 +122,31 @@ jobs:
         # template (and therefore in the coverage count) before it can pass.
         run: |
           bash .github/rescan-translation.sh
-          if ! git diff --quiet -- po/; then
-            echo "::error title=Translation template::po/ is out of date - run .github/rescan-translation.sh and commit the result"
-            git diff --stat -- po/
+
+          # Compare the msgid SET, not the file. The scanner also records
+          # `#: file:line` for every message, so requiring an unchanged po/
+          # failed on any edit that shifted a line in a view - 788 changed
+          # lines and not one changed string. That is noise, and a gate that
+          # cries wolf gets ignored.
+          #
+          # A msgid that appears or disappears is the thing this step is for:
+          # a new string must reach the template, where the coverage check
+          # above can insist it is translated. Removing one is equally
+          # deliberate and worth seeing.
+          changed="$(git diff -U0 -- po/ | grep -E '^[-+]msgid ' | grep -vE '^[-+]msgid ""$' || true)"
+
+          if [ -n "$changed" ]; then
+            echo "::error title=Translation template::the set of translatable strings changed - run .github/rescan-translation.sh and commit po/"
+            printf '%s\n' "$changed"
             exit 1
           fi
+
+          echo "the translatable string set is unchanged (location drift is ignored)"
+
+
+          # Location comments are therefore allowed to be stale. Regenerating
+          # them is a separate, optional chore; keeping the .pot free of churn
+          # matters more than keeping its line numbers exact.
 
       - name: Run ucode test suite
         env:
