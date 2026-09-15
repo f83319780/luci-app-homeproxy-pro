@@ -202,6 +202,18 @@ else
 	FAILED=1
 fi
 
+echo "== TLS / transport builder tests =="
+rm -rf "$WORK/tls_transport"
+mkdir -p "$WORK/tls_transport"
+cp "$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" "$WORK/tls_transport/"
+cp "$ROOT/tests/ucode/test_tls_transport.uc" "$WORK/tls_transport/"
+if ( cd "$WORK/tls_transport" && ucode test_tls_transport.uc ); then
+	echo "PASS: TLS / transport builder tests"
+else
+	echo "FAIL: TLS / transport builder tests"
+	FAILED=1
+fi
+
 echo "== executeCommand() failure-path test =="
 rm -rf "$WORK/homeproxy_inject"
 mkdir -p "$WORK/homeproxy_inject"
