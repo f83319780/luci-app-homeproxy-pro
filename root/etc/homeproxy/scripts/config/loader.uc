@@ -20,7 +20,10 @@
 
 import { cursor } from 'uci';
 
-import { Config, Node, CREDENTIALS } from './model.uc';
+import {
+	Config, Node, CREDENTIALS, Inbound,
+	INBOUND_CREDENTIALS, INBOUND_OPTIONS, INBOUND_COMMON, INBOUND_TLS_SERVER
+} from './model.uc';
 
 import { PROTOCOL_TO_UCI as PROTOCOL_OPTIONS } from '../parser/mapping.uc';
 
@@ -223,7 +226,11 @@ function normalize_section(cfg) {
 	const item = {};
 
 	for (let k, v in cfg) {
-		if (k[0] === '.')
+		/* substr(), not k[0]: the target ucode (2026.01.16) rejects
+		 * string indexing with "left-hand side expression is not an
+		 * array or object". subscription/repository.uc already uses
+		 * the substr() form for the same check. */
+		if (substr(k, 0, 1) === '.')
 			continue;
 		item[k] = v;
 	}
@@ -298,16 +305,66 @@ function load_access_control(uci) {
 	};
 }
 
+/* The two "read a table of canonical -> UCI names off a section"
+ * helpers shared by the node and inbound paths. Same shape as
+ * load_protocol_options() above; split out so the server side reads
+ * the same way the client side does. */
+function load_table(get, mapping) {
+	const out = {};
+
+	for (let canonical, uci_name in mapping)
+		out[canonical] = get(uci_name);
+
+	return out;
+}
+
+/* PR-04 (Protocol Adapter Completion): a server inbound is now a
+ * domain object like a Node, built here and shaped into sing-box JSON
+ * by config/adapter.uc's InboundFactory. Before this the generator read
+ * the flat UCI section directly (`cfg.snell_version`,
+ * `cfg.shadowsocks_encrypt_method`, ...), so the server path had no
+ * domain model at all.
+ *
+ * Same sub-object split as Node: common (listener-level), credentials,
+ * tls (the shared shape the client uses too), tls_server (the
+ * server-only tail), transport, multiplex, protocol_options. */
+function load_inbound(get, section) {
+	const type = get('type');
+
+	return Inbound.create({
+		id: section['.name'],
+		name: get('label') || section['.name'],
+		type: type,
+		enabled: section.enabled === '1',
+
+		address: get('address'),
+		port: get('port'),
+		firewall: get('firewall'),
+
+		common: load_table(get, INBOUND_COMMON),
+		credentials: load_table(get, INBOUND_CREDENTIALS[type] || {}),
+		tls: load_tls(get),
+		tls_server: load_table(get, INBOUND_TLS_SERVER),
+		transport: load_transport(get),
+		multiplex: load_multiplex(get),
+		protocol_options: load_table(get, INBOUND_OPTIONS[type] || {})
+	});
+}
+
 /* server has one enabled/log_level single section + N inbound sections
- * (each with a `type` of vless / trojan / shadowsocks / ...). The full
- * inbound list is preserved verbatim; A3 reshapes it into the sing-box
- * inbounds. */
+ * (each with a `type` of vless / trojan / shadowsocks / ...). */
 function load_server(uci) {
+	const inbounds = [];
+
+	uci.foreach(UCICONFIG, SECTION.server, (section) => {
+		push(inbounds, load_inbound((name) => node_opt(uci, section['.name'], name), section));
+	});
+
 	return {
 		settings: load_settings(uci, SECTION.server, [
 			'enabled', 'log_level'
 		]),
-		inbounds: load_sections(uci, SECTION.server)
+		inbounds
 	};
 }
 

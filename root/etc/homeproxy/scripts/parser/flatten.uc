@@ -83,21 +83,32 @@ function flatten_transport(node) {
 	if (!t)
 		return out;
 
-	if (t === 'ws')
+	/* The host / path UCI option names depend on the transport: a ws
+	 * transport stores them as ws_path / ws_host, an httpupgrade as
+	 * http_path / httpupgrade_host, plain http as http_host / http_path.
+	 * normalize() collapses both path spellings into transport.path, so
+	 * flatten() has to pick the right one back or a re-written node
+	 * would sprout an http_path the parser never produced (and drop the
+	 * ws_path the loader's `http_path || ws_path` fallback had read). */
+	if (t === 'ws') {
 		out.ws_host = node.transport.headers?.Host;
+		out.ws_path = node.transport.path;
+	}
 
-	if (t === 'httpupgrade')
+	if (t === 'httpupgrade') {
 		out.httpupgrade_host = node.transport.host;
+		out.http_path = node.transport.path;
+	}
 
 	if (t === 'http') {
 		out.http_host = node.transport.host;
+		out.http_path = node.transport.path;
 		out.http_method = node.transport.method;
 	}
 
 	if (t === 'grpc')
 		out.grpc_servicename = node.transport.service_name;
 
-	out.http_path = node.transport.path;
 	out.http_idle_timeout = node.transport.idle_timeout;
 	out.http_ping_timeout = node.transport.ping_timeout;
 	out.grpc_permit_without_stream = node.transport.permit_without_stream;
@@ -216,8 +227,10 @@ export function flatten(node) {
 		...flatten_protocol_options(protocol, node)
 	};
 
+	/* ucode has no `undefined`: an absent key reads as null, so a
+	 * single null check covers both. */
 	for (let k, v in sub)
-		if (v !== null && v !== undefined)
+		if (v !== null)
 			out[k] = v;
 
 	copy_meta(out, node);

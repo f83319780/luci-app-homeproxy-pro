@@ -44,6 +44,12 @@ uci_seed() {
 	done
 }
 
+# The real /etc/config/homeproxy always carries `config homeproxy 'config'`;
+# the sandbox needs it too, because libuci's uci_set() creates an anonymous
+# section when the named one does not exist, and the main_node assertions
+# read the options back by the section name 'config'.
+uci_seed config routing_mode=bypass_mainland_china main_node=urltest
+
 uci_seed cfgUSER0001 label=user-only type=vless address=user.example.com
 uci_seed cfgKEEP00001 label=kept-node grouphash=test-group type=vless \
 	address=old.example.com stale_field=remove-me
@@ -58,9 +64,12 @@ uci_seed cfgDROP00001 label=dropped-node grouphash=test-group type=vless \
 # parser/mapping.uc. Stage the whole parser/ tree into a sibling
 # `parser/` directory so the bare-name imports inside it resolve.
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$STAGE/"
-mkdir -p "$STAGE/parser"
+# repository.uc imports '../parser/flatten.uc', so parser/ must be a
+# sibling of the directory holding repository.uc (STAGE/subscription/),
+# not of STAGE itself.
+mkdir -p "$STAGE/subscription" "$STAGE/parser"
 cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$STAGE/parser/"
-cp "$ROOT/root/etc/homeproxy/scripts/subscription/repository.uc" "$STAGE/"
+cp "$ROOT/root/etc/homeproxy/scripts/subscription/repository.uc" "$STAGE/subscription/"
 cp "$ROOT/tests/ucode/test_subscription_repository.uc" "$STAGE/"
 
 if ( cd "$STAGE" && ucode -L "$STAGE" test_subscription_repository.uc "$SANDBOX" ); then

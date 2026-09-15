@@ -29,9 +29,9 @@
 
 'use strict';
 
-import { isEmpty, strToInt, strToTime, strToBool } from 'homeproxy';
+import { isEmpty, strToInt, strToTime, strToBool, parse_port } from 'homeproxy';
 
-import { parse_port } from './common.uc';
+
 import { get_outbound, get_resolver, get_ruleset, get_direct_override } from './common.uc';
 
 /* --- shared initial block (every routing mode) ------------------------- */

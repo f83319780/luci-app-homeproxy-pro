@@ -139,6 +139,8 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/ucode/test_ucode_grammar.sh` | Pins the ucode dialect: the toolchain must reject `export function ... }` without `;` and object/array destructuring, and must accept the constructs the package uses (`?.`/`??`, object spread, computed keys, template literals). |
 | `tests/ucode/test_generators.sh` (wireguard case) | Asserts the WireGuard fixture keeps its private key, peer public key and local address list, so the endpoint builder cannot silently regress to reading flat UCI option names. |
 | `tests/ucode/test_golden_outbounds.sh` | Builds one outbound per protocol from `tests/fixtures/generators/outbounds.uci` and diffs the result against `tests/snapshots/generator/outbounds.json`, so a field change for any protocol is a reviewable diff. Regenerate with `HP_UPDATE_SNAPSHOTS=1`. |
+| `tests/ucode/test_golden_inbounds.sh` | PR-04: the server-side counterpart. Builds one inbound per protocol from `tests/fixtures/generators/server.uci` and diffs the result against `tests/snapshots/generator/inbounds.json`. The ACME `data_directory` is normalised to `<HP_DIR>/certs` so the snapshot is portable across hosts. Before this existed the server path had no snapshot at all, which is how the fixture's unused `listen_port` option survived. Regenerate with `HP_UPDATE_SNAPSHOTS=1`. |
+| `tests/ucode/test_inbound_adapter.uc` | PR-04: `InboundFactory`'s protocol-shape decisions — snell / shadowsocks must get no `users[]` block (a snell users entry is read as an extra user key and makes sing-box reject the section), vless / vmess keep `flow` / `alterId` per-user, the snell listener set omits `udp_fragment` / `udp_timeout` / `network`, the server-only TLS tail (key material, ECH key, REALITY private key + handshake, ACME) reaches `buildTLSObject()`, hysteria v1 emits `obfs` as a string while hysteria2 emits the object, and the per-protocol credential requirements are enforced. |
 | `tests/ucode/test_protocol_inventory.sh` | Cross-checks the protocol surface: every type named by `parse_uri.uc`, `CREDENTIALS`, `PROTOCOL_OPTIONS`, `REQUIRED_CREDENTIALS`, `OPTION_FIELDS` and the golden snapshot must agree. This is the check that catches "added a protocol to one table and forgot another". |
 | `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
 
@@ -183,7 +185,9 @@ therefore never fail; it is gone, along with the `/* HP_TEST_HOOK */` marker it
 relied on. Two tests replaced it:
 
 * `tests/ucode/test_golden_outbounds.sh` pins the actual emitted JSON per
-  protocol in `tests/snapshots/generator/outbounds.json`.
+  protocol in `tests/snapshots/generator/outbounds.json`; PR-04 added the
+  matching `tests/ucode/test_golden_inbounds.sh` for the server inbounds
+  (`tests/snapshots/generator/inbounds.json`).
 * `tests/ucode/test_protocol_inventory.sh` asserts that the parser, the model,
   the loader option table, the adapter tables and the golden snapshot all name
   the same set of protocols.

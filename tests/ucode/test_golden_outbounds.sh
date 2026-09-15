@@ -37,6 +37,10 @@ sed -e "s#/sbin/validate_data#${VALIDATE_DATA}#" \
 cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$WORK/scripts/config/"
 cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$WORK/scripts/config/"
 cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$WORK/scripts/config/"
+# PR-02: config/loader.uc imports '../parser/mapping.uc'; stage the
+# parser tree as a sibling of config/ or nothing loads.
+mkdir -p "$WORK/scripts/parser"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$WORK/scripts/parser/"
 cp "$FIXTURE" "$WORK/scripts/config/homeproxy"
 
 # One outbound per node, in fixture order.  %.J keeps the JSON value-exact and

@@ -35,7 +35,11 @@ mkdir -p "$WORK/parser" "$WORK/inventory/config"
 # normalize,mapping}.uc; stage the whole tree plus the homeproxy mock
 # so the share-link importer can find every import it needs.
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/parser/homeproxy.uc"
-cp "$SCRIPTS/parser/"*.uc "$WORK/parser/"
+# The test module imports 'parser/uri.uc', which resolves relative to
+# the -L search root, so the parser tree must be staged as a `parser/`
+# subdirectory of that root (not flattened into it).
+mkdir -p "$WORK/parser/parser"
+cp "$SCRIPTS/parser/"*.uc "$WORK/parser/parser/"
 # The Loader imports PROTOCOL_OPTIONS from '../parser/mapping.uc'.
 # After staging, the loader lives at $WORK/inventory/config/loader.uc,
 # so the parser tree must also live at $WORK/inventory/parser/ for the
@@ -101,8 +105,12 @@ cat > "$WORK/inventory/inventory.uc" <<'EOF'
 
 import { readfile } from 'fs';
 
-import { CREDENTIALS } from './config/model.uc';
-import { PROTOCOL_OPTIONS } from './config/loader.uc';
+import {
+	CREDENTIALS, INBOUND_CREDENTIALS, INBOUND_OPTIONS
+} from './config/model.uc';
+/* PR-02 moved the client option table to parser/mapping.uc; the Loader
+ * imports it from there as PROTOCOL_OPTIONS. */
+import { PROTOCOL_TO_UCI as PROTOCOL_OPTIONS } from './parser/mapping.uc';
 import { OPTION_FIELDS, REQUIRED_CREDENTIALS } from './config/adapter.uc';
 
 const parser_types = json(readfile('parser-types.json')) || [];
@@ -174,7 +182,18 @@ for (let type_name in keys(REQUIRED_CREDENTIALS)) {
 		contains(emitted_types, type_name));
 }
 
-/* 4. The golden snapshot must not carry a protocol nobody models. */
+/* 4. The server side of the surface must be modelled too. Every protocol
+ *    with a per-protocol option row must also have a credential row, or
+ *    the Loader reads options for a protocol whose credentials it never
+ *    loads. (The reverse does not hold: trojan / shadowtls / http /
+ *    mixed / naive / socks have credentials and no per-protocol
+ *    options.) */
+for (let name in keys(INBOUND_OPTIONS)) {
+	check(sprintf("INBOUND_OPTIONS.%s has an INBOUND_CREDENTIALS row", name),
+		name in INBOUND_CREDENTIALS);
+}
+
+/* 5. The golden snapshot must not carry a protocol nobody models. */
 for (let type_name in emitted_types) {
 	check(sprintf("golden type '%s' is in PROTOCOL_OPTIONS", type_name),
 		type_name in PROTOCOL_OPTIONS);

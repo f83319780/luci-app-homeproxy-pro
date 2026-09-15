@@ -95,8 +95,12 @@ expect('vless.tls.reality.enabled', vless_node.tls.reality.enabled, '1');
 expect('vless.tls.reality.public_key', vless_node.tls.reality.public_key, 'PUBKEY');
 expect('vless.tls.utls.fingerprint', vless_node.tls.utls.fingerprint, 'chrome');
 expect('vless.transport.type', vless_node.transport.type, 'ws');
-expect('vless.transport.host', vless_node.transport.host, 'ws.example.com');
 expect('vless.transport.path', vless_node.transport.path, '/ws');
+/* A websocket transport keeps its host in `headers.Host`, not `host`
+ * (only the http / httpupgrade transports use `host`), matching the
+ * Loader's load_transport() shape and buildTransportObject()'s
+ * expectation. */
+expect('vless.transport.host', vless_node.transport.host, null);
 expect('vless.transport.headers', vless_node.transport.headers?.Host, 'ws.example.com');
 
 /* --- hysteria2: hy_* UCI -> protocol_options.hop_interval / obfs_type */

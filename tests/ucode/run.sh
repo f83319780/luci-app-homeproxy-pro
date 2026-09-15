@@ -78,26 +78,24 @@ for file in "$SCRIPTS_DIR"/*.uc \
 done
 # Modules are syntax-checked by loading them through `import`. The
 # -e expression is a no-op program; the import itself is what we
-# want to validate. Subscriptions and config modules live in
-# subdirectories, so they need an explicit `.uc` path that ucode's
-# resolver can follow (bare `subscription/filter` is not searched
-# in the -L tree, only top-level module names are).
-for module in homeproxy parser/uri parser/protocols parser/validator parser/normalize parser/flatten parser/mapping; do
+# want to validate. Only top-level module names are searched in the
+# -L tree, so anything in a subdirectory is loaded by absolute path
+# in the second loop below.
+for module in homeproxy; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "/tmp/hp-ucode-syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "/tmp/hp-ucode-syntax.err"
 		FAILED=1
 	fi
 done
-# `config/*.uc` is imported through a relative `./config/*.uc` by both
-# generators, so a syntax error there only surfaces when a generator runs;
-# import it explicitly too so the failure names the module.
-#
-# `generator/*.uc` was added in PHASE 4: client.uc and server.uc are the
-# public entry points and pull every other generator module in transitively.
-# Loading them through `import` is the cheapest way to syntax-check the
-# whole subtree at once.
-for module in subscription/filter subscription/decoder subscription/fetcher subscription/repository \
+# `parser/*.uc` (added in PR-02), `config/*.uc` and `generator/*.uc` are
+# imported through relative paths, so a syntax error there only surfaces
+# when a generator or a test runs; import them explicitly too so the
+# failure names the module. `generator/client.uc` and `generator/server.uc`
+# are the public entry points and pull the rest of that subtree in
+# transitively, which is the cheapest way to syntax-check it.
+for module in parser/uri parser/protocols parser/validator parser/normalize parser/flatten parser/mapping \
+              subscription/filter subscription/decoder subscription/fetcher subscription/repository \
               config/loader config/model config/adapter \
               generator/client generator/server; do
 	if ! ucode -L "$SCRIPTS_DIR" -e "import * as m from \"$SCRIPTS_DIR/$module.uc\";" 2> "/tmp/hp-ucode-syntax.err"; then
@@ -158,7 +156,7 @@ cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$WORK/parse_uri/parser/"
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/parse_uri/"
 cp "$ROOT/tests/ucode/test_parse_uri.uc" "$WORK/parse_uri/"
 
-if ( cd "$WORK/parse_uri" && ucode test_parse_uri.uc ); then
+if ( cd "$WORK/parse_uri" && ucode -L "$WORK/parse_uri" test_parse_uri.uc ); then
 	echo "PASS: parse_uri unit tests"
 else
 	echo "FAIL: parse_uri unit tests"
@@ -171,7 +169,7 @@ echo "== parser/normalize unit tests =="
 # $WORK/parse_uri/ already has parser/ and the homeproxy mock, so we
 # just drop the test next to test_parse_uri.uc.
 cp "$ROOT/tests/ucode/test_parser_normalize.uc" "$WORK/parse_uri/"
-if ( cd "$WORK/parse_uri" && ucode test_parser_normalize.uc ); then
+if ( cd "$WORK/parse_uri" && ucode -L "$WORK/parse_uri" test_parser_normalize.uc ); then
 	echo "PASS: parser/normalize unit tests"
 else
 	echo "FAIL: parser/normalize unit tests"
@@ -185,7 +183,7 @@ echo "== parser/flatten round-trip tests =="
 # directly, so Repository.apply_nodes can write it verbatim and
 # the Loader's next read yields the same canonical Node.
 cp "$ROOT/tests/ucode/test_parser_flatten.uc" "$WORK/parse_uri/"
-if ( cd "$WORK/parse_uri" && ucode test_parser_flatten.uc ); then
+if ( cd "$WORK/parse_uri" && ucode -L "$WORK/parse_uri" test_parser_flatten.uc ); then
 	echo "PASS: parser/flatten round-trip tests"
 else
 	echo "FAIL: parser/flatten round-trip tests"
@@ -286,6 +284,41 @@ sh "$ROOT/tests/ucode/test_generators.sh" "$ROOT" "$WORK/generators" || FAILED=1
 
 echo "== golden protocol snapshot =="
 sh "$ROOT/tests/ucode/test_golden_outbounds.sh" "$ROOT" "$WORK/golden" || FAILED=1
+
+echo "== inbound adapter unit tests =="
+# PR-04: InboundFactory's protocol-shape decisions (snell / shadowsocks get
+# no users[] block, vless / vmess keep flow / alterId per-user, the snell
+# listener set, the server-only TLS tail, hysteria v1 vs v2 obfs, and the
+# per-protocol credential requirements). The golden snapshot pins the
+# emitted JSON for the fixture; this pins the decisions behind it.
+rm -rf "$WORK/inbound_adapter"
+mkdir -p "$WORK/inbound_adapter/config" "$WORK/inbound_adapter/parser"
+# The adapter needs the real homeproxy.uc (buildTLSObject /
+# buildTransportObject / strTo* / parse_port), not the test double; the
+# golden tests stage it the same way. HP_VALIDATE_DATA lets a development
+# host replace /sbin/validate_data, which homeproxy.uc calls.
+INBOUND_VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
+sed -e "s#/sbin/validate_data#${INBOUND_VALIDATE_DATA}#" \
+	"$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/inbound_adapter/homeproxy.uc"
+cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$WORK/inbound_adapter/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$WORK/inbound_adapter/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$WORK/inbound_adapter/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc       "$WORK/inbound_adapter/parser/"
+cp "$ROOT/tests/ucode/test_inbound_adapter.uc"          "$WORK/inbound_adapter/"
+
+if ( cd "$WORK/inbound_adapter" && ucode -L "$WORK/inbound_adapter" test_inbound_adapter.uc ); then
+	echo "PASS: inbound adapter unit tests"
+else
+	echo "FAIL: inbound adapter unit tests"
+	FAILED=1
+fi
+
+echo "== golden inbound snapshot =="
+# PR-04: the server-side counterpart. Before this the server path had no
+# snapshot, which is how the fixture's unused `listen_port` option survived
+# (the generated config carried no listen_port at all and sing-box accepted
+# it, so nothing ever noticed).
+sh "$ROOT/tests/ucode/test_golden_inbounds.sh" "$ROOT" "$WORK/golden-inbounds" || FAILED=1
 
 echo "== protocol inventory =="
 sh "$ROOT/tests/ucode/test_protocol_inventory.sh" "$ROOT" "$WORK/inventory" || FAILED=1

@@ -71,6 +71,11 @@ run_case() {
 	cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$dir/scripts/config/"
 	cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$dir/scripts/config/"
+	# PR-02: config/loader.uc imports '../parser/mapping.uc', so the
+	# parser tree has to be staged as a sibling of config/ or the
+	# generator cannot even load the configuration.
+	mkdir -p "$dir/scripts/parser"
+	cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc "$dir/scripts/parser/"
 
 	# Stage the generator/ subtree that PHASE 4 introduced. The CLI
 	# shells (scripts/generate_*.uc) import from generator/; the

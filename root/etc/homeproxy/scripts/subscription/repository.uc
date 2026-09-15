@@ -31,7 +31,12 @@
 
 import { md5 } from 'digest';
 
-import { flatten } from 'parser/flatten.uc';
+import { isEmpty } from 'homeproxy';
+
+/* Relative, like config/loader.uc's '../parser/mapping.uc': ucode's
+ * resolver only searches top-level module names in the -L tree, so a
+ * bare 'parser/flatten.uc' does not resolve. */
+import { flatten } from '../parser/flatten.uc';
 
 /* --- apply_nodes -------------------------------------------------------- */
 
@@ -160,7 +165,12 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
  * the orchestrator can log "Main node is gone, switching to ..." /
  * "No available node, disable tproxy." exactly as before. */
 function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
-	const { main_node, main_udp_node, has_nodes } = ctx;
+	/* Object destructuring is not part of the dialect the ucode on the
+	 * target accepts (ImmortalWrt ucode 2026.01.16 rejects
+	 * `const { a } = x` with "Expecting variable name"), so pull the
+	 * fields out by name. tests/ucode/test_ucode_grammar.sh guards this. */
+	const main_node = ctx.main_node,
+	      main_udp_node = ctx.main_udp_node;
 	const result = { main_node, main_udp_node, log: [] };
 
 	if (isEmpty(main_node))
@@ -174,7 +184,7 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 		uci.commit(uciconfig);
 		result.main_node = 'nil';
 		result.main_udp_node = 'nil';
-		result.log.push('No available node, disable tproxy.');
+		push(result.log, 'No available node, disable tproxy.');
 		return result;
 	}
 
@@ -196,13 +206,13 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 			uci.set(uciconfig, ucimain, 'main_node', first_server);
 			uci.commit(uciconfig);
 			result.main_node = first_server;
-			result.log.push('Main node is gone, switching to the first node.');
+			push(result.log, 'Main node is gone, switching to the first node.');
 		}
 	} else if (!uci.get(uciconfig, main_node)) {
 		uci.set(uciconfig, ucimain, 'main_node', first_server);
 		uci.commit(uciconfig);
 		result.main_node = first_server;
-		result.log.push('Main node is gone, switching to the first node.');
+		push(result.log, 'Main node is gone, switching to the first node.');
 	}
 
 	if (!isEmpty(main_udp_node) && main_udp_node !== 'same') {
@@ -224,13 +234,13 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 				uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
 				uci.commit(uciconfig);
 				result.main_udp_node = first_server;
-				result.log.push('Main UDP node is gone, switching to the first node.');
+				push(result.log, 'Main UDP node is gone, switching to the first node.');
 			}
 		} else if (!uci.get(uciconfig, main_udp_node)) {
 			uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
 			uci.commit(uciconfig);
 			result.main_udp_node = first_server;
-			result.log.push('Main UDP node is gone, switching to the first node.');
+			push(result.log, 'Main UDP node is gone, switching to the first node.');
 		}
 	}
 

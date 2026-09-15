@@ -61,6 +61,132 @@ export const CREDENTIALS = {
 	direct:  {}
 };
 
+/* Canonical credentials for a server Inbound. A different table from
+ * the client's CREDENTIALS because the server form exposes a smaller
+ * set (no ssh material, no snell userkey) and because snell's server
+ * side reads the psk off the same `password` UCI option the client
+ * node uses for its own psk. Keeping the two tables separate means a
+ * change to one side cannot silently alter the other.
+ *
+ * PR-04 (Protocol Adapter Completion). */
+export const INBOUND_CREDENTIALS = {
+	vless:     { uuid: 'uuid' },
+	vmess:     { uuid: 'uuid' },
+	trojan:    { password: 'password' },
+	hysteria:  { auth_str: 'hysteria_auth_payload', auth_base64: 'hysteria_auth_payload' },
+	hysteria2: { password: 'password' },
+	tuic:      { uuid: 'uuid', password: 'password' },
+	shadowsocks: { password: 'password', method: 'shadowsocks_encrypt_method' },
+	shadowtls: { password: 'password' },
+	snell:     { psk: 'password' },
+	anytls:    { password: 'password' },
+	http:      { username: 'username', password: 'password' },
+	mixed:     { username: 'username', password: 'password' },
+	naive:     { username: 'username', password: 'password' },
+	socks:     { username: 'username', password: 'password' }
+};
+
+/* Per-protocol options on a server Inbound, canonical -> UCI. This is
+ * the server-side counterpart of parser/mapping.uc's PROTOCOL_TO_UCI;
+ * the two are NOT identical - the server side exposes inbound-only
+ * knobs (anytls padding_scheme, hysteria masquerade / packet sizes /
+ * ignore_client_bandwidth, tuic auth_timeout) and does not expose the
+ * client's port-hopping options - so they stay separate tables. A
+ * protocol whose server-side row is missing here produces no
+ * protocol_options rather than reading a flat UCI key. */
+export const INBOUND_OPTIONS = {
+	anytls: {
+		padding_scheme: 'anytls_padding_scheme'
+	},
+	hysteria: {
+		auth_type: 'hysteria_auth_type',
+		up_mbps: 'hysteria_up_mbps',
+		down_mbps: 'hysteria_down_mbps',
+		obfs_password: 'hysteria_obfs_password',
+		masquerade: 'hysteria_masquerade',
+		ignore_client_bandwidth: 'hysteria_ignore_client_bandwidth'
+	},
+	hysteria2: {
+		up_mbps: 'hysteria_up_mbps',
+		down_mbps: 'hysteria_down_mbps',
+		obfs_type: 'hysteria_obfs_type',
+		obfs_password: 'hysteria_obfs_password',
+		obfs_min_packet_size: 'hysteria_obfs_min_packet_size',
+		obfs_max_packet_size: 'hysteria_obfs_max_packet_size',
+		masquerade: 'hysteria_masquerade',
+		ignore_client_bandwidth: 'hysteria_ignore_client_bandwidth'
+	},
+	shadowsocks: {
+		method: 'shadowsocks_encrypt_method'
+	},
+	snell: {
+		version: 'snell_version',
+		obfs_mode: 'snell_obfs_mode'
+	},
+	tuic: {
+		congestion_control: 'tuic_congestion_control',
+		auth_timeout: 'tuic_auth_timeout',
+		zero_rtt_handshake: 'tuic_enable_zero_rtt',
+		heartbeat: 'tuic_heartbeat'
+	},
+	vless: {
+		flow: 'vless_flow'
+	},
+	vmess: {
+		alter_id: 'vmess_alterid'
+	}
+};
+
+/* Listener-level fields every server inbound carries. Inbound-only
+ * (no client outbound emits them), so they are not part of the
+ * client's load_common() table. */
+export const INBOUND_COMMON = {
+	bind_interface: 'bind_interface',
+	reuse_addr: 'reuse_addr',
+	tcp_fast_open: 'tcp_fast_open',
+	tcp_multi_path: 'tcp_multi_path',
+	udp_fragment: 'udp_fragment',
+	udp_timeout: 'udp_timeout',
+	network: 'network'
+};
+
+/* The server-only TLS tail. These options exist because a client
+ * outbound never needs them (key material, ACME, the server half of
+ * the REALITY handshake), so they live on the Inbound rather than
+ * being folded into the shared `tls` sub-object the Loader builds for
+ * both sides. Canonical -> UCI; the Adapter re-keys them back to the
+ * UCI names buildTLSObject() reads, which is the one place the flat
+ * names still exist. */
+export const INBOUND_TLS_SERVER = {
+	key_path: 'tls_key_path',
+	ech_key: 'tls_ech_key',
+	reality_private_key: 'tls_reality_private_key',
+	reality_max_time_difference: 'tls_reality_max_time_difference',
+	reality_server_addr: 'tls_reality_server_addr',
+	reality_server_port: 'tls_reality_server_port',
+	acme: 'tls_acme',
+	acme_domain: 'tls_acme_domain',
+	acme_dsn: 'tls_acme_dsn',
+	acme_email: 'tls_acme_email',
+	acme_provider: 'tls_acme_provider',
+	acme_account_key: 'tls_acme_account_key',
+	acme_key_type: 'tls_acme_key_type',
+	acme_profile: 'tls_acme_profile',
+	acme_disable_http_challenge: 'tls_acme_dhc',
+	acme_disable_tls_alpn_challenge: 'tls_acme_dtac',
+	acme_alternative_http_port: 'tls_acme_ahp',
+	acme_alternative_tls_port: 'tls_acme_atp',
+	acme_external_account: 'tls_acme_external_account',
+	acme_external_account_key_id: 'tls_acme_ea_keyid',
+	acme_external_account_mac_key: 'tls_acme_ea_mackey',
+	dns01_challenge: 'tls_dns01_challenge',
+	dns01_provider: 'tls_dns01_provider',
+	dns01_access_key_id: 'tls_dns01_ali_akid',
+	dns01_access_key_secret: 'tls_dns01_ali_aksec',
+	dns01_region_id: 'tls_dns01_ali_rid',
+	dns01_api_token: 'tls_dns01_cf_api_token'
+};
+
 /* --- Domain types ------------------------------------------------------- */
 
 export const Config = {
@@ -155,6 +281,75 @@ export const Node = {
 
 	/* sing-box tag convention lives here, not scattered through the generator */
 	tag: (node) => 'cfg-' + node.id + '-out'
+};
+
+/* The server-side counterpart of Node. Same layering discipline: it
+ * describes what the user configured (listen address/port, protocol,
+ * credentials, TLS, transport, per-protocol knobs) and knows nothing
+ * about sing-box JSON. The Inbound adapter (config/adapter.uc,
+ * InboundFactory) is what turns it into a sing-box inbound.
+ *
+ * Field grouping mirrors Node deliberately so the Adapter's two halves
+ * read the same way:
+ *   common           listener-level shared fields (bind_interface,
+ *                    reuse_addr, tcp_fast_open, ...)
+ *   credentials      canonical credential names
+ *   tls              shared TLS shape (same load_tls() the client uses)
+ *   tls_server       server-only TLS tail (key material, ACME, the
+ *                    server half of the REALITY handshake)
+ *   transport        shared transport shape (same load_transport())
+ *   multiplex        shared multiplex shape
+ *   protocol_options per-protocol knobs
+ *
+ * PR-04 (Protocol Adapter Completion). */
+export const Inbound = {
+	create: (opts) => ({
+		/* identity */
+		id: opts.id,
+		name: opts.name,
+		type: opts.type,
+		enabled: opts.enabled,
+
+		/* listener */
+		address: opts.address,
+		port: opts.port,
+
+		/* firewall is consumed by firewall_pre.uc (which decides the
+		 * nft accept rules), not by the inbound adapter. It stays on the
+		 * model so the server section is described in one place. */
+		firewall: opts.firewall,
+
+		common: opts.common || {},
+		credentials: opts.credentials || {},
+		tls: opts.tls || {},
+		tls_server: opts.tls_server || {},
+		transport: opts.transport || {},
+		multiplex: opts.multiplex || {},
+
+		protocol_options: opts.protocol_options || {}
+	}),
+
+	/* Same scope as Node.validate(): cross-protocol sanity the model
+	 * can express without naming a sing-box field. The per-protocol
+	 * rules live in the Adapter (InboundFactory.problems). */
+	validate: (inbound) => {
+		let problems = [];
+
+		if (!inbound.type)
+			problems = [...problems, 'missing type'];
+
+		/* An inbound with no listen address is legitimate (sing-box
+		 * defaults to all interfaces), but a port is required. */
+		if (inbound.port == null || int(inbound.port) < 1 || int(inbound.port) > 65535)
+			problems = [...problems, `invalid port '${inbound.port}'`];
+
+		return problems;
+	},
+
+	/* sing-box tag convention for a server inbound. Uses `id` (the UCI
+	 * section name) rather than `name` (the user's label) so renaming a
+	 * label does not change the tag. */
+	tag: (inbound) => 'cfg-' + inbound.id + '-in'
 };
 
 /* --- Config helpers ----------------------------------------------------- */
