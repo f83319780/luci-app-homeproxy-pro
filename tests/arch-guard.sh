@@ -156,6 +156,63 @@ for f in subscription_urls filter_keywords; do
 done
 
 echo
+echo "== guard 3: the ACL grants only what the browser actually writes =="
+
+# The certificate buttons and the staging path each one uploads to.  The
+# frontend derives /tmp/homeproxy_cert_<name>.tmp from the same name it passes
+# to certificate_write, so the button list is the source of truth for what the
+# ACL needs.
+BTN="$(grep -rhoE "uploadCertificate[^;]*'[a-z_]+'\)" "$VIEWS" \
+	| grep -oE "'[a-z_]+'\)$" | tr -d "')" | sort -u)"
+
+if [ -n "$BTN" ]; then
+	pass "found the certificate upload buttons: $(printf '%s ' $BTN)"
+else
+	fail "could not find any uploadCertificate call site under $VIEWS"
+fi
+
+for n in $BTN; do
+	if grep -q "/tmp/homeproxy_cert_$n.tmp" "$ACL"; then
+		pass "the ACL grants the staging path for $n"
+	else
+		fail "the ACL is missing the staging path for $n"
+	fi
+done
+
+# The write-file block, as a list of paths.
+WRITE_FILES="$(awk '
+	/"write"[[:space:]]*:/ { inwrite = 1 }
+	inwrite && /"file"[[:space:]]*:/ { infile = 1; next }
+	infile && /^[[:space:]]*}/ { infile = 0; inwrite = 0; next }
+	infile { print }
+' "$ACL" | grep -oE '"/[^"]*"' | tr -d '"')"
+
+if [ -n "$WRITE_FILES" ]; then
+	pass "parsed the ACL write-file list ($(printf '%s\n' "$WRITE_FILES" | grep -c . ) paths)"
+else
+	fail "could not parse the ACL write-file list"
+fi
+
+# The file ACL governs what a *browser session* may touch through fs.*.  The
+# backend writes certs/ and resources/ as root, authorised by its ubus method
+# entry - not by this list.  So a /etc/ entry here grants nothing the feature
+# needs, and does grant a session holding only this ACL the ability to
+# overwrite server_privatekey.pem directly through fs.write, bypassing the PEM
+# and binary checks in certificate_write.
+ETC_WRITES="$(printf '%s\n' "$WRITE_FILES" | grep '^/etc/' || true)"
+if [ -z "$ETC_WRITES" ]; then
+	pass "the ACL write list grants no /etc/ path"
+else
+	fail "the ACL write list grants /etc/ paths no browser operation uses:"
+	printf '      %s\n' "$ETC_WRITES"
+fi
+
+# The general form, so a future fs.write has to come with a deliberate ACL
+# change rather than silently inheriting a stale grant.
+assert_empty "the frontend makes no fs.write call" \
+	grep -rn "fs\.write" "$VIEWS"
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
