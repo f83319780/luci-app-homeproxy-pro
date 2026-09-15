@@ -6,9 +6,29 @@
 >
 > 分歧处理原则：**具体改动细节以本文为准**（本文有逐项现状证据与 commit 记录）；
 > **优先级与边界规则以那一份为准**（尤其第 28 项 Architecture Guard）。
+>
+> 现状对齐见 §0.4（28 项逐条对照）与 §0.5（7 个 PR 路线映射）。
 
-评审对象：`szwjp/luci-app-homeproxy-pro`，分支 `main`，HEAD `ad43ee2`。
-评审方式：全量阅读 + 目标设备实测（ImmortalWrt，`ucode-2026.01.16~85922056-r1`）。
+## 文档分工与口径
+
+本仓库有三份架构文档，职责不同，**不要互相替代**：
+
+| 文档 | 定位 | 回答的问题 | 权威性 |
+|---|---|---|---|
+| `homeproxy_architecture_refactor_agent_guide.md` | 规格 / 执行手册 | "目标架构长什么样、分哪 9 个 PHASE、ABSOLUTE RULES 是什么" | 目标定义。其 PHASE 清单按 1.14 时代的仓库快照写就，其中列出的文件路径（如 `parse_uri.uc`）已被 PR-02 移动，**引用时以本文的现状证据为准** |
+| 本文 `architecture-improvement-plan.md` | 实施账本 | "每一 PHASE 现在到底做到哪、证据是什么、commit 是哪个、还缺什么" | **改动细节的唯一权威**：具体文件、行号、字段、commit |
+| `重构实施间断性指导建议.md` | 判断基准 | "接下来按什么边界推进、什么该冻结、什么优先" | **优先级与边界的唯一权威**：尤其第 28 项 Architecture Guard |
+
+**测量口径说明（两份文档"结论一致"的确切含义）**：本文 §0.1 的 PHASE 表算术平均
+（PR-05 之前 83.5%，之后 **87.5%**）是**实施进度**；指导建议的 **80–85%** 是**架构边界成熟度**。
+两者不矛盾：前者按"每层建好了没有"打分，后者按"边界锁死了没有"打分，
+差值恰好等于 §0.4 里未完成的那几项（PR-06/07 与 on-target CI）。
+用一句话说：**功能账 ~88%，边界账 80–85%**。
+
+评审对象：`szwjp/luci-app-homeproxy-pro`，分支 `main`。
+本文覆盖 `ca01141`（PR-01）→ `7e561e0`（HEAD，pinned-ucode 轮）区间的实施记录；
+早期 P0/PHASE 6-7 证据取自基线 `599a10b` / `19eb77c` / `0b…`（各处单独标注）。
+评审方式：全量阅读 + 目标设备实测 + 本机 pinned-ucode testbed（见 §2.3.2）。
 状态标记：**PASS / FAIL / NOT RUN**。
 
 ---
@@ -17,28 +37,46 @@
 
 ### 0.1 完成度
 
-按文档的 9 个 PHASE 取平均，目前约 **95%**（PHASE 6 已接近完成，PHASE 9 到 95%，
-PHASE 4 已落地 —— `generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
-§4 安全 8/9 项已落地 —— ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS
-防御、acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
-PHASE 9 本轮补齐 5/6 —— `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、
-`migrate_config` 36 项、`firewall_pre` 8 场景 + CI 快照循环补 `client`，仅剩 on-target CI job，
-详见 §2.9；
-**PHASE 1 Domain Model 收尾已落地** —— `load_sections()` 走 `normalize_section()`，
-5 个 `cfg.enabled !== '1'` 站点全改 `!cfg.enabled`，14 个 `cfg['.name']` 站点全改 `cfg.name`，
-`Node.raw` / `Config.endpoints` / 3 个 `ConfigQuery` 死 helper 删掉，详见 §2.1；
-**PHASE 2 Parser 目录化 + 归一化 + 校验分离已落地** —— `scripts/parser/{uri,protocols,
-validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc`
-导入，详见 §2.2；
-**PHASE 5 Subscription Pipeline 收尾已落地** —— `parser/flatten.uc` 补 canonical ↔ flat
-闭环；`Repository = { apply_nodes, apply_main_node_refs, scrub_stale_urltest_refs }`
-接收 canonical Node，把 6 处 `uci.set/commit` 收敛；`update_subscriptions.uc` 改用
-`Loader.load()` 读 subscription，自己零 UCI 写入，详见 §2.5；
-**PHASE 3 Protocol Adapter 收尾已落地** —— `Inbound` 领域模型 + `InboundFactory`，
-WireGuard 走 `EndpointFactory`，`generator/server.uc` 只剩编排；
-同时修掉 PR-01～03 引入的 12 处缺陷（详见 §2.3.1 —— 它们此前从未被 CI 跑到，
-因为 CI 的 toolchain 构建步骤一直失败，本次一并修好）。
-剩余部分见 §0.3。
+按下面 PHASE 表的 10 行（PHASE 0–9）**取算术平均**：
+
+| | PHASE 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 平均 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| PR-05 之前 | 100 | 95 | 90 | 95 | 95 | 95 | 85 | 40 | 45 | 95 | **83.5%** |
+| PR-05 之后 | 100 | 95 | 90 | 95 | 95 | 95 | 85 | **80** | 45 | 95 | **87.5%** |
+
+> **口径修正**：本文件此前写"约 95%"，与它自己的 PHASE 表对不上（表里 PHASE 6/7/8 是
+> 85/40/45）。按表计算是 **83.5%** —— 这正好落在指导建议"整体架构成熟度 80–85%"的区间内，
+> 也就是说两份文档本来就没有分歧，是这里的叙述数字写飘了。现值 **87.5%**（PR-05 把
+> PHASE 7 从 40 推到 80）。
+
+已落地的部分（PHASE 1/2/3/4/5 收尾、§4 安全 8/9、PHASE 9 收尾 5/6、PHASE 7 抽离）：
+
+- PHASE 4：`generator/*.uc` 七模块拆分 + 10 行 CLI 壳 + sed 注入清除，详见 §2.4；
+- §4 安全 8/9：ACL 拆分、路径白名单、订阅响应上限、URL 脱敏、renderStatus XSS 防御、
+  acllist 错误上报、poll 泄漏修复、证书上传竞态修复，详见 §4 表格；
+- PHASE 9 补齐 5/6：`client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、
+  `migrate_config` 36 项、`firewall_pre` 8 场景 + CI 快照循环补 `client`，仅剩 on-target CI job，
+  详见 §2.9；
+- **PHASE 1 Domain Model 收尾**：`load_sections()` 走 `normalize_section()`，
+  5 个 `cfg.enabled !== '1'` 站点全改 `!cfg.enabled`，14 个 `cfg['.name']` 站点全改 `cfg.name`，
+  `Node.raw` / `Config.endpoints` / 3 个 `ConfigQuery` 死 helper 删掉，详见 §2.1；
+- **PHASE 2 Parser 目录化 + 归一化 + 校验分离**：`scripts/parser/{uri,protocols,
+  validator,normalize,mapping,flatten}.uc` 建好，Loader 的 `PROTOCOL_OPTIONS` 现在从 `parser/mapping.uc`
+  导入，详见 §2.2；
+- **PHASE 5 Subscription Pipeline 收尾**：`parser/flatten.uc` 补 canonical ↔ flat
+  闭环；`Repository = { apply_nodes, apply_main_node_refs, scrub_stale_urltest_refs }`
+  接收 canonical Node，把 6 处 `uci.set/commit` 收敛；`update_subscriptions.uc` 改用
+  `Loader.load()` 读 subscription，自己零 UCI 写入，详见 §2.5；
+- **PHASE 3 Protocol Adapter 收尾**：`Inbound` 领域模型 + `InboundFactory`，
+  WireGuard 走 `EndpointFactory`，`generator/server.uc` 只剩编排；
+  同时修掉 PR-01～03 引入的 12 处缺陷（详见 §2.3.1 —— 它们此前从未被 CI 跑到，
+  因为 CI 的 toolchain 构建步骤一直失败，本次一并修好）；
+- **PHASE 7 Runtime 抽离（PR-05）**：`init.d/homeproxy` 517 → 253 行，
+  `scripts/runtime/{service,dns,firewall,net}.sh` 承接 dnsmasq / fw4 / tproxy-TUN / 服务与
+  procd 注册；离机差分 trace 测试证明行为逐字未变，真机 192.168.1.102 验证了 procd 生命周期，
+  详见 §2.7 与 §2.10。
+
+剩余部分见 §0.2。
 
 | PHASE | 内容 | 状态 | 说明 |
 |---|---|---|---|
@@ -48,8 +86,8 @@ WireGuard 走 `EndpointFactory`，`generator/server.uc` 只剩编排；
 | 3 | Protocol Adapter | ✅ ~95% | PR-04 已落地（commit f657063）：`Inbound` 领域模型 + `INBOUND_CREDENTIALS`/`INBOUND_OPTIONS`/`INBOUND_COMMON`/`INBOUND_TLS_SERVER` 四张表；`InboundFactory` 与 `OutboundFactory` 同形；WireGuard endpoint 也搬进 `EndpointFactory`，Generator 不再持有协议构建逻辑；`generator/server.uc` 165 → 60 行；顺带修掉 fixture 的 `listen_port` 缺陷并新增 inbound golden 快照 |
 | 4 | Generator 拆分 | ✅ ~95% | `generator/` 子树七模块（`common/dns/inbound/outbound/route/ruleset/client`）+ `server.uc`，10 行 CLI 壳直接 `Loader.load(HP_DIR+'/config')`，`__LOADER_DIR__` / `HP_TEST_HOOK` / `__HP_TEST_DOMAIN_MODEL__` 全部从源码清除；golden 字节级一致（client 6773 / custom 1860 / wireguard 3755 / partial_invalid 3494）；`direct_overrides` 改成编排器持有的显式参数 |
 | 5 | Subscription Pipeline | ✅ ~95% | PR-03 已落地（commit e88f7c7）：`parser/flatten.uc` 补 canonical ↔ flat 闭环；`Repository` 现在接收 canonical Node 并把 6 处 `uci.set/commit` 收敛成 3 个公开方法（`apply_nodes` / `apply_main_node_refs` / `scrub_stale_urltest_refs`）；`update_subscriptions.uc` 改用 `Loader.load()` 读 subscription，自己零 UCI 写入；剩余 = decoder 的 SIP008 tag 抽出独立 normalizer（可选） |
-| 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；缺 on-target procd 验证 |
-| 7 | Runtime | 🟡 ~40% | `runtime/{config,health}.sh` 已抽、重复 `sing-box check` 已去；`dns`/`firewall`/`service` 仍在 init.d（517 行） |
+| 6 | Candidate Config | 🟢 ~85% | known-good / 生成失败回退 / 健康门 / 回滚已落地并有 16 项测试；PR-05 验证轮在真机 192.168.1.102 跑通了 `reload` + 健康门 + known-good 刷新（`Reload completed.`）；**回滚分支仍只在离机测试里覆盖**，真机未触发（要触发需要一份能过 `sing-box check` 但起不来的配置） |
+| 7 | Runtime | ✅ ~80% | **PR-05 已落地**：`init.d/homeproxy` 517 → 253 行，dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 实例注册 / 生成事务全部搬到 `scripts/runtime/{service,dns,firewall,net}.sh`（+ 既有 `config.sh`/`health.sh`）。剩余 = 观点 18 的健康分级（listener / functional）与观点 21 的显式状态机，见 §2.10.3 与 §2.10.5 |
 | 8 | LuCI | 🟡 ~45% | TLS/Transport 已抽到 `homeproxy.js`；双 parser 已消除；协议表前后端仍 6 份不同步，`node.js`↔`server.js` 仍有 ~229 行重复 |
 | 9 | Test / CI | 🟢 ~95% | pin ucode + 语法金丝雀 + 取消全部 SKIP + golden 快照（含真实 `sing-box check`）+ 协议清单不变量 + 运行时事务测试 + shell 语法检查；本轮补齐 `client.json` 快照、TLS/Transport 直测、`subscription/fetcher` 单测、`migrate_config` 36 项、`firewall_pre` 8 场景、CI 快照循环含 `client`；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 
@@ -57,11 +95,14 @@ WireGuard 走 `EndpointFactory`，`generator/server.uc` 只剩编排；
 `Subscription Failure → Candidate Rejected → Old Config Preserved → Old Runtime Preserved`
 **已经成立**（§2.6 已实施）。**PHASE 4 Generator 拆分、§4 安全 8/9、PHASE 9 收尾 5/6、
 PHASE 1 Domain Model 收尾（PR-01）、PHASE 2 Parser 目录化 + 归一化 + 校验分离（PR-02）、
-PHASE 5 Subscription Pipeline 收尾（PR-03）也已落地**（commits `ca01141` + 33994fa +
-e88f7c7），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"，而是纯粹的结构性债务：
-**可维护性**（PHASE 8 LuCI 模块化）与**运行时抽离**（PHASE 7）。
+PHASE 5 Subscription Pipeline 收尾（PR-03）、PHASE 3 Protocol Adapter 收尾（PR-04）、
+PHASE 7 Runtime 抽离（PR-05）也已落地**（commits `ca01141` + 33994fa + e88f7c7 +
+f657063 + PR-05），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"：
+**实施账上只剩 PHASE 8 LuCI 模块化**，而**结构账上还欠一件事 —— 边界没有锁死**
+（§0.4 的 ❌ 三项 = PR-06 / PR-07 / on-target CI）。这正是指导建议 §九 的判断：
+"把已经存在的层次真正变成不可越界的架构边界"。
 
-### 0.3 剩余大项与工时估算
+### 0.2 剩余大项与工时估算
 
 按 agent 连续跟进（含在目标设备上验证）计。**估算口径**：一个 agent 的净工作时长，含改代码、
 跑套件、在设备上复现/验证、更新 golden 快照与文档；不含人工 code review 的等待时间。
@@ -73,27 +114,30 @@ e88f7c7），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"
 | ~~C~~ | ~~§4 安全（ACL 拆分、路径后端白名单、订阅响应上限、日志脱敏、innerHTML/poll/临时文件竞态）~~ | ~~中~~ | ~~中（路径白名单可能影响既有配置）~~ | ~~5 – 9~~ ✅ 已落地 8/9 项（commit `d9a4dac` + `0bd1b65`）；剩"前端 RPC 无统一封装"留作后续 PR |
 | ~~D~~ | ~~PHASE 1 Domain Model 收尾（dns/routing/server 领域化 + 删 raw/死代码）~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit `ca01141`，PR-01 §A + §B）；server inbound 领域化留在 H（PR-04） |
 | ~~E~~ | ~~PHASE 2 Parser 目录化 + normalize/validator + 唯一字段映射~~ | ~~中~~ | ~~中~~ | ~~4 – 7~~ ✅ 已落地（commit 33994fa，PR-02）；Repository 切换到 canonical Node 写留在 H（PR-03）；validator 扩展（missing_credential / invalid_tls）留作后续 PR |
-| F | PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`） | 中 | 高（只能真机验证 procd） | 4 – 8 |
+| ~~F~~ | ~~PHASE 7 Runtime 抽离（`service`/`dns`/`firewall`）~~ | ~~中~~ | ~~高（只能真机验证 procd）~~ | ~~4 – 8~~ ✅ 已落地（PR-05，见 §2.7 / §2.10）；离机差分 trace 测试 + 真机 192.168.1.102 procd 生命周期验证；剩健康分级与状态机（§2.10.3 / §2.10.5） |
 | ~~G~~ | ~~PHASE 9 收尾（`client.json` 快照、TLS/Transport 单测、on-target CI、剩余 quirk 测试、无测试文件补齐）~~ | ~~中~~ | ~~低–中（on-target 部分需要设备/硬件）~~ | ~~5 – 9~~ ✅ 已落地 5/6（commit `db1d200` `ac910b6` `b23f9c3` `e17b75d` `b0e4a33`）；仅剩 on-target CI job（需常驻测试设备或 QEMU-in-CI） |
 | ~~H1~~ | ~~PHASE 5 收尾（normalizer/validator、6 处 `uci.set/commit` 收敛、Repository canonical Node 写）~~ | ~~中~~ | ~~低–中~~ | ~~5 – 8~~ ✅ 已落地（commit e88f7c7，PR-03） |
 | ~~H2~~ | ~~PHASE 3 server inbound 领域化（`generator/server.uc` 走 Domain Model / Adapter）~~ | ~~中~~ | ~~中~~ | ~~3 – 5~~ ✅ 已落地（commit f657063，PR-04） |
 | I | 文档与注释债务（~~`architecture-review.md` 部分结论已失效~~ 该文件已随本次改动删除、README、头注释） | 小 | 低 | 1 – 2 |
-| | **合计（A / C / D / E / G / H1 / H2 已完成）** | | | **12 – 23** |
+| | **合计（A / C / D / E / F / G / H1 / H2 已完成）** | | | **12 – 23**（只剩 B 与 I 未完成：9 – 15 + 1 – 2） |
 
 **最小可用集合**（只求"稳、能跑、可维护"）：
 ~~**A + C + G ≈ 16 – 28 工时**~~ ✅ **A / C / G 已完成**（`0c67d77`、`d9a4dac`+`0bd1b65`、
 `db1d200`+`ac910b6`+`b23f9c3`+`e17b75d`+`b0e4a33`），**D 也已完成**（`ca01141`），
-**E 也已完成**（33994fa）。原定的三步顺序已走完：A → C → G → D → E → H1 → H2。
-**下一批从 F 开始**（PHASE 7 Runtime 抽离，等有 on-target CI 再做），最后 B
-（LuCI 模块化，必须配人工回归）。
+**E 也已完成**（33994fa），**F 也已完成**（PR-05，见 §2.10）。
+原定的三步顺序已走完：A → C → G → D → E → H1 → H2 → F。
+**下一批只剩 B**（LuCI 模块化，必须配人工回归，9 – 15 工时）与 I（文档债务，1 – 2 工时）。
+按 §0.5 的建议，PR-07 Architecture Guard 应插在 B 之前做——它成本最低、且能保护 B 的改动。
 
 **无法由 agent 单独闭环的部分**（必须有人/设备参与，估时不含在上表内）：
 - 浏览器里点一次"导入分享链接"（RPC 后端已在设备上验证通过，剩余只有 DOM/Promise 接线）。
-- 真机 flash 一次、跑一遍 `reload`/回滚（procd 行为）。
+- ~~真机 flash 一次、跑一遍 `reload`/回滚（procd 行为）。~~ **PR-05 验证轮已在
+  192.168.1.102 上跑通 `start` / `reload`+健康门 / `stop`**（§2.10.7）；**回滚分支**与
+  `service_triggers` 触发的 reload 仍需人工。
 - LuCI 各表单的人工目视确认（快照只能证明结构没变，不能证明可用）。
 - 若要让 CI 覆盖 on-target 用例，需要一台常驻测试设备或 QEMU-in-CI 环境。
 
-### 0.2 P0 清单（6 项，全部已修复）
+### 0.3 P0 清单（6 项，全部已修复）
 
 1. ~~**P0-1 目标设备 ucode 无法解析重构模块 ⇒ 生成器 / 订阅更新无法编译 ⇒ 服务无法启动**~~
    **已修复**（§1.1 `export function` 缺 `;`、§1.1b 对象解构），目标设备全套 ucode 测试已 **PASS**（见附录）。
@@ -106,6 +150,78 @@ e88f7c7），所以剩下的不再是"能不能跑"，也不是"覆盖够不够"
 5. ~~**P0-5 单个非法节点 `die()` 掉整份配置**~~ **已修复**（§1.5）。
 6. **P0-6 各协议 outbound 存在 sing-box 1.14 不接受的字段** —— 由新的 golden schema 检查发现，
    **已修复**（§1.6）。
+
+### 0.4 指导建议 28 项逐条对照
+
+指导建议是**优先级与边界规则**的权威，本文是**改动细节**的权威。本节把 28 项逐条落到本文的
+证据行上，使两份文档可以互相校验。**判定口径**：✅ = 已达成且有本期证据；🟡 = 部分达成，
+缺口已定位；❌ = 未开始。
+
+> 复核时间：`7e561e0`。所有 ✅ 都可在本文件对应章节找到 commit 或 `file:line` 证据；
+> 所有 🟡/❌ 都在 §0.2 或 §2.10–§2.13 里有对应的工作项。
+
+| # | 观点 | 判定 | 本期证据（本文 §／commit／file:line） | 归属 |
+|---|---|---|---|---|
+| 01 | 已从"脚本堆叠"转为分层架构 | ✅ | `scripts/{config,parser,generator,subscription,runtime}` 六目录；§2.1–§2.5 | — |
+| 02 | 最大风险是边界未收敛；冻结 Generator | 🟡 | 冻结已生效：PR-05 全程**未改 `generator/` 一个字节**（§2.4 `0c67d77` 之后无结构性改动）；**边界仍未锁死** | PR-07 |
+| 03 | Domain Model 是唯一内部事实来源 | 🟡 | `Node`/`Inbound` 是真领域对象（`model.uc:209,305`）；`dns/routing` 仍只是 `normalize_section()` 归一化后的 dict，**不是**领域对象（§2.1 §A 选了括号里的第二条路） | 后续 |
+| 04 | Domain Model 不知道 sing-box JSON | ✅ | `config/` 下无 sing-box JSON 构造；JSON 概念只出现在 `model.uc` 的**注释**里；构造集中在 `config/adapter.uc` | PR-07 守护 |
+| 05 | `raw` 只能作兼容层，不得成为逃生通道 | 🟡 | `Node.raw` 已删（§2.1 §B）；**`tls.raw` 仍在且已是死字段** —— 见 §2.13.1 | PR-07 后的小 PR |
+| 06 | Parser 是"输入格式 → Normalized Node"纯转换器 | ✅ | `parser/` 全目录对 `cursor()`/`uci.get` 零命中（唯一 `uci.` 命中是 `flatten.uc:201` 的注释与 `protocols.uc` 的注释） | PR-07 守护 |
+| 07 | 统一输出 Canonical Node，协议特例进 `protocol_options` | ✅ | `parser/normalize.uc` + `parser/mapping.uc` 唯一映射表（§2.2 §B） | — |
+| 08 | Parse / Normalize / Validate 明确分层 | 🟡 | 三层已分目录（§2.2 §A）；但 validator 只覆盖 `invalid_host`/`invalid_port`，缺 `missing_credential`/`invalid_tls` | 小 PR |
+| 09 | Adapter 只做协议差异，不读 UCI，纯函数 `create(node, context)` | ✅ | `config/adapter.uc` 对 `uci.`/`cursor()` 零命中；`OutboundFactory`/`InboundFactory`/`EndpointFactory` 同形（§2.3 §B） | PR-07 守护 |
+| 10 | Generator 保持"Domain → sing-box JSON"单向职责 | ✅ | `generator/` 全目录对 `uci.`/`cursor()` **零命中**（本期实测） | PR-07 守护 |
+| 11 | Generator 拆分已足够，进入冻结 | ✅ | §2.4：八模块 + 43/37 行 CLI 壳；本期未再拆分 | 政策 |
+| 12 | WireGuard 等特殊协议走 Domain/Adapter，不在 Generator 特判 | ✅ | §2.3 §B `EndpointFactory`；`generator/outbound.uc` 的 `generate_endpoint()` 只剩委托 | — |
+| 13 | Subscription 形成完整纯流水线 | ✅ | §2.5：`fetch → decode → parse → normalize → validate → filter → repository` | — |
+| 14 | Pure stage 不得修改 UCI | ✅ | `subscription/{decoder,fetcher,filter}.uc` 对 `uci.` 零命中；`parser/flatten.uc` 唯一命中是注释 | PR-07 守护 |
+| 15 | `update_subscriptions.uc` 退化为 Orchestrator | ✅ | 全文 `uci.set/commit/delete` **零命中**（§2.5 §C 本轮勘误）；只留 `cursor()` 交给 Repository | — |
+| 16 | Repository 是唯一持久化边界 | ✅ | 订阅链路上 `subscription/repository.uc` 是唯一 UCI 写入者（37 处 `uci.`） | PR-07 守护 |
+| 17 | Candidate / Transaction / Rollback 三层概念 | ✅ | §2.6：文件快照路线（`runtime/config.sh` + known-good），**未**依赖"跨进程未提交 UCI 可见" | — |
+| 18 | Runtime 健康应超越"进程活着" | 🟡 | `runtime/health.sh`（54 行）仍只做实例探测（`pgrep` + ubus 二选一）；**listener / functional 两级仍缺失** | PR-05 续（§2.10.3） |
+| 19 | `init.d/homeproxy` 继续减负 | ✅ | **PR-05 已落地**：517 → **253 行**；`runtime/{service,dns,firewall,net}.sh` 承接 dnsmasq / fw4 / tproxy-TUN / 版本闸门 / cron / 运行时文件 / procd 注册 / 生成事务（§2.7、§2.10） | — |
+| 20 | 已有 `procd respawn`，不重复实现 supervision | ✅ | `procd_set_param respawn` ×3（`init.d:263,313,320`）；全文件无 `while true`/`sleep` 守护循环 | — |
+| 21 | Known-Good 成为正式 Runtime 状态 | 🟡 | known-good 副本 + 回滚**机制**已在（§2.6）并在真机验证轮跑通刷新；但**没有**显式 `KNOWN_GOOD→CANDIDATE→VALIDATING→ACTIVATING→HEALTHY` 状态机 | PR-05 续（§2.10.5） |
+| 22 | 前端最大问题是模块重复而非功能不足 | ✅ | §2.8 重复表；本轮复核见 §2.11 | PR-06 |
+| 23 | 前端协议定义与 Backend Domain Model 对齐 | ❌ | 仍是多份副本；`node.js:534` 与 `server.js:351` 的 snell 版本仍真实分叉 | PR-06 |
+| 24 | 不做无证据支持的 frontend 大规模 rewrite | ✅ | §4 只做有实证 sink 的定向加固（`renderStatus` allow-list + poll 守卫），未做 DOM 全面替换 | 政策 |
+| 25 | 从功能测试升级到架构不变量测试 | 🟡 | `test_protocol_inventory.sh` 已是跨层不变量（122 项）；**边界类检查为零** | PR-07 |
+| 26 | Golden / Snapshot 继续作为重构安全网 | ✅ | `snapshots/{node,client,server}.json` + `generator/{outbounds,inbounds}.json`（§2.9） | — |
+| 27 | Full on-target test 是 CI 的重要剩余缺口 | ❌ | 仍无 on-target CI job。**该观点有两处已过期**，见 §2.13.3 | PR-07 |
+| 28 | 必须建立 Architecture Guard | ❌ | 无任何边界检查存在 | **PR-07（建议先做）** |
+
+**统计**：✅ 18 项、🟡 7 项、❌ 3 项。三个 ❌（23 / 27 / 28）恰好就是 §0.5 的三个未开始 PR。
+🟡 的 7 项里：03 与 05 属于 "Domain Model 完整化" 的尾巴（`tls.raw` 死字段见 §2.13.1，
+`dns/routing` 领域对象化）；18 与 21 是 PR-05 没做完的可靠性半场（健康分级、状态机）；
+02 与 25 要等 PR-07 的 Guard 才有意义；08 是一个独立的 validator 小项。
+**PR-05 让 ✅ 从 17 项升到 18 项，把 ❌ 之外的 🟡 从 8 项压到 7 项**。
+
+### 0.5 指导建议 7 个 PR 路线 ↔ 本文映射
+
+| PR | 指导建议的目标 | 状态 | 本文对应 | commit / 备注 |
+|---|---|---|---|---|
+| PR-01 | Domain Model Completion | ✅ 已落地 | §2.1 | `ca01141`；尾巴 = `tls.raw` 死字段（§2.13.1）与 `dns/routing` 领域对象化（观点 03） |
+| PR-02 | Parser Normalization | ✅ 已落地 | §2.2 | `33994fa`；尾巴 = validator 扩展（观点 08） |
+| PR-03 | Subscription Transaction Boundary | ✅ 已落地 | §2.5 | `e88f7c7` |
+| PR-04 | Protocol Adapter Completion | ✅ 已落地 | §2.3 | `f657063` |
+| PR-05 | Runtime Reliability 2.0 | 🟢 抽离半场已落地 | §2.7 / §2.10 | `c2aeac5`； 已落地：`init.d` 517→253 行 + `runtime/{service,dns,firewall,net}.sh`；离机差分 trace 等价测试 + 真机 192.168.1.102 procd 生命周期验证。**剩余半场** = 健康分级（观点 18）与显式状态机（观点 21），见 §2.10.3 / §2.10.5 |
+| PR-06 | LuCI Modularization | ⬜ 未开始 | §2.11 | 需人工浏览器回归 |
+| PR-07 | Architecture Guard + CI | ⬜ 未开始 | §2.12 | **建议作为下一个 PR**，理由见 §2.12 |
+
+**推荐顺序：PR-07 → PR-06 → PR-05 剩余半场**（PR-05 的抽离部分已落地）。三条理由：
+
+1. **指导建议自己的判断**：§九 的结论是"把已经存在的层次真正变成不可越界的架构边界"，
+   观点 02/28 把边界收敛列为最大风险。PR-07 正是这一项。
+2. **成本与收益比最高**：§2.12.2 的实测证明七条边界**当前已经是干净的**（generator / parser /
+   adapter / subscription-pure 全部零 UCI 命中，runtime 零 UCI 写入），所以 PR-07 是**纯增量**——
+   不需要改一行业务代码，只是把已经做到的用 CI 钉住。
+3. **先锁边界再动结构**：PR-06 要动前端 ~4.5k 行，PR-05 剩余半场要动 `runtime/health.sh` 与
+   `init.d` 的 reload 路径。先有 Guard，这两次改动才不会把 PR-01～05 的成果推回去。
+   PR-05 的抽离已经落地且**实测证明边界是干净的**，趁现在把 Guard 加上成本最低。
+
+**注意（时序风险）**：PR-07 的 UCI 白名单必须**为 `runtime/` 预留**目录——PR-05 的四个新模块
+正是按"设备侧、允许 `config_get`"设计的，见 §2.12.4。
 
 ---
 
@@ -427,7 +543,7 @@ Generator golden 字节级一致（client / custom / wireguard / partial_invalid
   label fallback。`features` / `log` 默认值仍在这里。
 * `parser/protocols.uc`（~440 行）：11 个 `parse_<scheme>_uri()` 函数，按 `parse_uri.uc` 原文
   搬迁；3 处历史 `[1]/[0]` 索引只在审查时校对，不动行为。
-* `parser/validator.uc`（~75 行）：`validate(config, log)` + `check(config)`，把 §0.2 末尾的
+* `parser/validator.uc`（~75 行）：`validate(config, log)` + `check(config)`，把 §0.3 末尾的
   inline host/port 校验抽出来；每个错误带 `kind` 字段（`invalid_host` / `invalid_port`），
   后续 PR 可加 `missing_credential` / `invalid_tls` 不需要再改 dispatcher / protocols。
 * `parser/normalize.uc`（~140 行）：`normalize(flat)` 把扁平 UCI 键 dict 转换成 Adapter 真正
@@ -712,7 +828,12 @@ apply_main_node_refs, scrub_stale_urltest_refs }`，接收 canonical Node，内�
   `Loader.load().access_control.subscription`（plan §2.5 #3）。
 * Pipeline：`parse_uri` → `apply_policy`（仍是 flat 形式，apply_policy 单测不动）→
   `normalize` → Repository。
-* 自身零 UCI 写入：唯一一处 `uci.set` 是 `config_backup` 异常回滚。
+* 自身零 UCI 写入（2026-09 复核：全文 `grep -n "uci\.set\|uci\.commit\|uci\.delete"`
+  **零命中**）。回滚走的是 §2.6 的文件快照而不是 UCI 写：`:96` `readfile(CONFIG_FILE)`
+  取快照，失败时 `:255` `writefile(CONFIG_FILE, config_backup)` 还原。
+  （**勘误**：本文件此前写作"唯一一处 `uci.set` 是 `config_backup` 异常回滚"，
+  与代码不符 —— 该路径本来就没有 `uci.set`。）它仍持有 `cursor()`（`:65-66`）
+  并把 cursor 交给 Repository，这是"cursor 就是 UCI 写入契约"的有意设计。
 * Repository 的 `main_refs.log` 在 orchestrator 回放（`"Main node is gone, switching to ..."`
   / `"No available node, disable tproxy."` 行为不变）。
 
@@ -802,23 +923,34 @@ runtime/candidate.uc 或 init.d 内的小函数:
 > 文档特别提醒的"不得假设未 commit 的 candidate 会被另一个 ucode cursor 自动看到"——本仓库目前
 > 没有踩这个坑（`repository.uc` 是在同一个 cursor 上 set 完再 commit），设计新事务时请保持这一点。
 
-### 2.7 PHASE 7 — Runtime 抽离🟡 部分实施
+### 2.7 PHASE 7 — Runtime 抽离 ~~🟡 部分实施~~ ✅ 已落地（PR-05，见 §2.10）
 
-> **已实施**：抽出 `scripts/runtime/config.sh`（配置事务）与 `scripts/runtime/health.sh`（健康探测），
-> `init.d/homeproxy` 只保留 procd 外壳 + dnsmasq/fw4/ip rule 编排，并去掉了重复的 `sing-box check`。
-> **未实施**：`runtime/{service,dns,firewall}.uc` 的进一步抽离（把 dnsmasq 片段生成、tproxy/tun 规则
-> 也搬出 init.d）。原因：这部分与 procd 生命周期耦合最紧，且离机无法验证——按"不要为了拆文件而拆文件"
-> 的原则留待有 on-target CI 时再做。
+> **~~未实施~~ 已实施**：~~`runtime/{service,dns,firewall}.uc` 的进一步抽离（把 dnsmasq 片段生成、
+> tproxy/tun 规则也搬出 init.d）。原因：这部分与 procd 生命周期耦合最紧，且离机无法验证——按
+> "不要为了拆文件而拆文件"的原则留待有 on-target CI 时再做。~~
+> **PR-05 已落地**：`init.d/homeproxy` 517 → **253 行**，抽到
+> `scripts/runtime/{service,dns,firewall,net}.sh`。落地形态、验证方式与剩余半场见 §2.10。
 
-`init.d/homeproxy` 417 行里混了 5 类职责：服务生命周期、版本闸门、dnsmasq 片段生成、
-ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文档抽到
-`scripts/runtime/{service,firewall,dns,health,rollback}.uc`，init.d 只留 procd 壳。
+> **已实施（PR-05 之前）**：抽出 `scripts/runtime/config.sh`（配置事务）与
+> `scripts/runtime/health.sh`（健康探测），`init.d/homeproxy` 去掉重复的 `sing-box check`。
 
-注意约束（文档也强调了）：
-- 不能破坏 procd / respawn / start/stop/reload；
-- `service_triggers` 的 `procd_add_reload_trigger` 与 `procd_add_interface_trigger`（`:414-417`）要保持；
-- `stop_service` 现在会 flush/delete 13 个 chain + 11 个 set（`:344-352`），拆分时必须保持
-  "逐个删除、不批量"的语义（`fw4_names.sh` 注释已解释原因）。
+`init.d/homeproxy` 原本 517 行里混了 5 类职责（实测分布，见 §2.10.1）：服务生命周期 75、
+版本闸门 13、配置事务 95、dnsmasq 57、fw4/nft 25、ip/tproxy/tun 68、健康 26、其它 158。
+PR-05 之后 init.d 只剩生命周期编排 + 配置读取 + 三个 service 函数骨架。
+
+注意约束（文档也强调了，PR-05 全部保持）：
+- ~~不能破坏~~ procd / respawn / start/stop/reload —— 真机实测通过（§2.10.7）；
+- `service_triggers` 的 `procd_add_reload_trigger` 与 `procd_add_interface_trigger` 保持原样
+  （`init.d:248-250`；与原版逐字一致，见 §2.10.6）；
+- `stop_service` 会 flush/delete 13 个 chain + 11 个 set，**"逐个删除、不批量"的语义必须保持**
+  （`fw4_names.sh` 注释已解释原因）—— 现在是 `runtime/firewall.sh::hp_firewall_teardown`，
+  差分 trace 测试逐条比对了这 48 次 `nft` 调用（§2.10.4）。
+
+**一条与 plan 原定目标不同的决定**：§2.7 原文写的是 `runtime/*.uc`，实际用的是 `runtime/*.sh`。
+理由：被搬走的代码是 shell（`procd_*` / `ip` / `nft` / `dnsmasq` 片段生成），init.d 本身就是 shell，
+改用 ucode 会引入一门新语言、多一层 `ucode` 运行时依赖，收益为零。既有的
+`runtime/config.sh` / `health.sh` 也已经是 shell 先例。同时把 tproxy/TUN 单独拆成 `net.sh`
+（68 行，与 service 的生命周期编排不同质），而不是硬塞进 `service.sh`。
 
 ### 2.8 PHASE 8 — LuCI 模块化
 
@@ -918,6 +1050,399 @@ ip rule/route（tproxy/tun）、ujail/procd 参数、fw4 调用。建议按文�
 `init.d/homeproxy` 现在有 shell 语法检查 + 事务语义测试，但 procd 行为仍需 on-target CI；
 `luci.homeproxy` 的 RPC 已在设备上跑过真实 rpcd（见附录）。
 
+### 2.10 PR-05 — PHASE 7 Runtime 抽离 ✅ 已落地（commit `c2aeac5`）
+
+对应指导建议 PR-05 的**抽离半场**（观点 19）与观点 20 的复核。可靠性另一半（观点 18 健康分级、
+观点 21 显式状态机）见 §2.10.3 / §2.10.5，**未做**。
+
+#### 2.10.1 抽离前的职责实测分布（517 行的账）
+
+把 `init.d/homeproxy` 的 517 行逐行归入唯一一类（合计校验 = 517）：
+
+| 类别 | 行区间 | 行数 |
+|---|---|---|
+| (a) procd 生命周期 | 6；8-9；238-265；288-315；318-321；450-455；502-503；514-517 | 75 |
+| (b) 版本/工具链闸门 | 64-76 | 13 |
+| (c) 生成配置事务 | 18-21；115-142；268-286；401-402；430-448；477-494；496-500 | 95 |
+| (d) dnsmasq | 35-54；155-188；397-399 | 57 |
+| (e) fw4/nft | 23-24；343-348；379-395 | 25 |
+| (f) ip/tproxy/tun | 190-236；365-377；407-414 | 68 |
+| (g) 健康 | 457-475；505-511 | 26 |
+| (h) 其它（常量、`log()`、UCI 读取、WAN 等待、cron、cache.db 准备、chown） | 见 §2.7 脚注 | 158 |
+
+这张表就是"该搬什么"的依据：**(b)(d)(e)(f) 加 (c) 的胶水**是纯设备侧编排，可以整块外移；
+**(a) 是不可约的 init 内核**，必须在 init.d 里。
+
+#### 2.10.2 落地形态
+
+`init.d/homeproxy` **517 → 253 行**（纯代码 145 行）；新增四个模块，加上既有两个共六个：
+
+| 模块 | 行数 / 纯代码 | 承接 |
+|---|---|---|
+| `runtime/service.sh` | 259 / 153 | `hp_require_singbox`（版本闸门）、`hp_sync_autoupdate_cron` / `hp_clear_autoupdate_cron`、`hp_prepare_runtime_files`（cache.db / ruleset / certs / 日志截断 / chown）、`hp_procd_client_instance` / `hp_procd_server_instance` / `hp_procd_log_cleaner`、`hp_start_generated_config`（生成 → ensure-live → known-good 事务） |
+| `runtime/dns.sh` | 107 / 57 | `hp_dnsmasq_resolve_dir`、`hp_dnsmasq_write_snippets`、`hp_dnsmasq_remove_snippets` |
+| `runtime/firewall.sh` | 67 / 32 | `hp_restore_upnp_mappings`、`hp_firewall_apply`、`hp_firewall_teardown` |
+| `runtime/net.sh` | 129 / 79 | `hp_net_wait_wan`、`hp_net_setup`（tproxy + TUN）、`hp_net_teardown`、`hp_net_remove_tun` |
+| `runtime/config.sh`（既有） | 76 / 28 | 事务原语：known-good / ensure-live / rollback / same-file |
+| `runtime/health.sh`（既有） | 54 / 25 | 实例健康探测 + 轮询 |
+
+**分层约定（写进了 `service.sh` 头注释）**：`config.sh` / `health.sh` 保持**纯**（只取显式路径参数，
+不碰 procd/ubus/UCI），所以能离机单测；PR-05 新增的四个模块**是设备侧的**——它们调用 `log`、
+`config_get`、`procd_*`，因此要求调用方已 `config_load` 且处于 procd init 上下文。
+这个区分是刻意的，PR-07 的 UCI 白名单必须按它来写（§2.12.4）。
+
+**留在 init.d 的东西**：`USE_PROCD` / `START` / `STOP`、`start|stop|reload|service_stopped` /
+`service_triggers` 骨架、决定"客户端 / 服务端 / 都不做"的配置读取、以及那条安全顺序
+（先生成 → 后拆除 → 证明起来了 → 否则回滚）。`reload_service` **97 行逐字未改**（§2.10.6 有 diff 证明）。
+
+#### 2.10.3 剩余半场 1 — 健康仍然只有"进程活着"（观点 18）
+
+`runtime/health.sh` 现在只有 `hp_instance_running`（`pgrep -f "run --config <path>"`，退化到
+`ubus call service list` + `jsonfilter`）与 `hp_wait_instance`。对照指导建议的四级阶梯：
+
+| 级别 | 状态 | 说明 |
+|---|---|---|
+| Process Health | ✅ 已有 | `health.sh:23-38` |
+| Configuration Health | 🟡 部分 | 生成期 `sing-box check`（`generate_client.uc:39` / `generate_server.uc:33`，**init.d 内 0 次**）；但健康门本身不重新校验 |
+| Listener Health | ❌ 缺 | 没有"mixed_port / tproxy_port / dns_port 在 listen"的检查。这是**可离机测试**的一级：`ss -ltn` / `netstat -ltn` 的输出可以 stub |
+| Functional Health | ❌ 缺 | 没有真实探针 |
+
+**设计取舍（重要）**：建议 Listener Health 直接接入健康门（进程活着但端口没听 = 配置有问题，
+应当回滚）；**Functional Health 默认只告警、不触发回滚**——探测目标不可达 ≠ 本地配置坏，
+把它接进回滚会让一次上游抖动变成一个可回滚事件。这条边界要写进 PR-05 续的实现里。
+
+#### 2.10.4 验证方式 1：离机差分 trace 等价测试（新增，永久回归）
+
+抽离类重构的唯一可信证明是"可观测行为没变"。新增
+`tests/runtime/test_runtime_extraction.sh`（346 行）：
+
+1. 用桩命令（`ip` / `nft` / `fw4` / `utpl` / `ucode` / `sing-box` / `uci` / `uname` / `chown` / `sleep`）
+   + 桩 `procd_*` + 桩 `config_get` + 夹具 UCI，把 init.d **source 进同一个 shell**（与 rc.common 同构）；
+2. 跑三个场景：A `tun` + `bypass_mainland_china` + 仅客户端；B `redirect_tproxy` + `gfwlist` + ipv6 +
+   服务端 + 自动更新 cron；C 两边都没配置（早期返回）；
+3. 每个场景记录**命令序列 + 参数 + `log` 文本 + 文件产物内容**，与
+   `tests/fixtures/runtime/trace.pre-pr05.txt`（**360 行，从 PR-05 之前的 517 行 init.d 采集**）逐字 diff。
+
+结果：**PASS — 三个场景 360 行 trace 完全一致**。
+
+它同时是这类重构的**永久防线**：谁再动 `runtime/*.sh` 的编排顺序，trace 就会红。可信度来自两点：
+
+- **反向验证过**：第一次跑出的是 FAIL —— 我把版本闸门写成了 `"$prog" version -n`（绝对路径），
+  而原版是裸 `sing-box`（走 PATH）。trace 立刻把它抓出来了，已改回。这正是 §3.1 要求的
+  "测试必须能失败"。
+- **桩的忠实度**：`ip` 桩对 `rule del` 必须返回非零，否则 `while ip rule del …; do :; done`
+  去重循环永不终止（第一次实现就踩了这个坑，见脚本注释）。
+
+`tests/ucode/run.sh` 与 `tests/run.sh` 都已接入这个测试。注意 `arch-test.yml:94` 调的是
+`tests/ucode/run.sh` 而**不是** `tests/run.sh`，所以只放进后者等于 CI 不跑——两个入口都加了。
+
+#### 2.10.5 剩余半场 2 — Known-Good 不是状态机（观点 21）
+
+机制在（known-good 副本、ensure-live 回退、健康门后刷新、失败回滚），但**状态是隐含在控制流里的**，
+没有显式状态机。本轮复核暴露两个具体问题：
+
+1. **known-good 放在 tmpfs。** `GOOD_DIR="$RUN_DIR/known-good"`，而 `RUN_DIR=/var/run/homeproxy`、
+   设备上 `/var → tmp`（实测：`tmpfs on /tmp type tmpfs`，`df /var/run` 报 `tmpfs 1.9G`）。
+   所以 **known-good 不跨重启存活**，而全仓没有任何地方重新播种它。保护范围实际上只有"单次开机周期内"。
+   PR-05 续需要先决定这是有意还是缺口；若要跨重启，就把它落盘（例如 `/etc/homeproxy/known-good/`）
+   或在首次成功启动后播种。
+2. **回滚只见 "配置不同" 不见 "状态"。** 建议的显式状态机
+   `KNOWN_GOOD → CANDIDATE → VALIDATING → ACTIVATING → HEALTHY`（+ 失败 `→ ROLLBACK → KNOWN_GOOD`）
+   是 PR-05 续的骨架。
+
+#### 2.10.6 未改动的部分（逐字一致的证明）
+
+| 检查 | 方法 | 结果 |
+|---|---|---|
+| `reload_service()` 97 行 | `awk` 提取旧/新函数体后 `diff` | **一字不差** |
+| `service_triggers()` | 同上 | **一字不差** |
+| 四条边界的所有命令 | 差分 trace（§2.10.4） | **360 行一致** |
+| 旧函数名残留 | `grep -rn "restore_upnp_mappings\b"`（排除 `hp_` 前缀） | 无 |
+| `generator/` 是否被波及 | 冻结检查 | 未改一个字节 |
+
+#### 2.10.7 验证方式 2：真机 192.168.1.102 procd 生命周期
+
+在测试机（ImmortalWrt 25.12.1 x86/64）上安装 **PR-05 的 diff**（`init.d/homeproxy` +
+`runtime/*.sh` + `fw4_names.sh`）后实测：
+
+| 步骤 | 证据 |
+|---|---|
+| `start` | `rc=0`；`ubus call service list` 显示 **`sing-box-c` running pid 28624** 与 **`log-cleaner` running pid 28625** —— 这两行是 PR-05 最关键的结论：**procd 接受在 sourced 模块里注册的实例** |
+| 实例 argv | `["/usr/bin/sing-box","run","--config","/var/run/homeproxy/sing-box-c.json"]` —— 与 `health.sh` 的 pgrep 模式完全对齐 |
+| TUN | `singtun0: <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> mtu 9000 state UP` |
+| ip rule | `32765: from all fwmark 0x66 lookup 100`（0x66 = 102 = `tun_mark`） |
+| 产物 | `known-good/sing-box-c.json`、`cache.db`、`fw4_{forward,input,post}.nft`、`sing-box-c.json`（owner `sing-box`）、`/etc/homeproxy/ruleset`（custom 模式） |
+| dnsmasq | `dnsmasq-homeproxy.conf` = `conf-dir=…/dnsmasq-homeproxy.d`；`redirect-dns.conf` = `no-poll / no-resolv / server=127.0.0.1#5333`（custom 分支） |
+| `reload` | `rc=0`；健康门通过；known-good 刷新；日志 `Reload completed.` |
+| `stop` | `rc=0`；实例清空、`singtun0` 删除（`service_stopped` 生效）、ip rule 消失、dnsmasq 片段删除、live 配置删除、**known-good 按设计保留**、`fw4_*.nft` 归零、日志 `Service stopped.` |
+
+**为了不把测试机弄断网，两处刻意的隔离（必须记下来，否则会被误读成"全链路已验证"）**：
+
+- `fw4` 与 `nft` 用 PATH 桩替换为**记录型 no-op**：真实 `fw4 reload` 会装入 homeproxy 的
+  nft 规则集，把测试机自己的出站流量送去 tproxy/tun，可能直接切断我的 SSH。
+  因此**防火墙规则的实际生效没有在真机验证**；被验证的是"渲染 + 调用顺序"（差分 trace 已覆盖）。
+- 版本闸门用 PATH 桩把 `sing-box version -n` 报成 `1.14.0`。原因：设备上装的是 **sing-box 1.13.16**
+  且是 musl 系统（官方 release 是 glibc，跑不起来；apk 源实测不可达，无法升级）。
+  被闸门拦住的只是启动前置条件，**被验证的代码是原样的**；生成器用的是设备自带的
+  1.13 时代 generator（与 1.13.16 匹配）。
+
+**设备已完全还原**：`/etc/init.d/homeproxy` 与 `/etc/config/homeproxy` 的 md5 与备份逐字相同
+（`dc7fdad5…` / `04c771c5…`），`runtime/`、`fw4_names.sh`、`ruleset/` 已删除，dnsmasq 已归位，
+`sing-box` 保持 1.13.16 未动。备份留在设备 `/root/hp-pr05-backup/`（含 1.13.16 二进制，
+不需要时 `rm -rf /root/hp-pr05-backup` 即可）。
+
+#### 2.10.8 本轮复核发现、但**没有**在 PR-05 里改的实现问题
+
+抽离是行为保持的，所以下面这些**原有**问题被原样搬了过来。它们是 PR-05 续的输入：
+
+1. **`runtime/*.sh` 的函数不用 `local`**（`config.sh` / `health.sh` 全都没有）。`live` / `good` /
+   `name` / `config` / `tries` / `state` 会泄漏到调用者作用域。今天恰好无害（`reload_service`
+   在 `:479-480` 先 `local good`/`local live` 再调用，且传的正是同样的值），但只要 init.d 将来引入
+   同名全局就会被静默覆盖。设备实测 `local x=1` 在 busybox ash 下正常（`A=[1]`），改起来是纯收益。
+   **PR-05 新增的四个模块已经全部用 `local`**，旧的两个没有动（保持 diff 最小）。
+2. **`hp_instance_running` 的 pgrep 模式与 procd 命令文本强耦合**：`run --config <path>`
+   必须同时匹配 `health.sh:28` 与 `service.sh` 里的 `procd_append_param command run --config …`。
+   改任一处都会让健康门**静默失效**（退化成"总是超时 → 总是回滚"）。建议加一条断言把两者绑在一起测。
+3. **dnsmasq 卸载不对称**：`hp_dnsmasq_remove_snippets` 无条件 `rm -rf`，即使 `start` 从未写入
+   （例如 `outbound_node == nil` 时）。影响很小，但是"删除不存在的东西"这类噪音的来源。
+4. **`hp_prepare_runtime_files` 的 `chown` 在 custom 模式下必然报 warning**：它 `chown` 了
+   `$HP_DIR/cache.db`，而 `cache.db` 只在 `bypass_mainland_china` 下创建。真机日志里可见
+   `Warning: failed to change the ownership of the runtime files to sing-box.`。
+   **这是 PR-05 之前就有的行为**（该行逐字未改，差分 trace 的场景 A/B 未覆盖 custom + 无 cache.db
+   这个组合，所以没被抓成差异）。
+
+### 2.11 PR-06 — LuCI 模块化（未开始；设计基准）
+
+对应指导建议观点 22 / 23 / 24。**只做重复消除与协议真源，不做"因为 innerHTML 看着危险"的重写**
+（观点 24：没有实证 sink 就不重写）。
+
+#### 2.11.1 现状规模（实测）
+
+| 文件 | 行数 |
+|---|---|
+| `view/homeproxy/client.js` | 1811 |
+| `view/homeproxy/node.js` | 973 |
+| `view/homeproxy/server.js` | 787 |
+| `homeproxy.js` | 600 |
+| `view/homeproxy/status.js` | 296 |
+| **合计** | **4467** |
+
+#### 2.11.2 真问题 1：协议表前后端共 **24 份**（12 份前端 + 12 份后端）
+
+前端 12 处协议字面量列表：`node.js` 的 type `ListValue`(58-77)、password `required_type`(111)、
+TLS `type_depends`(568)、`tls_forced_types`(569)、`multiplex` depends(476-479)；
+`server.js` 的 type `ListValue`(197-214)、password `required_type`(245)、`type_depends`(467)、
+`tls_forced_types`(468)、`multiplex` depends(434-437)；`homeproxy.js` 的 transport depends(121-123)、
+`packet_encoding` depends(231-232)。
+
+后端 12 张表：`model.uc` 的 `CREDENTIALS`(42-62)、`INBOUND_CREDENTIALS`(72-87)、
+`INBOUND_OPTIONS`(97-138)；`adapter.uc` 的 `REQUIRED_CREDENTIALS`(47-66)、`OPTION_FIELDS`(197-311)、
+`INBOUND_COMMON_OMIT`(511-513)、`INBOUND_NO_USERS`(520)、`INBOUND_OPTION_FIELDS`(574-625)、
+`REQUIRED_INBOUND_CREDENTIALS`(697-714)；`parser/mapping.uc` 的 `PROTOCOL_TO_UCI`(30-123)；
+`parser/protocols.uc` 的 12 个 `parse_*_uri`；`parser/uri.uc` 的 17 个 scheme 标签。
+（`config/loader.uc` **没有自己的协议表** —— 它 `import PROTOCOL_TO_UCI as PROTOCOL_OPTIONS`，
+这一点 PR-02 做对了。）
+
+**已经造成/暴露的具体分歧**（逐条有证据）：
+
+| 分歧 | 证据 | 后果 |
+|---|---|---|
+| `snell` 在后端全链路支持，但**不在 `node.js` 的 type 列表里** | `node.js:58-77` 无 snell，但 `node.js:101` 有 `o.depends('type','snell')`、`:533-563` 有完整 Snell 块；后端 `model.uc:52`、`adapter.uc:54/209/603/704`、`mapping.uc:39-48`、`protocols.uc:140` 全有 | **UI 里根本选不到 Snell**（死代码 + 用户可见的能力缺失） |
+| `shadowtls` 有后端 inbound 支持，但**不在 `server.js` 的 type 列表里** | `model.uc:80`、`adapter.uc:706`、`adapter.uc:536` vs `server.js:197-214` | 同上 |
+| Snell 版本前后端**真实不一致** | `node.js:536-538` 是 `'4'`（默认 `'4'`）、"v4 only"(`:553`)；`server.js:353-355` 是 `'5'`（默认 `'5'`）、"v5 only"(`:360`) | 同一概念两套取值 |
+| `shadowsocks` 加密方法列表不一致 | `node.js:262-274` 额外列出 aes-128/192/256-ctr、*-cfb、chacha20、chacha20-ietf、rc4-md5；`server.js:368-371` 只有 `hp.shadowsocks_encrypt_methods` | 客户端能选、服务端不能 |
+| `wireguard` / `direct` 无 adapter 表行 | `node.js:74` / `:59` vs `adapter.uc:90-95`（`if` 特判）/ `:376` | 与观点 12 冲突（特殊协议走 Adapter） |
+| mux/TCP-Brutal 门控不一致 | `node.js:515-530` 无条件；`server.js:444-461` 在 `if (features.hp_tcp_brutal)` 内 | 服务端缺 feature 时表单仍显示 |
+
+#### 2.11.3 真问题 2：`node.js` ↔ `server.js` 有 322 行逐字重复
+
+去空白后按行多重集统计：**node.js 的 785 行纯代码里有 322 行（41%）在 server.js 里逐字出现**
+（占 server.js 634 行纯代码的 51%）。最大连续块：
+
+| node.js | server.js | ≈行数 | 内容 |
+|---|---|---|---|
+| 191-232 | 297-338 | 42 | Hysteria auth / obfs / min-max packet size |
+| 369-396 | 398-425 | 28 | TUIC uuid + congestion + 0-RTT + heartbeat，接 vless_flow / vmess_alterid |
+| 511-530 | 440-459 | 20 | mux padding + TCP-Brutal |
+| 108-117 | 242-251 | 10 | password 校验体 |
+| 659-669 | 742-752 | 11 | `tcp_fast_open` / `tcp_multi_path` / `udp_fragment` |
+| 1-16 | 1-16 | 16 | SPDX 头 + require 块 |
+| … | … | ~100 | 其它 ≥3 行的连续块 |
+
+再加上跨文件的状态三件套：`getServiceStatus`（`client.js:49-57` vs `server.js:50-58`，只差实例名）、
+`renderStatus`（`:59-76` vs `:60-74`，只差 label）、状态栏 + poll 守卫（`:120-145` vs `:143-166`）。
+
+#### 2.11.4 真问题 3：`client.js` 内部重复 ≈184 行
+
+`routing_rule`（644-985，342 行）与 `dns_rule`（1167-1497，331 行）的去空白交集 **184 行（占前者 65%）**，
+只有 3 处描述文本与 2 个字段不同。另有：GridSection 7 属性脚手架 ×5、Label+Enable 组 ×4、
+`delete this.keylist` 动态 load 覆盖 ×13（每次 12-14 行）、proxy 域名列表(1699-1742) 与
+direct 域名列表(1748-1784) 36 行里 32 行相同（只差 `'proxy_list'` / `'direct_list'`）。
+
+#### 2.11.5 不是问题、不要动的部分（观点 24）
+
+- `homeproxy.js` 已经承担了共享职责：`renderTransportOptions`(109-237)、`renderTlsOptions`(243-323)
+  被 `node.js:423`、`server.js:429` / `node.js:566`、`server.js:465` 复用；另有 20 个 helper 被各视图复用。
+- **`innerHTML` 只有 1 个活 sink 且已加固**：`client.js:142` / `server.js:163` 的
+  `renderStatus(res, features.version)`，版本串受 `^[\w.\-+]+$` 白名单（`client.js:67-69`）。
+  其余 `innerHTML` 全是静态字面量（`homeproxy.js:127-147` 的提示常量、`status.js:50/53` 的 `_('passed')`）。
+- `status.js:246-258` 的 `o.rawhtml = true` 今天只喂 DOM 节点（`getResVersion` 用 `E()` 拼），
+  没有字符串注入路径 —— 记一笔，不改。
+- `homeproxy.js:399-412` 的 `decodeBase64Str` **没有任何视图调用**（后端有自己的实现）—— 死代码，
+  可以在 PR-06 顺手删，但不是重写的理由。
+
+#### 2.11.6 PR-06 的收敛目标（按优先级）
+
+1. **一份协议真源**：后端已有 `parser/mapping.uc`；前端不应再手写 type 列表。可选路线：
+   由后端 capability manifest 生成静态 metadata（build-time），或由一致性测试守护一份共享表。
+   **先做"能失败的测试"再抽象**——因为今天已经有 6 类分歧，测试本身就能立刻抓到。
+2. **抽 `components/` 与 `shared/`**：把 `node.js`↔`server.js` 的 322 行重复收进共享 builder，
+   把跨文件状态三件套收进一个 `shared/status.js`。
+3. **`shared/rpc.js`**：现在 12 处 `rpc.declare`，其中 **9 处把失败吞成 `L.resolveDefault(…, {})`**
+   （`homeproxy.js:415/433`、`client.js:20`、`server.js:18/83`、`status.js:35/64/71/164`）。
+   统一封装 + 统一错误上报是 §4 "前端 RPC 无统一封装"那一条的落点。
+4. **删死代码**：`decodeBase64Str`、UI 里选不到的协议分支。
+
+#### 2.11.7 验收
+
+- 表单快照（`node` / `client` / `server`）在三份 `tests/snapshots/*.json` 上必须继续 PASS；
+  若**有意**改变 UI，按 §3.2 的规矩在同一 commit 里更新快照并写明原因。
+- 协议真源落地后，需要一条"前端 type 列表 ⊆ 后端 `PROTOCOL_TO_UCI`"的断言（PR-07 的 Guard 可直接覆盖）。
+- 浏览器人工目视：快照只能证明结构没变，**不能证明可用**。
+
+### 2.12 PR-07 — Architecture Guard + CI（未开始；建议作为下一个 PR）
+
+对应指导建议**第 28 项**，也是本文件头部"分歧处理原则"里被点名优先的那一条。
+
+#### 2.12.1 为什么它排在最前
+
+1. 指导建议 §九 的结论是"把已经存在的层次真正变成不可越界的架构边界"，观点 02/28 把边界收敛
+   列为最大风险。
+2. **成本最低**：§2.12.2 的实测证明七条边界**今天就是干净的**。PR-07 是纯增量——不改一行业务代码，
+   只是把 PR-01～05 已经做到的用 CI 钉住。
+3. **保护后面的改动**：PR-06 要动 4467 行前端，PR-05 续要动 `health.sh` 与 reload 路径。
+   先有 Guard，这两次改动才不会把前面的成果推回去。
+
+#### 2.12.2 现状证据：七条边界今天都是干净的（`7e561e0` + PR-05）
+
+| 边界 | 作用域 | 实测 |
+|---|---|---|
+| generator 不得碰 UCI | `scripts/generator/**` | `uci.` / `cursor(` **零命中** |
+| adapter 不得碰 UCI | `scripts/config/adapter.uc` | **零命中** |
+| parser 不得碰 UCI | `scripts/parser/**` | 只有注释命中（`flatten.uc:201`、`protocols.uc:20`） |
+| 订阅纯阶段不得写 UCI | `scripts/subscription/{decoder,fetcher,filter}.uc` | **零命中** |
+| Domain Model 不得反向依赖 | `scripts/config/{model,loader}.uc` | `model.uc` 只 import `homeproxy`；`loader.uc` 只 import `uci` + `../parser/mapping.uc`；**都不 import `adapter.uc` 或 `generator/`** |
+| Domain Model 不得出现 sing-box 顶层 section 名 | `scripts/config/{model,loader}.uc` | `inbounds` / `outbounds` / `experimental` / `rule_set` / `urltest` / `selector` 作为键 **零命中** |
+| runtime / init.d 不得写 UCI | `root/etc/init.d/homeproxy` + `scripts/runtime/*.sh` | 写入（`uci set/commit/delete/add/rename`）**零命中**；`init.d:41` 的 `uci -q show` 是只读，需白名单 |
+| **（增补）持久化只允许两处** | 全仓 | 真正的 UCI 写入只有 `subscription/repository.uc`（观点 16 的边界）与 `migrate_config.uc`（一次性迁移） |
+
+#### 2.12.3 七条检查（命名对齐指导建议第 28 项）
+
+指导建议给了六个名字，另加一条直接实现观点 16：
+
+```
+check-generator-boundary     scripts/generator/**                     禁止 uci.* / cursor(
+check-adapter-boundary       scripts/config/adapter.uc                禁止 uci.* / cursor(
+check-parser-boundary        scripts/parser/**                        禁止 uci.* / cursor(
+check-subscription-boundary  scripts/subscription/{decoder,fetcher,filter}.uc  禁止 uci.* / cursor(
+check-domain-boundary        scripts/config/{model,loader}.uc         禁止 import adapter/generator；
+                                                                      禁止 sing-box 顶层 section 名当键
+check-runtime-boundary       init.d/homeproxy + scripts/runtime/*.sh  禁止 UCI 写入（只读 show 白名单）
+check-persistence-boundary   全仓                                      UCI 写入只允许 repository.uc /
+                                                                      migrate_config.uc
+```
+
+#### 2.12.4 实现形态（含两个必须处理的坑）
+
+- **位置**：新增 `tests/arch-guard.sh`（POSIX sh，**不需要 ucode/node**）。
+- **接线**：`tests/ucode/run.sh`（→ `arch-test.yml:94` 会在每个 PR 跑到）**和** `tests/run.sh`
+  （本地没装 ucode 也有覆盖）。只放后者等于 CI 不跑——这是本轮实测发现的接线事实。
+- **坑 1：必须能处理注释。** 直接 grep 会有三处误报：`model.uc:11-17`、`flatten.uc:201`、
+  `update_subscriptions.uc:199` 都在注释里提到被禁的 API。方案：用 awk 状态机剥掉 `/* … */`；
+  **不剥 `//`**（ucode 里有 `/:\/\//` 这类正则字面量，盲剥会截断代码行），改为**断言 `//` 注释里
+  不得出现被禁 token**——目前 `scripts/` 下只有一条 `//` 注释（`adapter.uc:138`），且不含被禁 token。
+- **坑 2：Guard 自己必须能失败。** 参照 `test_ucode_grammar.sh` 的 accept/reject 探针设计，
+  Guard 要带自检：为每条规则喂一个合成违规片段并断言被抓住（reject 探针），再喂一个干净片段断言通过。
+  否则它就是 §3.1 里那种"永远不可能失败"的测试。
+- **白名单要预留 `runtime/`**：PR-05 的四个新模块按"设备侧、允许 `config_get`"设计
+  （§2.10.2）。Guard 必须允许 `runtime/**` 与 init.d 读 UCI（`config_get` / `uci show`），
+  只禁写。若写成"runtime 完全不许碰 UCI"，PR-05 的成果会被自己的 Guard 判红。
+
+#### 2.12.5 验收
+
+- 七条检查在当前 HEAD 全绿（§2.12.2 已实测，Guard 落地后应复现同样的零命中）。
+- 自检：每条规则的合成违规都能被抓住。
+- **反向证明**：故意在一个受保护目录里加一行 `uci.set(...)`，CI 必须红。这一步要留证据。
+
+#### 2.12.6 与 on-target CI 的关系
+
+观点 27 的"完整测试不依赖开发者手工设备"仍**未闭环**：`tests/run.sh` 在没有本地
+ucode/sing-box 时会 SSH 到 `$HP_TEST_HOST`（默认已改为测试机 `root@192.168.1.102`，见 §2.13.2），
+而 `arch-test.yml` 在 CI 里是自建 toolchain 就地跑（**没有** on-target job）。
+真要闭环需要一台常驻设备或 QEMU-in-CI。这一项与 PR-07 同期做最省事，因为它需要 CI job 改动。
+
+### 2.13 本轮复核新发现的缺口（不在 PR-05 范围内，未修）
+
+#### 2.13.1 `Node.tls.raw` 是**死字段**（观点 05 的尾巴）
+
+`config/loader.uc:99-105` 的 `load_tls()` 仍然返回一个 `raw` 子对象，注释写着
+"kept verbatim: the server-side builder owns the key material format"：
+
+```js
+raw: {
+    tls_reality_public_key: get('tls_reality_public_key'),
+    tls_reality_short_id: get('tls_reality_short_id'),
+    tls_utls: get('tls_utls'),
+    tls_sni: get('tls_sni'),
+    tls_insecure: get('tls_insecure')
+}
+```
+
+但**全仓没有任何地方读它**：`grep -rn '\.raw\.' root/` 零命中（唯一命中是 `model.uc:15` 的注释）。
+服务端 TLS 尾巴现在走的是 `Inbound.tls_server`（`loader.uc:349` `tls_server: load_table(get, INBOUND_TLS_SERVER)`），
+由 `adapter.uc:632-639` 的 `build_tls_server_extras(tls_server)` 消费。
+
+**结论**：这是 PR-01 删 `Node.raw` 时漏掉的残留，而且是**死代码**，删掉零风险。
+它同时让观点 05（"`raw` 只能作兼容层"）从 🟡 走向 ✅。
+
+#### 2.13.2 `tests/run.sh` 的默认测试主机指向**生产主路由**（本轮已修）
+
+`tests/run.sh:16` 原本是 `HOST="${HP_TEST_HOST:-root@192.168.1.1}"`，而 `192.168.1.1` 是家里的
+ImmortalWrt **主路由**；SSH 回退分支会把整个 checkout `tar` 上传并 `rm -rf` 目标目录后再解包。
+把测试物料铺到生产路由器上是不该有的默认值。**本轮改为 `root@192.168.1.102`（测试机）**，
+并在注释里写清为什么。这是 §4 之外的一个"默认值即安全隐患"的例子。
+
+#### 2.13.3 i18n 这道 CI 门**永远不可能失败**
+
+`tests/i18n-coverage.py` 只在 `--fail-below` 时 `return 1`；`--warn-below` 只打印
+`::warning` 并 **`return 0`**（`i18n-coverage.py:144-148`）。而两处 CI 用的都是 `--warn-below`：
+
+- `.github/workflows/arch-test.yml:82`
+- `.github/workflows/i18n.yml:28`（该 workflow 只有这一条命令）
+
+实测：`python3 tests/i18n-coverage.py --warn-below 99.99; echo $?` → `0`。
+也就是说覆盖率的**下降不会被 CI 拦住**，只会留一条 warning。当前 724/724 是 100%，
+所以问题还没暴露。这属于 §3.1 同一类问题（"不可能失败的检查"），建议改成
+`--fail-below 100`（或明确写下"故意只告警"的理由）。
+
+#### 2.13.4 指导建议第 27 项有两处已经过期
+
+该文写"当前本地环境未安装二者（ucode / sing-box），因此 full suite 无法在本机完成"，
+并写 `tests/run.sh` 会 SSH 到 `root@192.168.1.1`。今天：
+
+1. 本机/CI 已有**按 pin 构建的 ucode testbed**（§2.3.2，`~/.local/ucode-strict` / CI 的
+   `~/.local/ucode-testbed`），full suite 可以在本地跑完（65 PASS / 0 FAIL / 1 NOT RUN）。
+2. 测试机是 **192.168.1.102**，不是 `192.168.1.1`。
+
+**没有改那一份**（它是优先级与边界的权威，改动应经你确认）；此处只登记差异，避免两份文档越漂越远。
+
+#### 2.13.5 其它文档漂移（建议随 PR-06/PR-07 一起清）
+
+- `tests/ucode/test_protocol_inventory.sh:8-10` 的头注释仍写 `parse_uri.uc` 与
+  "`loader.uc` PROTOCOL_OPTIONS"，而正文已经改成 `parser/mapping.uc`。
+- §2.8 表格里的行号仍是 PR-01～04 之前的位置（`parse_uri.uc:445-483`、`loader.uc:168-256`），
+  这些文件/行段已不存在；PR-06 落地时应一并更新（§2.11 已给出新行号）。
+
 ---
 
 ## 3. 测试诚信问题（文档 FINAL SELF REVIEW 明确要求）
@@ -945,7 +1470,7 @@ generate_client.uc:280-299                 function generate_outbound(node) { ..
 即 `f(x) == f(x)`。测试脚本自己的注释也承认了（`:112-117` "both sides are the same code path"）。
 它永远不可能失败，因此也永远不可能"抓到 tuic zero_rtt / ws transport.host 这两个 bug"——
 `docs/architecture-review.md` 的 Bottom line 里那句话现在已经不成立
-（该文件已随之删除，见 §0.3 附录 I：它的结论已被本文与设备实测取代）。
+（该文件已随之删除，见 §0.2 附录 I：它的结论已被本文与设备实测取代）。
 
 同时 `demo/architecture/` 目录**根本不存在**（`find demo` → no such directory），但：
 - 源码头注释仍在说"the copy in demo/architecture/ must stay in lockstep"
@@ -1024,10 +1549,14 @@ P1（可靠性 — 文档 PHASE 6/7 的核心目标）
 P2（结构）
 15. ✅ refactor(gen): split generate_client.uc into generator/*.uc            # §2.4  (`0c67d77`)
 16. ✅ refactor(gen): generator becomes an importable library (drop sed hooks)# §2.4  (`0c67d77`)
-17. ⬜ refactor(parser): parser/ dir + single canonical field mapping         # §2.2
-18. ⬜ refactor(gen): server inbound through domain model + InboundFactory    # §2.3
-19. ⬜ refactor(runtime): extract runtime/{service,dns,firewall}.uc           # §2.7
-20. ⬜ refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.8
+17. ✅ refactor(parser): parser/ dir + single canonical field mapping         # §2.2   (`33994fa`，即下面的 29)
+18. ✅ refactor(gen): server inbound through domain model + InboundFactory    # §2.3   (`f657063`，即下面的 31)
+19. ✅ refactor(runtime): extract runtime/{service,dns,firewall,net}.sh       # §2.7   (`c2aeac5`，见 §2.10)
+       init.d 517 → 253 行；新增 runtime/{service,dns,firewall,net}.sh；离机差分 trace
+       等价测试（tests/runtime/test_runtime_extraction.sh + fixtures/runtime/trace.pre-pr05.txt）
+       + 真机 192.168.1.102 procd 生命周期验证
+20. ⬜ refactor(luci): shared/rpc.js + components/ + protocol registry        # §2.11  (PR-06)
+20b. ⬜ arch: architecture-guard checks in CI                                 # §2.12  (PR-07，建议先做)
 21. ✅ security: split ACL wildcard; backend path allowlist                   # §4     (`d9a4dac`)
 22. ✅ security: frontend XSS / poll / RPC-error / cert-tmp hardening         # §4     (`0bd1b65`)
 23. ✅ test: client.json form snapshot                                        # §2.9   (`db1d200`)
@@ -1057,10 +1586,23 @@ P2（结构）
       inbound golden 快照；并修掉 PR-01～03 的 12 处未被 CI 覆盖的缺陷（§2.3.1）
 32. ✅ ci(toolchain): fix the Linux ucode build (lucihttp include/link paths)   # §2.9   (`0dae4e6`)
       "Build ucode toolchain" 一直在第一步失败，run.sh 从未在 CI 执行过
+33. ✅ fix(target): make the package loadable on the pinned ucode (12 defects)  # §2.3.2 (`4cd98d6`)
+34. ✅ fix(homeproxy): executeCommand() redirects to files, not fds             # §2.3.2 (`ad2796a`)
+35. ✅ test(firewall): check the {%- glue bug without needing the fw4 module    # §2.3.2 (`601cd9d`)
+36. ✅ ci(toolchain): set CMAKE_INSTALL_RPATH so the binaries find libucode     # §2.3.2 (`7822e6f`)
+37. ✅ docs: record the pinned-ucode round and the honest NOT RUN               # §2.3.2 (`7e561e0`)
+38. ✅ refactor(runtime): PR-05 — extract dnsmasq/fw4/net/service out of init.d # §2.10
+      init.d 517 → 253 行；新增 runtime/{service,dns,firewall,net}.sh；
+      新增 tests/runtime/test_runtime_extraction.sh（差分 trace 等价，360 行，3 场景）
+      + tests/fixtures/runtime/trace.pre-pr05.txt；tests/run.sh 默认测试机改为 192.168.1.102；
+      真机 192.168.1.102 验证 start/reload/stop
 
-**下一步（F / B）**：19 → 20，按指导文档 §七的 PR 路线，做 F（PHASE 7 Runtime
-抽离：`service` / `dns` / `firewall` 从 init.d 抽出，等有 on-target CI 再做），
-最后 B（LuCI 模块化，必须配人工回归）。
+**下一步（PR-07 → PR-06 → PR-05 剩余半场）**：
+先做 **PR-07 Architecture Guard**（§2.12）——边界今天已经是干净的（§2.12.2 实测），
+加 Guard 是纯增量且最便宜，还能保护后续改动；再做 **PR-06 LuCI 模块化**（§2.11，必须配人工回归）；
+最后补 **PR-05 的可靠性半场**（§2.10.3 健康分级 + §2.10.5 显式状态机）。
+`runtime/*.sh` 的 `local` 缺失、pgrep 模式耦合、known-good 在 tmpfs 这三个问题（§2.10.8）
+可以搭在其中任何一个 PR 上，也可以单独一个小 PR。
 ```
 
 ---
