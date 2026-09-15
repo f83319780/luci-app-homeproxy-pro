@@ -213,6 +213,138 @@ assert_empty "the frontend makes no fs.write call" \
 	grep -rn "fs\.write" "$VIEWS"
 
 echo
+echo "== guard 4: the ACL and the rpcd method table agree =="
+
+BACKEND_METHODS="$(sed -n 's/^\t\([a-z_][a-z0-9_]*\): {$/\1/p' "$RPC" | sort -u)"
+if [ -n "$BACKEND_METHODS" ]; then
+	pass "parsed $(printf '%s\n' "$BACKEND_METHODS" | grep -c .) rpcd methods"
+else
+	fail "could not parse any method out of $(basename "$RPC")"
+fi
+
+ACL_METHODS="$(awk '
+	/"ubus"[[:space:]]*:/ { inubus = 1; next }
+	inubus && /^[[:space:]]*}/ { inubus = 0; next }
+	inubus && /"luci.homeproxy"[[:space:]]*:/ { inlist = 1; next }
+	inlist && /\]/ { inlist = 0; next }
+	inlist { print }
+' "$ACL" | grep -oE '"[a-z_]+"' | tr -d '"' | sort -u)"
+
+if [ -n "$ACL_METHODS" ]; then
+	pass "parsed $(printf '%s\n' "$ACL_METHODS" | grep -c .) ACL ubus methods"
+else
+	fail "could not parse any ubus method out of the ACL"
+fi
+
+# Not `comm`: it takes file arguments, and POSIX sh has no process
+# substitution.  The first draft used it anyway, so comm failed, the variable
+# came back empty and the check passed without testing anything.
+UNGATED=""
+for m in $BACKEND_METHODS; do
+	printf '%s\n' "$ACL_METHODS" | grep -qx "$m" || UNGATED="$UNGATED $m"
+done
+if [ -z "$UNGATED" ]; then
+	pass "every rpcd method is reachable through the ACL"
+else
+	fail "these rpcd methods have no ACL entry, so no session can call them:"
+	printf '      %s\n' "$UNGATED"
+fi
+
+PHANTOM=""
+for m in $ACL_METHODS; do
+	printf '%s\n' "$BACKEND_METHODS" | grep -qx "$m" || PHANTOM="$PHANTOM $m"
+done
+if [ -z "$PHANTOM" ]; then
+	pass "the ACL grants no method the module does not define"
+else
+	fail "the ACL grants methods that do not exist:"
+	printf '      %s\n' "$PHANTOM"
+fi
+
+# A wildcard would make the two checks above meaningless.
+if grep -qE '"[*]"' "$ACL"; then
+	fail "the ACL contains a wildcard"
+else
+	pass "the ACL contains no wildcard"
+fi
+
+echo
+echo "== guard 5: every RPC the frontend calls is a real method, and is tested =="
+
+FRONTEND_METHODS="$(grep -rhoE "rpcCall\('[a-z_]+'" "$VIEWS" \
+	| sed "s/rpcCall('//" | tr -d "'" | sort -u)"
+
+if [ -n "$FRONTEND_METHODS" ]; then
+	pass "parsed $(printf '%s\n' "$FRONTEND_METHODS" | grep -c .) rpcCall method names"
+else
+	fail "found no rpcCall method names under $VIEWS"
+fi
+
+UNKNOWN=""
+for m in $FRONTEND_METHODS; do
+	# 'list' is the ubus *service* object, not this module's.
+	if [ "$m" = "list" ]; then
+		grep -rq "object: 'service'" "$VIEWS" \
+			|| UNKNOWN="$UNKNOWN list(not via the service object)"
+		continue
+	fi
+	printf '%s\n' "$BACKEND_METHODS" | grep -qx "$m" || UNKNOWN="$UNKNOWN $m"
+done
+
+if [ -z "$UNKNOWN" ]; then
+	pass "every frontend rpcCall names a method the backend defines"
+else
+	fail "the frontend calls methods the backend does not define:$UNKNOWN"
+fi
+
+# And every one of them must be exercised somewhere, so a method cannot be
+# shipped - or a call site broken - without a test noticing.
+UNTESTED=""
+for m in $FRONTEND_METHODS; do
+	[ "$m" = "list" ] && continue
+	grep -rq "$m" "$ROOT/tests" || UNTESTED="$UNTESTED $m"
+done
+
+if [ -z "$UNTESTED" ]; then
+	pass "every RPC the frontend calls is referenced by a test"
+else
+	fail "these RPCs are called by the frontend but referenced by no test:$UNTESTED"
+fi
+
+echo
+echo "== guard 6: every certificate button has a backend case =="
+
+# guard 3 already found $BTN from the views.
+BACKEND_CASES="$(awk '/certificate_write: \{/,/^\t\},/' "$RPC" \
+	| grep -oE "case '[a-z_]+'" | sed "s/case '//" | tr -d "'" | sort -u)"
+
+if [ -n "$BACKEND_CASES" ]; then
+	pass "parsed the certificate_write cases: $(printf '%s ' $BACKEND_CASES)"
+else
+	fail "could not parse the certificate_write cases"
+fi
+
+for n in $BTN; do
+	printf '%s\n' "$BACKEND_CASES" | grep -qx "$n" \
+		&& pass "certificate_write handles '$n'" \
+		|| fail "the '$n' upload button has no certificate_write case"
+done
+
+echo
+echo "== guard 7: the semantic layers do not touch UCI =="
+
+# UCI -> Loader -> {Parser, Generator, Runtime}: config/loader.uc owns the only
+# cursor on the client path.  A parser or generator that grows its own cursor
+# breaks the layering this refactor exists to establish.
+LAYERS="$SCRIPTS/generator $SCRIPTS/parser $SCRIPTS/config/model.uc $SCRIPTS/config/adapter.uc"
+assert_empty "no parser/generator/model/adapter imports the uci module" \
+	grep -rn "from 'uci'" $LAYERS
+assert_empty "no parser/generator/model/adapter opens a cursor" \
+	grep -rn "cursor(" $LAYERS
+assert_nonempty "the Loader is still the one that owns the cursor" \
+	grep -rn "cursor(" "$SCRIPTS/config/loader.uc"
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
