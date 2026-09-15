@@ -84,6 +84,54 @@ if grep -q "Successfully updated subscriptions" "$LOGFILE" 2>/dev/null; then
 	FAILED=1
 fi
 
+# --- the lock ------------------------------------------------------------
+# The cron entry and the LuCI button can both start this script, and an update
+# is a sequence of commits, so two runs interleaving them is last-writer-wins.
+# A fresh lock must make the second run stand down...
+LOCKDIR="$WORK/run/update_subscriptions.lock"
+rm -f "$LOGFILE"
+mkdir -p "$LOCKDIR"
+if ( cd "$WORK/scripts" && ucode -L "$WORK/scripts" update_subscriptions.uc ) > "$WORK/stdout2" 2>&1; then
+	:
+else
+	echo "FAIL: the updater exited non-zero while another run held the lock"
+	FAILED=1
+fi
+
+if grep -q "already running" "$LOGFILE" 2>/dev/null; then
+	echo "PASS: a held lock makes the updater stand down"
+else
+	echo "FAIL: the updater ignored an existing lock"
+	sed 's/^/      /' "$LOGFILE"
+	FAILED=1
+fi
+
+# ...and a lock left behind by a killed process must not block every future
+# update, so one older than the stale window is broken.
+rm -f "$LOGFILE"
+rm -rf "$LOCKDIR"
+mkdir -p "$LOCKDIR"
+touch -t 202001010000 "$LOCKDIR"
+if ( cd "$WORK/scripts" && ucode -L "$WORK/scripts" update_subscriptions.uc ) > "$WORK/stdout3" 2>&1; then
+	:
+else
+	echo "FAIL: the updater exited non-zero on a stale lock"
+	FAILED=1
+fi
+
+if grep -q "Breaking a stale update lock" "$LOGFILE" 2>/dev/null; then
+	echo "PASS: a stale lock is broken rather than blocking forever"
+else
+	echo "FAIL: a stale lock was not broken - every future update would be skipped"
+	sed 's/^/      /' "$LOGFILE"
+	FAILED=1
+fi
+
+if [ -d "$LOCKDIR" ]; then
+	echo "FAIL: the lock was left behind after the run"
+	FAILED=1
+fi
+
 rm -rf "$WORK"
 
 if [ "$FAILED" != 0 ]; then

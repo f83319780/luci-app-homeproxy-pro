@@ -34,12 +34,12 @@
 'use strict';
 
 import { md5 } from 'digest';
-import { open, readfile, writefile } from 'fs';
+import { lstat, open, readfile, writefile } from 'fs';
 import { connect } from 'ubus';
 import { cursor } from 'uci';
 
 import {
-	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl
+	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl, shellQuote
 } from 'homeproxy';
 
 import { parse_uri } from './parser/uri.uc';
@@ -101,11 +101,62 @@ if (routing_mode !== 'custom') {
 
 const config_backup = readfile(CONFIG_FILE);
 
+
 function log(...args) {
 	const logfile = open(`${RUN_DIR}/homeproxy.log`, 'a');
 	logfile.write(`${getTime()} [SUBSCRIBE] ${join(' ', args)}\n`);
 	logfile.close();
 }
+
+/* One updater at a time.
+ *
+ * The cron entry and the LuCI button can both start this script, and the update
+ * is a sequence of commits (nodes, then main_node refs, then the repository's
+ * single commit). Two runs interleaving them is last-writer-wins, and a failing
+ * run restores ITS snapshot over whatever the other just wrote - so a
+ * concurrent update can lose a whole node set.
+ *
+ * mkdir is the lock: it is atomic on every filesystem this runs on and needs no
+ * flock binding. A lock older than HP_LOCK_STALE is treated as abandoned (a
+ * killed process cannot clean up after itself) and broken, so a crash cannot
+ * block every future update. */
+const LOCK_DIR = RUN_DIR + '/update_subscriptions.lock';
+const LOCK_STALE = 600;
+
+function lock_age() {
+	const st = lstat(LOCK_DIR);
+
+	if (!st)
+		return null;
+
+	/* time() is the epoch; getTime() is this package's *formatter*
+	 * (getTime(epoch) -> 'YYYY-MM-DD@HH:MM:SS'), so subtracting it produced
+	 * NaN and the stale check never fired. */
+	return max(0, time() - (st.mtime || 0));
+};
+
+function acquire_lock() {
+	system(sprintf('mkdir -p %s', shellQuote(RUN_DIR)));
+
+	if (system(sprintf('mkdir %s 2>/dev/null', shellQuote(LOCK_DIR))) === 0)
+		return true;
+
+	const age = lock_age();
+
+	if (age != null && age > LOCK_STALE) {
+		log(sprintf('Breaking a stale update lock (%s seconds old).', age));
+		system(sprintf('rmdir %s 2>/dev/null', shellQuote(LOCK_DIR)));
+
+		return system(sprintf('mkdir %s 2>/dev/null', shellQuote(LOCK_DIR))) === 0;
+	}
+
+	return false;
+};
+
+function release_lock() {
+	system(sprintf('rmdir %s 2>/dev/null', shellQuote(LOCK_DIR)));
+};
+
 
 function main() {
 	const node_cache = {};
@@ -261,7 +312,15 @@ function main() {
 	log('Successfully updated subscriptions.');
 }
 
-if (!isEmpty(subscription_urls))
+if (isEmpty(subscription_urls)) {
+	/* Nothing to do; do not take the lock at all. */
+}
+else if (!acquire_lock()) {
+	log('Another subscription update is already running; skipping this one.');
+}
+else {
+	/* ucode has no `finally`, so the release is written out on both paths by
+	 * the explicit call after the try/catch. */
 	try {
 		call(main);
 	} catch(e) {
@@ -270,7 +329,23 @@ if (!isEmpty(subscription_urls))
 		log(e.stacktrace[0].context);
 
 		if (config_backup != null) {
-			writefile(CONFIG_FILE, config_backup);
-			log('Restored the previous configuration; the running service was not stopped.');
+			/* Write the snapshot beside the config and rename it into place.
+			 * A bare writefile() truncates first, so a crash or a full disk
+			 * part-way through the restore leaves /etc/config/homeproxy
+			 * partial or empty - losing the very configuration this is
+			 * meant to protect. rename() is atomic within a directory. */
+			const restore_tmp = CONFIG_FILE + '.hp-restore';
+
+			if (writefile(restore_tmp, config_backup) != null
+			    && system(sprintf('mv -f %s %s', shellQuote(restore_tmp), shellQuote(CONFIG_FILE))) === 0) {
+				log('Restored the previous configuration; the running service was not stopped.');
+			}
+			else {
+				system(sprintf('rm -f %s', shellQuote(restore_tmp)));
+				log('FAILED to restore the previous configuration - the file on disk may be incomplete.');
+			}
 		}
 	}
+
+	release_lock();
+}
