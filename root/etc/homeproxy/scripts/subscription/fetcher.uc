@@ -20,13 +20,17 @@
 
 'use strict';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty, redactUrl } from 'homeproxy';
 
 export function fetch(url, user_agent, log) {
 	const result = wGETVerbose(url, user_agent);
 	if (isEmpty(result.content)) {
+		/* Redact the URL before logging: the query string is the
+		 * subscription token and homeproxy.log is world-readable on
+		 * a default install. The original URL goes back to the caller
+		 * via result.error so error propagation still works. */
 		log(sprintf('Failed to fetch resources from %s: %s',
-			url, result.error || 'empty response'));
+			redactUrl(url), result.error || 'empty response'));
 		return { content: null, error: result.error || 'empty response' };
 	}
 	return { content: result.content, error: null };

@@ -29,7 +29,7 @@
 
 'use strict';
 
-import { isEmpty } from 'homeproxy';
+import { isEmpty, validateHomeProxyPath } from 'homeproxy';
 
 import { get_outbound, isDirectOutboundTag } from './common.uc';
 
@@ -62,18 +62,30 @@ export function build_user_rulesets(rule_set_array, dm, ctx) {
 			type: cfg.type,
 			tag: rs_tag,
 			format: cfg.format,
-			path: cfg.path,
+			/* Local rule-set path is read by sing-box as root. The
+			 * whitelist is enforced here because the LuCI form's
+			 * datatype='file' is only UX - UCI can be set from anywhere
+			 * on the LAN, and an arbitrary /etc/passwd would leak the
+			 * file to anyone who could write UCI. Drop the field rather
+			 * than die(): a missing path on a local ruleset becomes
+			 * sing-box invalid (and known-good stays), same effect as a
+			 * hard fail. */
+			path: (cfg.type === 'local' && cfg.path && !validateHomeProxyPath(cfg.path))
+				? null
+				: cfg.path,
 			url: cfg.url,
 			update_interval: cfg.update_interval
 		};
 		/* download_detour is a pre-1.14 option that only makes sense for
 		   remote rule-sets; emitting it for local/inline ones makes sing-box
-		   1.14 reject the whole config. It is translated into http_clients
+		 * 1.14 reject the whole config. It is translated into http_clients
 		   right below. */
 		if (cfg.type === 'remote')
 			ruleset.download_detour = get_outbound(cfg.outbound, dm) || get_outbound(ctx.default_outbound, dm);
 		if (cfg.type === 'remote' && !isEmpty(cfg.initial_path))
-			ruleset.initial_path = cfg.initial_path;
+			/* initial_path is read off the local disk as root; same
+			 * whitelist as the local ruleset path. */
+			ruleset.initial_path = validateHomeProxyPath(cfg.initial_path) ? cfg.initial_path : null;
 		push(rule_set_array, ruleset);
 	}
 }

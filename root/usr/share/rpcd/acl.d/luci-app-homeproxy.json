@@ -10,13 +10,37 @@
 			},
 			"ubus": {
 				"service": [ "list" ],
-				"luci.homeproxy": [ "*" ]
+				"luci.homeproxy": [
+					"acllist_read",
+					"connection_check",
+					"node_parse",
+					"resources_get_version",
+					"singbox_get_features"
+				]
 			},
 			"uci": [ "homeproxy" ]
 		},
 		"write": {
 			"file": {
-				"/tmp/homeproxy_certificate.tmp": [ "write" ]
+				"/etc/homeproxy/resources/direct_list.txt": [ "write" ],
+				"/etc/homeproxy/resources/proxy_list.txt": [ "write" ],
+				"/etc/homeproxy/certs/server_publickey.pem": [ "write" ],
+				"/etc/homeproxy/certs/server_privatekey.pem": [ "write" ],
+				"/etc/homeproxy/certs/client_ca.pem": [ "write" ],
+				"/etc/homeproxy/certs/client_ech_conf.pem": [ "write" ],
+				"/tmp/homeproxy_cert_server_publickey.tmp": [ "write" ],
+				"/tmp/homeproxy_cert_server_privatekey.tmp": [ "write" ],
+				"/tmp/homeproxy_cert_client_ca.tmp": [ "write" ],
+				"/tmp/homeproxy_cert_client_ech_conf.tmp": [ "write" ]
+			},
+			"ubus": {
+				"luci.homeproxy": [
+					"acllist_write",
+					"certificate_write",
+					"log_clean",
+					"resources_update",
+					"singbox_generator"
+				]
 			},
 			"uci": [ "homeproxy" ]
 		}

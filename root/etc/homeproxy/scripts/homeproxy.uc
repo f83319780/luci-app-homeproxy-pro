@@ -39,6 +39,38 @@ function closeFD(fd) {
 	}
 };
 
+/* Whitelist absolute paths the generators are allowed to put into
+ * sing-box config. sing-box runs as root and reads the file itself; an
+ * arbitrary UCI value of e.g. /etc/passwd would leak the file to anyone
+ * who could write to the UCI tree. The LuCI UI already gates the input
+ * via validateCertificatePath() in homeproxy.js, but UCI can be set from
+ * any node on the LAN (subscription updates, scripted edits) and the
+ * UI check is only UX - we have to enforce on the backend.
+ *
+ *   /etc/homeproxy/...   - project-managed certs / ruleset paths / etc.
+ *   /tmp/homeproxy_*     - upload staging files (cert_upload_* writes)
+ *
+ * Anything else (relative paths, /etc/passwd, /var/run/...) returns false
+ * and the caller is expected to die() / warn() / strip the value. */
+export function validateHomeProxyPath(p) {
+	if (!p || type(p) !== 'string')
+		return false;
+
+	/* Reject anything that does not start with '/' - relative paths in
+	 * sing-box resolve against the process CWD, which is /tmp at boot
+	 * but is not a position we want any UCI value to land in. */
+	if (substr(p, 0, 1) !== '/')
+		return false;
+
+	if (substr(p, 0, length('/etc/homeproxy/')) === '/etc/homeproxy/')
+		return true;
+
+	if (substr(p, 0, length('/tmp/homeproxy_')) === '/tmp/homeproxy_')
+		return true;
+
+	return false;
+}
+
 export function executeCommand(...args) {
 	let outfd = null, errfd = null;
 
@@ -103,8 +135,18 @@ export function wGETVerbose(url, ua) {
 	if (!ua)
 		ua = 'Wget/1.21 (HomeProxy, like v2rayN)';
 
-	/* -nv (not -q) so wget still reports *why* a fetch failed on stderr */
-	const output = executeCommand(`/usr/bin/wget -nv -O- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
+	/* -nv (not -q) so wget still reports *why* a fetch failed on stderr.
+	 * --max-filesize aborts the fetch *before* the body is downloaded: a
+	 * malicious or misconfigured subscription cannot pull gigabytes onto
+	 * the router. The legacy path had no size cap and only relied on a
+	 * 512 KB read-truncation downstream, which was useless - by the time
+	 * the read cap kicked in, the full body had already been written to
+	 * /tmp by executeCommand().
+	 *
+	 * 5 MiB covers a 10 000-node subscription with ~3 KB per node plus
+	 * the base64 inflation. Anything larger is almost certainly an
+	 * attack or a misconfiguration. */
+	const output = executeCommand(`/usr/bin/wget -nv -O- --max-filesize=5m --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)}`) || {};
 	if (output.exitcode !== 0) {
 		let reason = trim(output.stderr || '');
 		reason = reason ? replace(reason, /\s+/g, ' ') : 'no error output';
@@ -121,6 +163,37 @@ export function wGETVerbose(url, ua) {
 export function wGET(url, ua) {
 	return wGETVerbose(url, ua).content;
 };
+
+/* Redact the credential-bearing parts of a URL before logging it. Any
+ * subscription URL we ship into /var/run/homeproxy/homeproxy.log is
+ * readable by anyone who can read /var/run/homeproxy - including UCI
+ * defaults that ship on the device and anyone with shell on the LAN.
+ * The plain host and path are useful for debugging ("which endpoint
+ * failed?"); the query string and userinfo are not - they hold the
+ * subscription token. The original URL is still passed to wGETVerbose.
+ *
+ *   https://user:token@host.example.com/path?q=abc&token=secret
+ *     -> https://***@host.example.com/path?q=*** */
+export function redactUrl(url) {
+	if (!url || type(url) !== 'string')
+		return '';
+
+	let u = url;
+
+	/* userinfo: scheme://user:pass@host -> scheme://***@host */
+	const at = index(u, '@');
+	const scheme = match(u, /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//);
+	if (scheme && at !== -1 && at > length(scheme[0]))
+		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
+
+	/* query: redact everything after the first '?'. The path itself
+	 * stays so logs still identify which endpoint failed. */
+	const q = index(u, '?');
+	if (q !== -1)
+		u = substr(u, 0, q) + '?***';
+
+	return u;
+}
 /* Utilities end */
 
 /* String helper start */
@@ -389,8 +462,8 @@ export function buildTLSObject(tls, is_server, server_extras) {
 		max_version: tls.max_version,
 		handshake_timeout: is_server ? null : strToTime(tls.handshake_timeout),
 		cipher_suites: tls.cipher_suites,
-		certificate_path: tls.cert_path,
-		key_path: is_server ? extras.tls_key_path : null,
+		certificate_path: tls.cert_path && validateHomeProxyPath(tls.cert_path) ? tls.cert_path : null,
+		key_path: (is_server && extras.tls_key_path && validateHomeProxyPath(extras.tls_key_path)) ? extras.tls_key_path : null,
 		certificate_provider: (is_server && extras.tls_acme === '1') ? {
 			type: 'acme',
 			domain: (type(extras.tls_acme_domain) === 'array') ? extras.tls_acme_domain
