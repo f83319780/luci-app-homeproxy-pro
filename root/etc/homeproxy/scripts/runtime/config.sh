@@ -25,8 +25,8 @@
 # Record <live> as the new known-good copy.  Non-zero when <live> is missing
 # or empty, in which case the previous known-good copy is left untouched.
 hp_known_good() {
-	live="$1"
-	good="$2"
+	local live="$1"
+	local good="$2"
 
 	[ -s "$live" ] || return 1
 
@@ -41,8 +41,8 @@ hp_known_good() {
 # 1  <live> was missing and the known-good copy was restored
 # 2  nothing usable: neither file exists
 hp_ensure_live() {
-	live="$1"
-	good="$2"
+	local live="$1"
+	local good="$2"
 
 	[ -s "$live" ] && return 0
 
@@ -57,8 +57,8 @@ hp_ensure_live() {
 # Replace <live> with the known-good copy.  Non-zero when there is nothing to
 # roll back to, so the caller can distinguish "restored" from "no fallback".
 hp_rollback() {
-	live="$1"
-	good="$2"
+	local live="$1"
+	local good="$2"
 
 	[ -s "$good" ] || return 1
 

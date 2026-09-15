@@ -56,7 +56,7 @@ hp_dnsmasq_write_snippets() {
 	local dnsmasq_dir="$1"
 	local hp_dir="$2"
 	local routing_mode="$3"
-	local ipv6_support dns_port gfw_nftset_v6 wan_nftset_v6
+	local ipv6_support dns_port gfw_nftset_v6 wan_nftset_v6 server
 
 	config_get_bool ipv6_support "config" "ipv6_support" "0"
 	config_get dns_port "infra" "dns_port" "5333"
