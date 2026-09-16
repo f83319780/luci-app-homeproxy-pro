@@ -27,6 +27,23 @@ import {
 
 import { validate } from './validator.uc';
 
+/* Default label: ip6addr uses brackets for readability, otherwise
+ * `address:port`. Exported because every scheme benefits and because a
+ * caller that mutates a parsed config's address (subscription
+ * apply_policy does not, but a future one could) can re-derive it.
+ *
+ * Declared above parse_uri on purpose: ucode does not hoist
+ * `export function`, so the call below would otherwise fail at runtime
+ * with "access to undeclared variable". */
+export function derive_label(config) {
+	if (config.label)
+		return config.label;
+	if (!config.address || !config.port)
+		return null;
+	return (validation('ip6addr', config.address) ?
+		`[${config.address}]` : config.address) + ':' + config.port;
+};
+
 export function parse_uri(uri, features, log) {
 	if (!features) features = {};
 	if (!log) log = function() {};
@@ -99,17 +116,4 @@ export function parse_uri(uri, features, log) {
 		checked.label = derive_label(checked);
 
 	return checked;
-};
-
-/* Default label: ip6addr uses brackets for readability, otherwise
- * `address:port`. Exported because every scheme benefits and because a
- * caller that mutates a parsed config's address (subscription
- * apply_policy does not, but a future one could) can re-derive it. */
-export function derive_label(config) {
-	if (config.label)
-		return config.label;
-	if (!config.address || !config.port)
-		return null;
-	return (validation('ip6addr', config.address) ?
-		`[${config.address}]` : config.address) + ':' + config.port;
 };
