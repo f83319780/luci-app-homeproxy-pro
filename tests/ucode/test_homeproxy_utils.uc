@@ -77,16 +77,16 @@ expect('wget.not-a-usage-error',
 expect('wget.reports-a-reason', length(wget.error || '') > 0, true);
 expect('wget.no-content-on-failure', wget.content, null);
 
-/* Review H3: wGETVerbose's stderr arrives with the original URL (wget's
- * `-nv` failure line is `<URL>: <reason>`); the returned error must not
- * carry the token back to callers.  Closed port + a token-shaped URL gives
- * wget a real network failure, and what the test sees is the post-redaction
- * error. */
+/* Review H3: an HTTP-level wget failure echoes the target, query string and
+ * all, so `<URL>?token=secret: 404 Not Found` is what would reach the log.
+ * A *connection* failure is the cheap case to reproduce here, but wget prints
+ * only `failed: Connection refused.` for it - no URL - so this fetch proves
+ * the end-to-end path hands back no token, not that redaction ran.  The
+ * redactReason() block below covers redaction itself, using the shapes wget
+ * actually emits. */
 const tokwget = wGETVerbose('http://127.0.0.1:1/?token=secret');
 expect('wget.token-not-in-error',
 	match(tokwget.error || '', /token=secret/) == null, true);
-expect('wget.redaction-marker-in-error',
-	match(tokwget.error || '', /\?\*\*\*/) != null, true);
 
 /* redactReason(): central redaction that protects every wGETVerbose caller.
  * Tested in isolation so the assertion does not depend on wget being

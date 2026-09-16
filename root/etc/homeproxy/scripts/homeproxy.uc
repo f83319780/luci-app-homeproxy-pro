@@ -250,11 +250,13 @@ export function wGETVerbose(url, ua) {
 	const output = executeCommand(`{ /usr/bin/wget -nv -O- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)} | head -c ${HP_FETCH_CAP + 1}; }`) || {};
 	let reason = trim(output.stderr || '');
 	reason = reason ? replace(reason, /\s+/g, ' ') : '';
-	/* Review H3: the original error string carries the full URL (wget's
-	 * -nv reports the target on the failure line, including the query
-	 * string - the subscription token).  Redact at the source so every
-	 * caller of wGETVerbose gets a safe `error` whether or not it
-	 * remembers to call redactUrl itself. */
+	/* Review H3: an HTTP-level wget failure echoes the full URL - query
+	 * string and subscription token included - as in
+	 * `https://host/path?token=secret: 404 Not Found`.  (A pure connection
+	 * failure prints only `failed: Connection refused.` and leaks nothing,
+	 * but the 404/403 case is enough.)  Redact at the source so every caller
+	 * of wGETVerbose gets a safe `error` whether or not it remembers to call
+	 * redactUrl itself. */
 	if (reason)
 		reason = redactReason(reason);
 
