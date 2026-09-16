@@ -967,6 +967,29 @@ else
 fi
 
 echo
+echo "== guard 22: client tab modules return a LuCI class =="
+
+# LuCI instantiates every module it requires and rejects anything that is not
+# a Class subclass:
+#
+#   _class = _factory.apply(...);
+#   if (!Class.isSubclass(_class))
+#       error('TypeError', '"%s" factory yields invalid constructor', name);
+#
+# The M5 split shipped six view.homeproxy.client.* modules returning a plain
+# object (`return { render }`), so every tab threw and no browser could render
+# the client page.  Nothing caught it: the modules parse, and the snapshot
+# harness has its own loader that happily accepts a plain object.
+for f in "$VIEWS"/view/homeproxy/client/*.js; do
+	[ -f "$f" ] || continue
+	if grep -qE '^return baseclass\.extend\(' "$f"; then
+		pass "$(basename "$f") returns a LuCI class"
+	else
+		fail "$(basename "$f") does not return baseclass.extend(...) - luci.js rejects it as an invalid constructor"
+	fi
+done
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
