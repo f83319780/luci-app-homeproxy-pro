@@ -3865,6 +3865,7 @@
 								"subsection": null,
 								"props": {
 									"datatype": "hostname",
+									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
 									"monospace": true,
 									"rows": 10
 								}
@@ -3883,6 +3884,7 @@
 								"subsection": null,
 								"props": {
 									"datatype": "hostname",
+									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
 									"monospace": true,
 									"rows": 10
 								}

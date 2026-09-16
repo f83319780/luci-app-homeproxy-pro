@@ -767,6 +767,136 @@ else
 fi
 
 echo
+echo "== guard 17: resource update has multi-mirror fallback =="
+
+# Review M7: update_resources.sh used to hardcode fastly.jsdelivr.net.  When
+# that CDN was unreachable (or shared the same rate limit / block as the
+# user's network), the only path to "successfully updated" was for the user
+# to switch the package's CDN manually - and there was no UI surface for
+# it.  Walking a fallback list at download time keeps the script correct
+# for the common case (fastly is up) and useful in the failure case
+# (gcore, cdn, or raw.githubusercontent.com catches it).  The list lives
+# in the script's MIRRORS variable; the order is part of the contract.
+UPDATE_SCRIPT="$ROOT/root/etc/homeproxy/scripts/update_resources.sh"
+
+for mirror in fastly.jsdelivr.net gcore.jsdelivr.net cdn.jsdelivr.net raw.githubusercontent.com; do
+	if grep -qE "\b$mirror\b" "$UPDATE_SCRIPT"; then
+		pass "update_resources.sh mentions $mirror"
+	else
+		fail "update_resources.sh is missing $mirror in its mirror list"
+	fi
+done
+
+# The fallback must actually iterate - asserting just that the names
+# appear would pass on a one-line comment.
+if grep -qE "for [a-zA-Z_]+ in \\\$MIRRORS" "$UPDATE_SCRIPT"; then
+	pass "update_resources.sh iterates over the mirror list"
+else
+	fail "update_resources.sh does not iterate over the mirror list - the fallback is not wired"
+fi
+
+echo
+echo "== guard 18: resource update exposes last-successful timestamp =="
+
+# The .updated_at file is what the UI shows as "(last updated ...)".
+# The .ver file holds the upstream commit date, which is not what the
+# user wants - they want to know when *this router* last succeeded.
+if grep -qE '\$RESOURCES_DIR/\$listtype\.updated_at' "$UPDATE_SCRIPT"; then
+	pass "update_resources.sh writes the local success timestamp to <type>.updated_at"
+else
+	fail "update_resources.sh does not persist the local success timestamp - the UI has nothing to show"
+fi
+
+# The RPC must return both version and updated_at.  Asserted positively
+# so the guard cannot pass by finding nothing.
+LUCI="$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy"
+if grep -qE "resources_get_version" "$LUCI" && grep -qE "\.updated_at" "$LUCI"; then
+	pass "resources_get_version returns updated_at"
+else
+	fail "resources_get_version does not return updated_at - the UI cannot show \"(last updated ...)\""
+fi
+
+# The UI must read and display it.  Without this, the RPC field is
+# unused and the user sees nothing new.
+STATUS_JS="$ROOT/htdocs/luci-static/resources/view/homeproxy/status.js"
+if grep -qE "res\.updated_at" "$STATUS_JS"; then
+	pass "status.js renders the last-updated timestamp"
+else
+	fail "status.js does not render res.updated_at - the RPC field is unused"
+fi
+
+echo
+echo "== guard 19: acllist_write rejects bad lines with a line number =="
+
+# Review L1: acllist_write used to return "invalid character in domain list"
+# with no offset, so a 200-line list with one bad row forced the user to
+# bisect by hand.  The rejection now names the line, and the UI hint tells
+# the user what characters are banned.  Pinned by the guard so the line
+# number cannot quietly regress.
+LUCI="$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy"
+ACLLIST_BODY="$(awk '/^[[:space:]]+acllist_write:/,/^[[:space:]]+},$/' "$LUCI")"
+
+if printf '%s' "$ACLLIST_BODY" | grep -qE "line \\\$\\{i \\+ 1\\}"; then
+	pass "acllist_write reports the offending line number"
+else
+	fail "acllist_write does not report a line number - the L1 fix is gone"
+fi
+
+# The UI hint (one per textarea) is the other half: the user sees the
+# description *before* trying to save.  Both proxy_list and direct_list
+# textareas must carry the hint; assert positively so the guard cannot
+# pass by finding nothing.
+ACCESS="$ROOT/htdocs/luci-static/resources/view/homeproxy/client/access.js"
+PROXY_HINT="$(awk '/_proxy_domain_list/,/description\s*=/' "$ACCESS" \
+	| grep -c 'One domain per line')"
+DIRECT_HINT="$(awk '/_direct_domain_list/,/description\s*=/' "$ACCESS" \
+	| grep -c 'One domain per line')"
+if [ "$PROXY_HINT" -ge 1 ]; then
+	pass "access.js proxy_domain_list textarea carries the L1 hint"
+else
+	fail "access.js proxy_domain_list textarea is missing the L1 hint - the user is back to guessing which characters are allowed"
+fi
+if [ "$DIRECT_HINT" -ge 1 ]; then
+	pass "access.js direct_domain_list textarea carries the L1 hint"
+else
+	fail "access.js direct_domain_list textarea is missing the L1 hint"
+fi
+
+echo
+echo "== guard 20: CONTRIBUTING.md and SECURITY.md exist =="
+
+# Review L5: the repo had no contribution guide and no private disclosure
+# channel.  Both belong at the root; either being missing is the kind of
+# thing nobody notices until an issue lands or a vuln is reported.
+for f in CONTRIBUTING.md SECURITY.md; do
+	if [ -s "$ROOT/$f" ]; then
+		pass "$f exists and is non-empty"
+	else
+		fail "$f is missing or empty - the repo has no contribution guide / private disclosure channel"
+	fi
+done
+
+# SECURITY.md must point at a private channel, not "open an issue".
+# "open an issue" defeats the point of having a security policy because
+# it asks for redacted tokens and concrete payloads in a public thread.
+if grep -qE 'do[ ]?not[ ]?open[ ]?a[ ]?public[ ]?issue' "$ROOT/SECURITY.md" || \
+   grep -qE 'Security[ ]?Advisory' "$ROOT/SECURITY.md" || \
+   grep -qE '@[a-z][a-z0-9.-]+\.(dev|com|org)' "$ROOT/SECURITY.md"; then
+	pass "SECURITY.md names a non-public channel"
+else
+	fail "SECURITY.md does not name a non-public channel - 'open an issue' is not one"
+fi
+
+# CONTRIBUTING.md must say where the architectural rules live, otherwise
+# contributors land PRs that the maintainer has to bounce.
+if grep -qE 'homeproxy_architecture_refactor_agent_guide' "$ROOT/CONTRIBUTING.md" && \
+   grep -qE 'arch-guard|arch_guard' "$ROOT/CONTRIBUTING.md"; then
+	pass "CONTRIBUTING.md points at the agent guide and the arch-guard"
+else
+	fail "CONTRIBUTING.md does not point at the agent guide or the arch-guard - contributors cannot find the rules"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
