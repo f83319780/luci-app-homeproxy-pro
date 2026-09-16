@@ -229,7 +229,7 @@ function main() {
 	 * per-tab shape the modules had at the top of client.js before the
 	 * split, plus `common` for the modules that pull in renderRuleSection.
 	 */
-	const tabsBase = { homeproxy, form, uci };
+	const tabsBase = { baseclass, homeproxy, form, uci };
 	const tabs = {};
 	if (target === 'client') {
 		const tabDir = path.join(viewDir, 'view/homeproxy/client');

@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 'require uci';
 
@@ -354,4 +355,4 @@ function renderRoutingRules(ctx) {
 	/* Routing rules end */
 }
 
-return { render, renderRoutingRules };
+return baseclass.extend({ render, renderRoutingRules });

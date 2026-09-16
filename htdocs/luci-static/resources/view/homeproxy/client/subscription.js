@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 'require uci';
 
@@ -131,4 +132,4 @@ function render(ctx) {
 	/* Rule set settings end */
 }
 
-return { render };
+return baseclass.extend({ render });

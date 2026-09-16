@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 'require uci';
 
@@ -558,4 +559,4 @@ function renderRuleSection(s, kind, self, data) {
 	so.modalonly = true;
 }
 
-return { renderRuleSection };
+return baseclass.extend({ renderRuleSection });
