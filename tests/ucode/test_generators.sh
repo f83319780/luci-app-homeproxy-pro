@@ -212,4 +212,28 @@ else
 	fi
 fi
 
+# A direct node as the main node leaves main-out with no fields of its own, and
+# sing-box refuses to detour into an empty direct outbound - both the main-dns
+# server and the rule-set http_client used to, so the service never started.
+# `sing-box check` accepts the file (only `sing-box run` rejects it), so assert
+# on the generated JSON rather than trusting check.
+run_case direct_main "$ROOT/tests/fixtures/generators/direct_main.uci" generate_client.uc sing-box-c.json
+
+dm_json="$WORK/direct_main/run/sing-box-c.json"
+if [ ! -f "$dm_json" ]; then
+	echo "FAIL: direct_main: no config was generated"
+	FAILED=1
+else
+	if ! grep -q '"tag": "main-out"' "$dm_json"; then
+		echo "FAIL: direct_main: main-out is missing from the generated config"
+		FAILED=1
+	fi
+	if grep -q '"detour": "main-out"' "$dm_json"; then
+		echo "FAIL: direct_main: something still detours into the empty direct main-out:"
+		grep -n '"detour": "main-out"' "$dm_json" | head -3
+		echo "      sing-box run rejects it with 'detour to an empty direct outbound makes no sense'"
+		FAILED=1
+	fi
+fi
+
 exit $FAILED
