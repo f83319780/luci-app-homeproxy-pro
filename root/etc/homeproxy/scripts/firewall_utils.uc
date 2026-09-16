@@ -32,15 +32,21 @@
 
 /* IPv4 (with optional /CIDR) - the regex is the standard four-octet body
  * followed by an optional /0..32.  Anything outside that - "1.2.3.4.5",
- * "1.2.3", " 1.2.3.4 ", "1.2.3.4 " - is rejected. */
-const IPV4_BODY = '(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)';
-const IPV4_CIDR_RE = new RegExp(`^(?:${IPV4_BODY}\\.){3}${IPV4_BODY}(?:/(?:3[0-2]|[12]?[0-9]))?$`);
+ * "1.2.3", " 1.2.3.4 ", "1.2.3.4 " - is rejected.
+ *
+ * Spelled out as one literal rather than built with `new RegExp(...)`: ucode
+ * has no `new` keyword, so the constructor form was a compile error
+ * ("Unexpected token") and the module never loaded.  The capture groups are
+ * plain `(...)` because ucode regexes go through POSIX regcomp(), which has
+ * no `(?:...)` non-capturing group; nothing here reads the captures, so the
+ * extra ones are harmless. */
+const IPV4_CIDR_RE = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\/(3[0-2]|[12]?[0-9]))?$/;
 
 export function isValidIPv4(s) {
 	if (!s || type(s) !== 'string')
 		return false;
 	return !!match(s, IPV4_CIDR_RE);
-}
+};
 
 export function ipv4_to_nftarr(list) {
 	if (isEmpty(list))
@@ -53,7 +59,7 @@ export function ipv4_to_nftarr(list) {
 	}
 
 	return isEmpty(out) ? null : `{ ${join(', ', uniq(out))} }`;
-}
+};
 
 /* MAC address: six colon-separated hex octets, case-insensitive. */
 const MAC_RE = /^[0-9a-fA-F]{2}(:[0-9a-fA-F]{2}){5}$/;
@@ -62,7 +68,7 @@ export function isValidMAC(s) {
 	if (!s || type(s) !== 'string')
 		return false;
 	return !!match(s, MAC_RE);
-}
+};
 
 export function mac_to_nftarr(list) {
 	if (isEmpty(list))
@@ -75,7 +81,7 @@ export function mac_to_nftarr(list) {
 	}
 
 	return isEmpty(out) ? null : `{ ${join(', ', uniq(out))} }`;
-}
+};
 
 /* Linux interface names: alnum, dot, underscore, hyphen.  Anything that
  * would survive `ip link show` parsing is accepted here. */
@@ -85,7 +91,7 @@ export function isValidIface(s) {
 	if (!s || type(s) !== 'string')
 		return false;
 	return !!match(s, IFACE_RE);
-}
+};
 
 export function iface_to_nftarr(list) {
 	if (isEmpty(list))
@@ -98,7 +104,7 @@ export function iface_to_nftarr(list) {
 	}
 
 	return isEmpty(out) ? null : `{ ${join(', ', uniq(out))} }`;
-}
+};
 
 /* Routing-port validator.  UCI delivers routing_port as a comma-separated
  * string ('22,53,80,443,...'), so we split first and then validate each
@@ -114,7 +120,7 @@ export function isValidPort(s) {
 		return false;
 	const n = +s;
 	return n >= 0 && n <= 65535;
-}
+};
 
 export function ports_to_nftarr(s) {
 	if (isEmpty(s) || type(s) !== 'string')
@@ -128,4 +134,4 @@ export function ports_to_nftarr(s) {
 	}
 
 	return isEmpty(out) ? null : `{ ${join(', ', uniq(out))} }`;
-}
+};
