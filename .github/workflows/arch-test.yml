@@ -59,7 +59,6 @@ jobs:
             libjson-c-dev libmd-dev libssl-dev meson ninja-build \
             pkg-config python3 zlib1g-dev
 
-      - name: Build ucode toolchain (libubox, libuci, libubus, ucode, lucihttp, sing-box)
         # The script installs into $HOME/.local/ucode-testbed by default and
         # prints the PATH setup we need below. It also verifies the modules
         # and the lucihttp binding before exiting, so a broken build fails
