@@ -14,7 +14,8 @@
  * UCI writers are untrusted (UI validation is there), but because UCI is
  * writable from anywhere on the LAN and the package principle is "backend
  * must enforce".  Why those helpers exist, and why dropping silently
- * matches the IPv6 path, is in docs/adr/0001-fw4-template-validation.md.
+ * matches the IPv6 path, is pinned by tests/ucode/test_firewall_validators.uc
+ * and guard 11 in tests/arch-guard.sh.
  *
  * Keep this comment inside the ucode block: text placed before `{%-` has its
  * trailing newline trimmed, which would glue it onto the first nft statement.

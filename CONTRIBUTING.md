@@ -5,11 +5,11 @@ applications/luci-app-homeproxy that targets sing-box 1.14+; the goal is a
 modular, testable package that ships on ImmortalWrt/OpenWrt without rebuilding
 the underlying proxy.
 
-This file is for **how to land a change**. The architectural rules live in
-`docs/homeproxy_architecture_refactor_agent_guide.md`; the rationale for past
-decisions lives in `docs/adr/`; the in-flight accounting lives in
-`docs/architecture-improvement-plan.md`. Read the relevant one before opening
-a PR.
+This file is for **how to land a change**. The architectural rules are
+executable rather than prose: `tests/arch-guard.sh` pins them, and each guard
+names the rule it enforces. The reasoning behind past decisions is in the
+commit messages and the PRs that made them — the maintainer's working design
+notes are deliberately not part of this tree.
 
 ## Workflow
 
@@ -70,9 +70,9 @@ a PR.
 
 - Do not bump `PKG_VERSION` / `PKG_RELEASE` in a feature PR. The release
   pipeline does that on a tag.
-- Do not edit `docs/` (the audit-report / next-step-plan / architecture-improvement-plan
-  trio is the in-flight accounting; keep the public tree clean of in-progress notes).
-  Design ADRs go in `docs/adr/`.
+- Do not add in-progress design notes to the published tree. The working
+  documents live in a gitignored `docs/` directory and never reach a clone;
+  what ships is the code, its guards and this file.
 - Do not add a dependency that the consumer's firmware may not have. The
   package already pulls `+sing-box +firewall4 +kmod-nft-tproxy +kmod-tun +ucode-mod-digest`
   on the Makefile side; runtime imports (`system('sing-box ...')`, etc.) must
@@ -94,8 +94,10 @@ Vulnerabilities: see `SECURITY.md`. Do not open a public issue.
 
 ## Code style
 
-- Ucode: existing pattern is 4-space indent, no semicolons after `export function`,
-  one `export` per symbol. Match what is already in the file you are editing.
+- Ucode: 4-space indent, one `export` per symbol, and **every `export function`
+  must end with `};`** — the ucode shipped by ImmortalWrt/OpenWrt 2026.01.16
+  rejects the semicolon-free form and `tests/ucode/test_ucode_grammar.sh` pins
+  that dialect. Indentation follows the file you are editing.
 - JavaScript: 4-space indent, trailing commas, single-quote strings. The
   LuCI form framework expects you to mutate `form.Map` objects in place rather
   than constructing new ones; do not refactor that without the snapshot test
