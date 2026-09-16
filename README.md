@@ -13,40 +13,11 @@
 本项目是试验性产品，对 homeproxy 架构重构版：以 sing-box **1.14** 内核为唯一目标，
 充分利用 1.14 引入的新特性，不再兼容 1.13 及更早内核。
 
-**仅在生产路由器上尝试过本项目的用户，欢迎反馈实际问题**——本 README 是面向用户的入口，
-架构设计与权衡见 [`docs/`](docs/)。
-
 ## 运行要求
 
 - ImmortalWrt / OpenWrt ≥ 24.10（`apk` 或 `opkg` 均可安装）
 - sing-box ≥ 1.14.0（ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1）
 - 低于 1.14 时服务拒绝启动并记录明确日志
-
-## 安装
-
-仓库只发布 `.apk` / `.ipk` 包（不要从源码构建——见下文「已知限制」）。
-
-### ImmortalWrt（apk）
-
-```sh
-# 两个包：本体 + 中文语言包
-apk add luci-app-homeproxy
-apk add luci-i18n-homeproxy-zh-cn
-
-# 卸载
-apk del luci-app-homeproxy luci-i18n-homeproxy-zh-cn
-```
-
-`luci-i18n-homeproxy-zh-cn` 是独立包，**只装本体不装语言包界面会是英文**。
-
-### OpenWrt（opkg）
-
-```sh
-opkg install luci-app-homeproxy_28.9.1.14-r2_all.ipk
-opkg install luci-i18n-homeproxy-zh-cn_28.9.1.14-r2_all.ipk
-```
-
-包文件名形态见 [Releases](../../releases)。
 
 ## 与上游 homeproxy 的差异
 
@@ -90,33 +61,15 @@ apk add luci-app-homeproxy luci-i18n-homeproxy-zh-cn
 
 - **试验性**：不承诺 API/配置稳定，重大变更可能在 minor 版本里发生。
 - **真机实测单平台**：本仓库只在 x86-64 软路由上做过端到端验证。
-- **不自举**：本包不会编译 sing-box。系统固件必须自带 sing-box 1.14+，
-  否则依赖解析直接失败。
-- **ucode 方言锁定**：ucode pin 到目标快照的 revision（`UCODE_REV` in
-  `tests/toolchain/build-ucode-linux.sh`），不能换上游默认分支的 ucode——
-  否则会编出设备上无法 parse 的代码。
-- **CI 不跑设备侧**：on-target 套件需要 LAN 测试机和 SSH 私钥，是手动触发的
-  workflow，不在 PR 反馈环里。
+- 本包不会编译 sing-box。系统固件必须自带 sing-box 1.14+;否则依赖解析直接失败。
 
 ## 版本号语义
 
 - `PKG_VERSION = YY.MM.PATCH.<sing-box_minor>`，例如 `28.9.1.14`：
-  - `28.9` = 2028 年 9 月的快照
-  - `.1` = 该月内的第 1 个发版
-  - `.14` = 目标 sing-box minor 版本
+  - `28.9` = 就理解为时间吧
+  - `1.14` = 目标 sing-box minor 版本
 - `PKG_RELEASE` 是该 `PKG_VERSION` 下的迭代号（`r1`, `r2`, ...），只在修补
   同一版本时递增。
-
-发版周期与 tag 由 `.github/workflows/build.yml` 管，参见 [`docs/architecture-improvement-plan.md`](docs/architecture-improvement-plan.md)。
-
-## 文档
-
-- [`docs/architecture-improvement-plan.md`](docs/architecture-improvement-plan.md) — 实施账本（按 PHASE 记录所有 commit）
-- [`docs/audit-report.md`](docs/audit-report.md) — 上一轮审计
-- [`docs/next-step-plan.md`](docs/next-step-plan.md) — 本轮优先级排序
-- [`docs/homeproxy_architecture_refactor_agent_guide.md`](docs/homeproxy_architecture_refactor_agent_guide.md) — 架构规格（ABSOLUTE RULES）
-- [`docs/重构实施间断性指导建议.md`](docs/重构实施间断性指导建议.md) — 下一阶段判断基准
-- [`tests/README.md`](tests/README.md) — 测试套件使用说明（面向维护者）
 
 ## 贡献
 
