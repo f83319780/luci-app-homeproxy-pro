@@ -221,7 +221,33 @@ function main() {
 
 	const viewDir = path.join(root, 'htdocs/luci-static/resources');
 	const homeproxy = loadLuciModule(path.join(viewDir, 'homeproxy.js'), {});
-	const mod = loadLuciModule(path.join(viewDir, 'view/homeproxy', target + '.js'), { homeproxy });
+
+	/* Per-tab modules of the client view. Each one is loaded with the deps
+	 * it actually `require`s - the loader rewrites the 'require ... as X;'
+	 * directive into a __deps lookup, so a missing key here becomes a
+	 * runtime error inside the first tab render. The dep set is the same
+	 * per-tab shape the modules had at the top of client.js before the
+	 * split, plus `common` for the modules that pull in renderRuleSection.
+	 */
+	const tabsBase = { homeproxy, form, uci };
+	const tabs = {};
+	if (target === 'client') {
+		const tabDir = path.join(viewDir, 'view/homeproxy/client');
+		tabs['view.homeproxy.client.common']       = loadLuciModule(path.join(tabDir, 'common.js'),
+				{ ...tabsBase });
+		tabs['view.homeproxy.client.routing']      = loadLuciModule(path.join(tabDir, 'routing.js'),
+				{ ...tabsBase, 'view.homeproxy.client.common': tabs['view.homeproxy.client.common'] });
+		tabs['view.homeproxy.client.nodes']        = loadLuciModule(path.join(tabDir, 'nodes.js'),
+				{ ...tabsBase, 'tools.widgets': widgets });
+		tabs['view.homeproxy.client.dns']          = loadLuciModule(path.join(tabDir, 'dns.js'),
+				{ ...tabsBase, 'view.homeproxy.client.common': tabs['view.homeproxy.client.common'] });
+		tabs['view.homeproxy.client.subscription'] = loadLuciModule(path.join(tabDir, 'subscription.js'),
+				{ ...tabsBase });
+		tabs['view.homeproxy.client.access']       = loadLuciModule(path.join(tabDir, 'access.js'),
+				{ ...tabsBase, 'tools.widgets': widgets, 'tools.firewall': deps['tools.firewall'] });
+	}
+
+	const mod = loadLuciModule(path.join(viewDir, 'view/homeproxy', target + '.js'), { homeproxy, ...tabs });
 
 	const features = {
 		version: '1.14.0',
