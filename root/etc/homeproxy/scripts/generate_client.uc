@@ -26,12 +26,12 @@
 import { mkdtemp, writefile } from 'fs';
 import { Loader } from './config/loader.uc';
 import { generate } from './generator/client.uc';
-import { removeBlankAttrs, RUN_DIR, UCICONFIG_DIR } from './homeproxy.uc';
+import { removeBlankAttrs, RUN_DIR, shellQuote, UCICONFIG_DIR } from './homeproxy.uc';
 
 const dm = Loader.load(UCICONFIG_DIR);
 const config = removeBlankAttrs(generate(dm));
 
-system('mkdir -p ' + RUN_DIR);
+system('mkdir -p ' + shellQuote(RUN_DIR));
 
 /* A private scratch directory rather than a fixed `<out>.tmp`.
  *
@@ -42,19 +42,22 @@ system('mkdir -p ' + RUN_DIR);
  * was still writing - the winner then installed a half-written config.
  *
  * mkdtemp() is this package's existing primitive for that (executeCommand()
- * uses it) and gives a 0700 directory under /tmp. */
+ * uses it) and gives a 0700 directory under /tmp.  The path here comes from
+ * mkdtemp() so it is safe today, but it goes through shellQuote() anyway:
+ * review M6's "all shell args quoted" rule is the machine-checkable
+ * invariant, not a comment about today's safety. */
 const work_dir = mkdtemp();
 const tmp = work_dir + '/sing-box-c.json';
 writefile(tmp, sprintf('%.J\n', config));
 
-if (system('sing-box check --config ' + tmp) !== 0) {
-	system('rm -rf ' + work_dir);
+if (system('sing-box check --config ' + shellQuote(tmp)) !== 0) {
+	system('rm -rf ' + shellQuote(work_dir));
 	exit(1);
 }
 
-if (system('mv -f ' + tmp + ' ' + RUN_DIR + '/sing-box-c.json') !== 0) {
-	system('rm -rf ' + work_dir);
+if (system('mv -f ' + shellQuote(tmp) + ' ' + shellQuote(RUN_DIR) + '/sing-box-c.json') !== 0) {
+	system('rm -rf ' + shellQuote(work_dir));
 	exit(1);
 }
 
-system('rm -rf ' + work_dir);
+system('rm -rf ' + shellQuote(work_dir));

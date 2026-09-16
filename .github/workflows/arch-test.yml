@@ -64,6 +64,32 @@ jobs:
         # prints the PATH setup we need below. It also verifies the modules
         # and the lucihttp binding before exiting, so a broken build fails
         # here rather than halfway through the test suite.
+        #
+        # Review M4: a toolchain rebuild is the slow part of the suite
+        # (several minutes on a hosted runner).  The build script does not
+        # have a skip-if-up-to-date step, so we wrap it in actions/cache:
+        # the cache key is the script's own hash, which already covers the
+        # only two things that can invalidate the build (UCODE_REV and
+        # SINGBOX_VERSION both live in the script).  A cache hit skips the
+        # build step entirely; a miss runs it, and the cache action stores
+        # the result for the next run.
+        #
+        # `id: cache` is required so the next step can read the cache-hit
+        # output; without it the conditional is unbound and the build step
+        # would either always run or never run.
+      - name: Restore ucode toolchain cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.HOME }}/.local/ucode-testbed
+          # Cache key is the script hash, prefixed by the runner OS so a
+          # future macOS-hosted runner does not pick up a Linux build.  The
+          # OS is included in the path-based fallback anyway, but the key
+          # is what GitHub uses to compare for a hit, so it has to be there.
+          key: ${{ runner.os }}-ucode-testbed-${{ hashFiles('tests/toolchain/build-ucode-linux.sh') }}
+
+      - name: Build ucode toolchain (cache miss only)
+        if: steps.cache.outputs.cache-hit != 'true'
         run: sh tests/toolchain/build-ucode-linux.sh
 
       - name: Run LuCI form snapshot tests
