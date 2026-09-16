@@ -51,6 +51,10 @@
 				[
 					"udp_nat",
 					"UDP NAT Settings"
+				],
+				[
+					"tun_dns",
+					"TUN DNS"
 				]
 			],
 			"options": [
@@ -1872,63 +1876,6 @@
 					"props": {}
 				},
 				{
-					"kind": "ListValue",
-					"name": "tun_dns_mode",
-					"title": "TUN DNS mode (1.14)",
-					"description": "Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.",
-					"depends": [
-						[
-							"proxy_mode",
-							"redirect_tun"
-						],
-						[
-							"proxy_mode",
-							"tun"
-						]
-					],
-					"values": [
-						[
-							"default",
-							"Unset (default)"
-						],
-						[
-							"disabled",
-							"Disabled"
-						],
-						[
-							"native",
-							"Native"
-						],
-						[
-							"hijack",
-							"Hijack"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "default",
-						"rmempty": true
-					}
-				},
-				{
-					"kind": "DynamicList",
-					"name": "tun_dns_address",
-					"title": "TUN DNS addresses (1.14)",
-					"description": null,
-					"depends": [
-						{
-							"proxy_mode": {},
-							"tun_dns_mode": {}
-						}
-					],
-					"values": [],
-					"subsection": null,
-					"props": {
-						"datatype": "ipaddr",
-						"modalonly": true
-					}
-				},
-				{
 					"kind": "SectionValue",
 					"name": "_dns_server",
 					"description": "dns_server",
@@ -3506,63 +3453,6 @@
 					"props": {}
 				},
 				{
-					"kind": "ListValue",
-					"name": "tun_dns_mode",
-					"title": "TUN DNS mode (1.14)",
-					"description": "Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.",
-					"depends": [
-						[
-							"proxy_mode",
-							"redirect_tun"
-						],
-						[
-							"proxy_mode",
-							"tun"
-						]
-					],
-					"values": [
-						[
-							"default",
-							"Unset (default)"
-						],
-						[
-							"disabled",
-							"Disabled"
-						],
-						[
-							"native",
-							"Native"
-						],
-						[
-							"hijack",
-							"Hijack"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "default",
-						"rmempty": true
-					}
-				},
-				{
-					"kind": "DynamicList",
-					"name": "tun_dns_address",
-					"title": "TUN DNS addresses (1.14)",
-					"description": null,
-					"depends": [
-						{
-							"proxy_mode": {},
-							"tun_dns_mode": {}
-						}
-					],
-					"values": [],
-					"subsection": null,
-					"props": {
-						"datatype": "ipaddr",
-						"modalonly": true
-					}
-				},
-				{
 					"kind": "SectionValue",
 					"name": "_control",
 					"description": "control",
@@ -4021,6 +3911,63 @@
 					"subsection": null,
 					"props": {
 						"datatype": "uinteger"
+					}
+				},
+				{
+					"kind": "ListValue",
+					"name": "tun_dns_mode",
+					"title": "TUN DNS mode (1.14)",
+					"description": "Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.",
+					"depends": [
+						[
+							"proxy_mode",
+							"redirect_tun"
+						],
+						[
+							"proxy_mode",
+							"tun"
+						]
+					],
+					"values": [
+						[
+							"default",
+							"Unset (default)"
+						],
+						[
+							"disabled",
+							"Disabled"
+						],
+						[
+							"native",
+							"Native"
+						],
+						[
+							"hijack",
+							"Hijack"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "default",
+						"rmempty": true
+					}
+				},
+				{
+					"kind": "DynamicList",
+					"name": "tun_dns_address",
+					"title": "TUN DNS addresses (1.14)",
+					"description": null,
+					"depends": [
+						{
+							"proxy_mode": {},
+							"tun_dns_mode": {}
+						}
+					],
+					"values": [],
+					"subsection": null,
+					"props": {
+						"datatype": "ipaddr",
+						"modalonly": true
 					}
 				}
 			],

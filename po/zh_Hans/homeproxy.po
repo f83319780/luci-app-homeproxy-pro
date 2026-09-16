@@ -302,7 +302,7 @@ msgstr "百度"
 msgid "Base64"
 msgstr "Base64"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:170
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:154
 msgid "Based on google/gvisor."
 msgstr "基于 google/gvisor。"
 
@@ -329,7 +329,7 @@ msgstr "BitTorrent"
 msgid "Blacklist mode"
 msgstr "黑名单模式"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:211
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:195
 msgid "Block"
 msgstr "封锁"
 
@@ -339,7 +339,7 @@ msgstr "封锁"
 msgid "Both"
 msgstr "全部"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:190
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:174
 msgid "Bypass CN traffic"
 msgstr "绕过中国流量"
 
@@ -347,7 +347,7 @@ msgstr "绕过中国流量"
 msgid "Bypass mainland China"
 msgstr "大陆白名单"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:191
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:175
 msgid "Bypass mainland China traffic via firewall rules by default."
 msgstr "默认使用防火墙规则绕过中国大陆流量。"
 
@@ -436,7 +436,7 @@ msgstr "CloudFlare 公共 DNS（1.1.1.1）"
 msgid "Cloudflare"
 msgstr "Cloudflare"
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:122
+#: htdocs/luci-static/resources/view/homeproxy/client.js:123
 #: htdocs/luci-static/resources/view/homeproxy/server.js:146
 #: htdocs/luci-static/resources/view/homeproxy/status.js:162
 msgid "Collecting data..."
@@ -528,7 +528,7 @@ msgstr "默认"
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:38
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:61
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:273
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:228
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:212
 msgid "Default DNS (issued by WAN)"
 msgstr "默认 DNS（由 WAN 下发）"
 
@@ -536,7 +536,7 @@ msgstr "默认 DNS（由 WAN 下发）"
 msgid "Default DNS server"
 msgstr "默认 DNS 服务器"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:223
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:207
 msgid "Default DNS server for resolving domain name in the server address."
 msgstr "用于解析服务器地址中的域名的默认 DNS 服务器。"
 
@@ -544,15 +544,15 @@ msgstr "用于解析服务器地址中的域名的默认 DNS 服务器。"
 msgid "Default DNS strategy"
 msgstr "默认 DNS 解析策略"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:203
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:187
 msgid "Default outbound"
 msgstr "默认出站"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:222
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:206
 msgid "Default outbound DNS"
 msgstr "默认出站 DNS"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:204
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:188
 msgid "Default outbound for connections not matched by any routing rules."
 msgstr "用于未被任何路由规则匹配的连接的默认出站。"
 
@@ -573,7 +573,7 @@ msgstr "每次 DNS 查询的默认超时时间（秒，sing-box 默认为 10）�
 #: htdocs/luci-static/resources/view/homeproxy/client/common.js:322
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:93
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:311
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:210
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:194
 #: htdocs/luci-static/resources/view/homeproxy/client/subscription.js:96
 msgid "Direct"
 msgstr "直连"
@@ -607,7 +607,7 @@ msgstr "直连 MAC 地址"
 msgid "Disable"
 msgstr "禁用"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:209
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:193
 msgid "Disable (the service)"
 msgstr "禁用（服务）"
 
@@ -670,7 +670,7 @@ msgstr "关闭本次查询解析的乐观 DNS 缓存（1.14）。"
 msgid "Disable optimistic cache"
 msgstr "禁用乐观缓存"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:135
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:31
 msgid "Disabled"
 msgstr "禁用"
 
@@ -691,7 +691,7 @@ msgid "Domain resolver"
 msgstr "域名解析器"
 
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:73
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:198
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:182
 msgid "Domain strategy"
 msgstr "域名解析策略"
 
@@ -859,11 +859,11 @@ msgstr "启用 UDP 分片。"
 msgid "Enable connection reuse (the Snell v2 CONNECT command)."
 msgstr "启用连接复用（Snell v2 CONNECT 指令）。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:175
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:159
 msgid "Enable endpoint-independent NAT"
 msgstr "启用端点独立 NAT"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:195
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:179
 msgid ""
 "Enable neighbor resolution so rules can match LAN devices by hostname (1.14)."
 msgstr "启用邻居解析，使规则可按主机名匹配局域网设备（1.14）。"
@@ -991,7 +991,7 @@ msgstr "过滤关键词"
 msgid "Filter nodes"
 msgstr "过滤节点"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:194
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:178
 msgid "Find neighbor hosts"
 msgstr "发现邻居主机"
 
@@ -1161,12 +1161,12 @@ msgstr "标头"
 msgid "Heartbeat interval"
 msgstr "心跳间隔"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:137
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:33
 msgid "Hijack"
 msgstr "劫持"
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:69
-#: htdocs/luci-static/resources/view/homeproxy/client.js:111
+#: htdocs/luci-static/resources/view/homeproxy/client.js:70
+#: htdocs/luci-static/resources/view/homeproxy/client.js:112
 #: htdocs/luci-static/resources/view/homeproxy/status.js:269
 #: root/usr/share/luci/menu.d/luci-app-homeproxy.json:3
 msgid "HomeProxy"
@@ -1283,7 +1283,7 @@ msgid ""
 "connections."
 msgstr "如果启用，客户端传输即使没有活动连接也会发送 keepalive ping。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:199
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:183
 msgid ""
 "If set, the requested domain name will be resolved to IP before routing."
 msgstr "如果设置，请求的域名将在路由前被解析为 IP 地址。"
@@ -1317,7 +1317,7 @@ msgstr "导入"
 msgid "Import share links"
 msgstr "导入分享链接"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:183
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:167
 #: htdocs/luci-static/resources/view/homeproxy/server.js:611
 msgid "In seconds."
 msgstr "单位：秒。"
@@ -1414,7 +1414,7 @@ msgstr ""
 "仅为兼容目的提供旧协议（VMess MD5 认证）支持，不建议使用大于 1 的 alterId。提"
 "供旧协议支持（VMess MD5 身份验证）仅出于兼容性目的，不建议使用 alterId > 1。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:172
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:156
 msgid "Less compatibility and sometimes better performance."
 msgstr "有时性能更好。"
 
@@ -1736,11 +1736,11 @@ msgid "Minimum streams"
 msgstr "最小流数量"
 
 #: htdocs/luci-static/resources/homeproxy.js:111
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:157
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:141
 msgid "Mixed"
 msgstr "混合"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:168
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:152
 msgid "Mixed <code>system</code> TCP stack and <code>gVisor</code> UDP stack."
 msgstr "混合<code>系统</code> TCP 栈和 <code>gVisor</code> UDP 栈。"
 
@@ -1774,7 +1774,7 @@ msgid "NS"
 msgstr "NS"
 
 #: htdocs/luci-static/resources/homeproxy.js:310
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:136
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:32
 msgid "Native"
 msgstr "原生"
 
@@ -1961,7 +1961,7 @@ msgstr "路径"
 msgid "Peer pubkic key"
 msgstr "对端公钥"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:176
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:160
 msgid ""
 "Performance may degrade slightly, so it is not recommended to enable on when "
 "it is not needed."
@@ -2426,7 +2426,7 @@ msgstr "ShadowTLS 版本"
 msgid "Shadowsocks"
 msgstr "Shadowsocks"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:133
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:29
 msgid ""
 "Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the "
 "platform interface DNS and hijacks port 53. On OpenWrt this overlaps with "
@@ -2601,7 +2601,7 @@ msgid ""
 "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified."
 msgstr "支持 UDP、TCP、DoH、DoQ、DoT。如未指定则使用 TCP 协议。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:160
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:144
 msgid "System"
 msgstr "系统"
 
@@ -2610,7 +2610,7 @@ msgstr "系统"
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:39
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:62
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:274
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:229
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:213
 msgid "System DNS"
 msgstr "系统 DNS"
 
@@ -2625,11 +2625,11 @@ msgstr "TCP"
 msgid "TCP fast open"
 msgstr "TCP 快速打开"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:154
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:138
 msgid "TCP/IP stack"
 msgstr "TCP/IP 协议栈"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:155
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:139
 msgid "TCP/IP stack."
 msgstr "TCP/IP 协议栈。"
 
@@ -2673,11 +2673,15 @@ msgstr "TLS spoof SNI（1.14）"
 msgid "TLS spoof method (1.14)"
 msgstr "TLS spoof 方式（1.14）"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:143
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:26
+msgid "TUN DNS"
+msgstr "TUN DNS"
+
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:39
 msgid "TUN DNS addresses (1.14)"
 msgstr "TUN DNS 地址（1.14）"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:132
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:28
 msgid "TUN DNS mode (1.14)"
 msgstr "TUN DNS 模式（1.14）"
 
@@ -2855,7 +2859,7 @@ msgstr "服务器和客户端之间的最大时间差。"
 msgid "The minimum TLS version that is acceptable."
 msgstr "可接受的最低 TLS 版本。"
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:112
+#: htdocs/luci-static/resources/view/homeproxy/client.js:113
 #: htdocs/luci-static/resources/view/homeproxy/server.js:137
 msgid "The modern ImmortalWrt proxy platform for ARM64/AMD64."
 msgstr "为 ARM64/AMD64 设计的现代 ImmortalWrt 代理平台。"
@@ -3021,7 +3025,7 @@ msgstr "UDP 分片"
 msgid "UDP NAT Settings"
 msgstr "UDP NAT 设置"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:182
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:166
 #: htdocs/luci-static/resources/view/homeproxy/server.js:610
 msgid "UDP NAT expiration time"
 msgstr "UDP NAT 过期时间"
@@ -3082,7 +3086,7 @@ msgstr "未知错误。"
 msgid "Unknown error: %s"
 msgstr "未知错误：%s"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:134
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:30
 msgid "Unset (default)"
 msgstr "不设置（默认）"
 
@@ -3280,7 +3284,7 @@ msgstr "gRPC 允许无活动连接"
 msgid "gRPC service name"
 msgstr "gRPC 服务名称"
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:158
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:142
 msgid "gVisor"
 msgstr "gVisor"
 
