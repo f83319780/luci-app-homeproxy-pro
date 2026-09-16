@@ -47,6 +47,10 @@
 				[
 					"control",
 					"Access Control"
+				],
+				[
+					"udp_nat",
+					"UDP NAT Settings"
 				]
 			],
 			"options": [
@@ -364,111 +368,6 @@
 					"props": {
 						"datatype": "ipaddr",
 						"modalonly": true
-					}
-				},
-				{
-					"kind": "ListValue",
-					"name": "udp_mapping",
-					"title": "UDP NAT mapping (1.14)",
-					"description": null,
-					"depends": [
-						[
-							"proxy_mode",
-							"redirect_tproxy"
-						],
-						[
-							"proxy_mode",
-							"redirect_tun"
-						],
-						[
-							"proxy_mode",
-							"tun"
-						]
-					],
-					"values": [
-						[
-							"endpoint_independent",
-							"Endpoint independent"
-						],
-						[
-							"address_dependent",
-							"Address dependent"
-						],
-						[
-							"address_and_port_dependent",
-							"Address and port dependent"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "endpoint_independent",
-						"description": "sing-box default; recommended for home use (small NAT table, QUIC/game friendly). Choose stricter only for specific UDP issues.",
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "ListValue",
-					"name": "udp_filtering",
-					"title": "UDP NAT filtering (1.14)",
-					"description": null,
-					"depends": [
-						[
-							"proxy_mode",
-							"redirect_tproxy"
-						],
-						[
-							"proxy_mode",
-							"redirect_tun"
-						],
-						[
-							"proxy_mode",
-							"tun"
-						]
-					],
-					"values": [
-						[
-							"endpoint_independent",
-							"Endpoint independent"
-						],
-						[
-							"address_dependent",
-							"Address dependent"
-						],
-						[
-							"address_and_port_dependent",
-							"Address and port dependent"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "endpoint_independent",
-						"description": "sing-box default; recommended for home use (accepts replies from any remote after mapping). Choose stricter only for specific UDP issues.",
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "Value",
-					"name": "udp_nat_max",
-					"title": "UDP NAT sessions max (1.14)",
-					"description": null,
-					"depends": [
-						[
-							"proxy_mode",
-							"redirect_tproxy"
-						],
-						[
-							"proxy_mode",
-							"redirect_tun"
-						],
-						[
-							"proxy_mode",
-							"tun"
-						]
-					],
-					"values": [],
-					"subsection": null,
-					"props": {
-						"datatype": "uinteger"
 					}
 				},
 				{
@@ -3961,6 +3860,111 @@
 						"subsection": null
 					},
 					"props": {}
+				},
+				{
+					"kind": "ListValue",
+					"name": "udp_mapping",
+					"title": "UDP NAT mapping (1.14)",
+					"description": null,
+					"depends": [
+						[
+							"proxy_mode",
+							"redirect_tproxy"
+						],
+						[
+							"proxy_mode",
+							"redirect_tun"
+						],
+						[
+							"proxy_mode",
+							"tun"
+						]
+					],
+					"values": [
+						[
+							"endpoint_independent",
+							"Endpoint independent"
+						],
+						[
+							"address_dependent",
+							"Address dependent"
+						],
+						[
+							"address_and_port_dependent",
+							"Address and port dependent"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "endpoint_independent",
+						"description": "sing-box default; recommended for home use (small NAT table, QUIC/game friendly). Choose stricter only for specific UDP issues.",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "ListValue",
+					"name": "udp_filtering",
+					"title": "UDP NAT filtering (1.14)",
+					"description": null,
+					"depends": [
+						[
+							"proxy_mode",
+							"redirect_tproxy"
+						],
+						[
+							"proxy_mode",
+							"redirect_tun"
+						],
+						[
+							"proxy_mode",
+							"tun"
+						]
+					],
+					"values": [
+						[
+							"endpoint_independent",
+							"Endpoint independent"
+						],
+						[
+							"address_dependent",
+							"Address dependent"
+						],
+						[
+							"address_and_port_dependent",
+							"Address and port dependent"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "endpoint_independent",
+						"description": "sing-box default; recommended for home use (accepts replies from any remote after mapping). Choose stricter only for specific UDP issues.",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "Value",
+					"name": "udp_nat_max",
+					"title": "UDP NAT sessions max (1.14)",
+					"description": null,
+					"depends": [
+						[
+							"proxy_mode",
+							"redirect_tproxy"
+						],
+						[
+							"proxy_mode",
+							"redirect_tun"
+						],
+						[
+							"proxy_mode",
+							"tun"
+						]
+					],
+					"values": [],
+					"subsection": null,
+					"props": {
+						"datatype": "uinteger"
+					}
 				}
 			],
 			"subsection": null

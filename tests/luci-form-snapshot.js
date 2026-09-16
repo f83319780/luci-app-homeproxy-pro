@@ -245,6 +245,8 @@ function main() {
 				{ ...tabsBase });
 		tabs['view.homeproxy.client.access']       = loadLuciModule(path.join(tabDir, 'access.js'),
 				{ ...tabsBase, 'tools.widgets': widgets, 'tools.firewall': deps['tools.firewall'] });
+		tabs['view.homeproxy.client.udp_nat']      = loadLuciModule(path.join(tabDir, 'udp_nat.js'),
+				{ ...tabsBase });
 	}
 
 	const mod = loadLuciModule(path.join(viewDir, 'view/homeproxy', target + '.js'), { homeproxy, ...tabs });
