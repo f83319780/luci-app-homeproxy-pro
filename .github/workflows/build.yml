@@ -1,25 +1,19 @@
 name: Build
 
-# Two trigger paths produce a release:
-#   - workflow_dispatch with a version input (the legacy "manual
-#     release" path, kept for re-publishing an existing tag without
-#     having to re-tag locally)
-#   - push of a v* tag (the new "git tag && git push" path, so
-#     releases can be cut from the command line without opening
-#     the Actions tab)
+# Two trigger paths, both of which build and publish:
+#   - workflow_dispatch: manual run from the Actions tab.  It takes no
+#     input: the version comes from the Makefile, so there is nothing to
+#     keep in sync by hand and no way to type it wrong.
+#   - push of a v* tag: same build, plus the tag is required to agree with
+#     the Makefile version, so a mistyped tag cannot publish a mismatched
+#     release.
 #
-# Both paths run the same build and publish steps; only the
-# "derive VERSION" step (see below) knows where the version
-# number comes from.
+# Either path uploads the apk/ipk packages as workflow artifacts and
+# attaches them to the GitHub release tagged v<PKG_VERSION>-r<PKG_RELEASE>.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
-    inputs:
-      version:
-        description: '发布版本号，须等于 Makefile 的 PKG_VERSION-rPKG_RELEASE（如 27.905.1.14-r9）。留空则只构建不发布。'
-        required: false
-        type: string
 
 concurrency:
   group: build-${{ github.ref }}
@@ -125,8 +119,10 @@ jobs:
 
       - name: Build packages (apk + ipk)
         run: |
-          fakeroot bash .github/build-pkg.sh apk "${{ github.event_name }}"
-          fakeroot bash .github/build-pkg.sh ipk "${{ github.event_name }}"
+          # 两条触发路径都是发布构建，所以固定传 release；build-pkg.sh 只
+          # 在 Makefile 缺少 PKG_VERSION 时才用它选兜底版本（当前有值）。
+          fakeroot bash .github/build-pkg.sh apk release
+          fakeroot bash .github/build-pkg.sh ipk release
           shopt -s nullglob
           apks=(.github/*.apk)
           ipks=(.github/*.ipk)
@@ -135,6 +131,25 @@ jobs:
             exit 1
           fi
           printf '生成的包:\n%s\n' "${apks[@]}" "${ipks[@]}"
+
+      # apk-tools v3 只认 ADB 容器格式（v2 的 gzip 包会被拒）。让 apk 自己
+      # 解一遍每个包，格式/元数据不合规在这里就失败，而不是等到设备上
+      # apk add 才发现。
+      - name: Validate apk packages (apk-tools v3)
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          apks=(.github/*.apk)
+          echo "apk-tools: $(apk --version)"
+          for f in "${apks[@]}"; do
+            echo "== $f"
+            if [ "$(head -c 3 "$f")" != "ADB" ]; then
+              echo "::error::$f 不是 apk v3 (ADB) 格式"
+              exit 1
+            fi
+            apk manifest --allow-untrusted "$f" > /dev/null
+            echo "   格式与元数据可解析"
+          done
 
       - name: Upload package artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -145,49 +160,47 @@ jobs:
             .github/*.apk
             .github/*.ipk
 
-      # ========== 发布（仅 workflow_dispatch 且填写了 version 时执行）==========
-      # 瀑布流策略：每个版本一个独立 tag/release，永不删除、永不覆盖已有 release。
+      # ========== 发布（手动触发与 tag push 都会执行）==========
+      # 瀑布流策略：每个版本一个独立 tag/release。
 
       - name: Derive and validate release version
-        # Two trigger paths converge here:
-        #   - workflow_dispatch: read github.event.inputs.version
-        #   - push tag:         strip the leading 'v' from the tag
-        # Both must still equal the Makefile product version, otherwise
-        # the build artefact and the release tag would disagree.
-        if: |
-          (github.event_name == 'workflow_dispatch' && github.event.inputs.version != '') ||
-          (github.event_name == 'push')
+        # 版本只有一个来源：Makefile 的 PKG_VERSION + PKG_RELEASE。这样产物
+        # 文件名、tag 与 release 标题不可能互相错位，手动触发时也没有需要
+        # 手工对齐的输入框。tag push 时额外要求 tag 与 Makefile 相符，避免
+        # 打错 tag 而发布出一个版本对不上的 release。
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # GITHUB_REF_NAME is e.g. 'v27.911.1.14-r11'; strip the 'v'.
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          # apk-tools v3 合法版本 + 命名约束：仅数字/点/字母与结尾 -r<数字>（无 _、无 ~）
-          if [[ ! "$VERSION" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]]; then
-            echo "::error::版本格式非法（期望形如 27.905.1.14-r9，不允许下划线与波浪号）"
-            exit 1
-          fi
-          # 需求 9：asset 文件名里的版本号必须等于 tag 版本号 → 发布版本必须等于 Makefile 产物版本
           MK_V="$(sed -n 's/^PKG_VERSION:=//p' Makefile)"
           MK_R="$(sed -n 's/^PKG_RELEASE:=//p' Makefile)"
           EXPECTED="${MK_V}-r${MK_R}"
-          if [ "$VERSION" != "$EXPECTED" ]; then
-            echo "::error::输入版本 $VERSION 与 Makefile 产物版本 $EXPECTED 不一致，拒绝发布"
+          # apk-tools v3 合法版本 + 命名约束：仅数字/点/字母与结尾 -r<数字>（无 _、无 ~）
+          if [[ ! "$EXPECTED" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]]; then
+            echo "::error::Makefile 版本 $EXPECTED 非法（期望形如 28.9.1.14-r2，不允许下划线与波浪号）"
             exit 1
           fi
-          # 等位编号：把 -rN 规范为 -rNN（如 r9 -> r09），使 GitHub 按 tag 字符串排序时
-          # r09 < r10 < r11，Release 列表保持从大到小（避免 'r10' 字典序小于 'r9' 的乱序）。
-          BASE="${VERSION%-r*}"
-          R="${VERSION##*-r}"
-          TAG_VERSION="$(printf '%s-r%02d' "$BASE" "$R")"
-          echo "VERSION=$VERSION" >> "${GITHUB_ENV:-/dev/null}"
-          echo "TAG_VERSION=$TAG_VERSION" >> "${GITHUB_ENV:-/dev/null}"
+          # 等位编号：把 -rN 规范为 -rNN（如 r2 -> r02），使 GitHub 按 tag
+          # 字符串排序时 r02 < r10 < r11，Release 列表保持从大到小。
+          # 10# 前缀让 bash 按十进制解析前导零，否则 r08/r09 会被当成八进制。
+          canon() {
+            printf '%s-r%02d' "${1%-r*}" "$((10#${1##*-r}))"
+          }
+          TAG_VERSION="$(canon "$EXPECTED")"
+          if [ "${{ github.event_name }}" = "push" ]; then
+            ON_TAG="${GITHUB_REF_NAME#v}"
+            if [[ ! "$ON_TAG" =~ ^[0-9][0-9A-Za-z.]*-r[0-9]+$ ]]; then
+              echo "::error::tag v$ON_TAG 格式非法（期望形如 v28.9.1.14-r02）"
+              exit 1
+            fi
+            if [ "$(canon "$ON_TAG")" != "$TAG_VERSION" ]; then
+              echo "::error::tag v$ON_TAG 与 Makefile 产物版本 $EXPECTED 不一致，拒绝发布"
+              exit 1
+            fi
+          fi
+          echo "VERSION=$EXPECTED" >> "$GITHUB_ENV"
+          echo "TAG_VERSION=$TAG_VERSION" >> "$GITHUB_ENV"
+          echo "发布版本 v$TAG_VERSION（包内版本 $EXPECTED）"
 
       - name: Publish release (replacing an existing one if present)
-        if: env.TAG_VERSION != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -207,6 +220,11 @@ jobs:
           if gh release view "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "已存在 v$TAG_VERSION，先删除后重新发布"
             gh release delete "v$TAG_VERSION" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v$TAG_VERSION" >/dev/null 2>&1; then
+            # 上一次跑到 create 之前失败时 tag 可能已存在，而 gh release create
+            # 会因 tag 重复而拒绝。清掉这个孤儿 tag，重跑即可自愈。
+            echo "已存在孤儿 tag v$TAG_VERSION，先删除后重新发布"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/v$TAG_VERSION"
           fi
           gh release create "v$TAG_VERSION" \
             --repo "$GITHUB_REPOSITORY" \
