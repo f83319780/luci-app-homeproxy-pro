@@ -41,12 +41,12 @@
 					"Rule Set"
 				],
 				[
-					"control",
-					"Access Control"
-				],
-				[
 					"dns_cache",
 					"DNS Settings"
+				],
+				[
+					"control",
+					"Access Control"
 				]
 			],
 			"options": [
@@ -3432,13 +3432,188 @@
 					"props": {}
 				},
 				{
+					"kind": "Value",
+					"name": "dns_server",
+					"title": "DNS server",
+					"description": "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified.",
+					"depends": [
+						{
+							"routing_mode": "custom",
+							"!reverse": true
+						}
+					],
+					"values": [
+						[
+							"wan",
+							"WAN DNS (read from interface)"
+						],
+						[
+							"1.1.1.1",
+							"CloudFlare Public DNS (1.1.1.1)"
+						],
+						[
+							"208.67.222.222",
+							"Cisco Public DNS (208.67.222.222)"
+						],
+						[
+							"8.8.8.8",
+							"Google Public DNS (8.8.8.8)"
+						],
+						[
+							"",
+							"---"
+						],
+						[
+							"223.5.5.5",
+							"Aliyun Public DNS (223.5.5.5)"
+						],
+						[
+							"119.29.29.29",
+							"Tencent Public DNS (119.29.29.29)"
+						],
+						[
+							"117.50.10.10",
+							"ThreatBook Public DNS (117.50.10.10)"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "8.8.8.8",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "Value",
+					"name": "china_dns_server",
+					"title": "China DNS server",
+					"description": "The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.",
+					"depends": [
+						[
+							"routing_mode",
+							"bypass_mainland_china"
+						]
+					],
+					"values": [
+						[
+							"wan",
+							"WAN DNS (read from interface)"
+						],
+						[
+							"223.5.5.5",
+							"Aliyun Public DNS (223.5.5.5)"
+						],
+						[
+							"210.2.4.8",
+							"CNNIC Public DNS (210.2.4.8)"
+						],
+						[
+							"119.29.29.29",
+							"Tencent Public DNS (119.29.29.29)"
+						],
+						[
+							"117.50.10.10",
+							"ThreatBook Public DNS (117.50.10.10)"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "223.5.5.5",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "Flag",
+					"name": "cn_ip_fallback",
+					"title": "CN-IP DNS fallback (sing-box 1.14)",
+					"description": "When the main DNS returns a mainland China IP, re-resolve via China DNS using evaluate/match_response.",
+					"depends": [
+						[
+							"routing_mode",
+							"bypass_mainland_china"
+						]
+					],
+					"values": [],
+					"subsection": null,
+					"props": {
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "SectionValue",
+					"name": "_dns_cache",
+					"description": "dns",
+					"depends": [
+						{
+							"routing_mode": "custom",
+							"!reverse": true
+						}
+					],
+					"values": [],
+					"subsection": {
+						"id": "GridSection:_dns_cache#9",
+						"kind": "GridSection",
+						"name": "_dns_cache",
+						"tabs": [],
+						"options": [
+							{
+								"kind": "Flag",
+								"name": "optimistic_cache",
+								"title": "Optimistic DNS cache",
+								"description": "Return expired cache immediately and refresh in background (sing-box 1.14).",
+								"depends": [],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"rmempty": false
+								}
+							},
+							{
+								"kind": "Value",
+								"name": "optimistic_timeout",
+								"title": "Optimistic cache timeout",
+								"description": "Max time an expired entry may be served. Examples: 3d, 1h.",
+								"depends": [],
+								"values": [],
+								"subsection": null,
+								"props": {}
+							},
+							{
+								"kind": "Value",
+								"name": "dns_timeout",
+								"title": "DNS query timeout",
+								"description": "Default timeout per DNS query in seconds (sing-box default: 10).",
+								"depends": [],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"datatype": "uinteger"
+								}
+							},
+							{
+								"kind": "Flag",
+								"name": "cache_file_store_dns",
+								"title": "Store DNS cache",
+								"description": "Persist DNS cache across restarts (replaces Store RDRC).",
+								"depends": [],
+								"values": [],
+								"subsection": null,
+								"props": {
+									"rmempty": false
+								}
+							}
+						],
+						"subsection": null
+					},
+					"props": {}
+				},
+				{
 					"kind": "SectionValue",
 					"name": "_control",
 					"description": "control",
 					"depends": [],
 					"values": [],
 					"subsection": {
-						"id": "GridSection:_control#9",
+						"id": "GridSection:_control#10",
 						"kind": "GridSection",
 						"name": "_control",
 						"tabs": [
@@ -3780,181 +3955,6 @@
 									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
 									"monospace": true,
 									"rows": 10
-								}
-							}
-						],
-						"subsection": null
-					},
-					"props": {}
-				},
-				{
-					"kind": "Value",
-					"name": "dns_server",
-					"title": "DNS server",
-					"description": "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified.",
-					"depends": [
-						{
-							"routing_mode": "custom",
-							"!reverse": true
-						}
-					],
-					"values": [
-						[
-							"wan",
-							"WAN DNS (read from interface)"
-						],
-						[
-							"1.1.1.1",
-							"CloudFlare Public DNS (1.1.1.1)"
-						],
-						[
-							"208.67.222.222",
-							"Cisco Public DNS (208.67.222.222)"
-						],
-						[
-							"8.8.8.8",
-							"Google Public DNS (8.8.8.8)"
-						],
-						[
-							"",
-							"---"
-						],
-						[
-							"223.5.5.5",
-							"Aliyun Public DNS (223.5.5.5)"
-						],
-						[
-							"119.29.29.29",
-							"Tencent Public DNS (119.29.29.29)"
-						],
-						[
-							"117.50.10.10",
-							"ThreatBook Public DNS (117.50.10.10)"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "8.8.8.8",
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "Value",
-					"name": "china_dns_server",
-					"title": "China DNS server",
-					"description": "The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.",
-					"depends": [
-						[
-							"routing_mode",
-							"bypass_mainland_china"
-						]
-					],
-					"values": [
-						[
-							"wan",
-							"WAN DNS (read from interface)"
-						],
-						[
-							"223.5.5.5",
-							"Aliyun Public DNS (223.5.5.5)"
-						],
-						[
-							"210.2.4.8",
-							"CNNIC Public DNS (210.2.4.8)"
-						],
-						[
-							"119.29.29.29",
-							"Tencent Public DNS (119.29.29.29)"
-						],
-						[
-							"117.50.10.10",
-							"ThreatBook Public DNS (117.50.10.10)"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "223.5.5.5",
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "Flag",
-					"name": "cn_ip_fallback",
-					"title": "CN-IP DNS fallback (sing-box 1.14)",
-					"description": "When the main DNS returns a mainland China IP, re-resolve via China DNS using evaluate/match_response.",
-					"depends": [
-						[
-							"routing_mode",
-							"bypass_mainland_china"
-						]
-					],
-					"values": [],
-					"subsection": null,
-					"props": {
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "SectionValue",
-					"name": "_dns_cache",
-					"description": "dns",
-					"depends": [
-						{
-							"routing_mode": "custom",
-							"!reverse": true
-						}
-					],
-					"values": [],
-					"subsection": {
-						"id": "GridSection:_dns_cache#10",
-						"kind": "GridSection",
-						"name": "_dns_cache",
-						"tabs": [],
-						"options": [
-							{
-								"kind": "Flag",
-								"name": "optimistic_cache",
-								"title": "Optimistic DNS cache",
-								"description": "Return expired cache immediately and refresh in background (sing-box 1.14).",
-								"depends": [],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"rmempty": false
-								}
-							},
-							{
-								"kind": "Value",
-								"name": "optimistic_timeout",
-								"title": "Optimistic cache timeout",
-								"description": "Max time an expired entry may be served. Examples: 3d, 1h.",
-								"depends": [],
-								"values": [],
-								"subsection": null,
-								"props": {}
-							},
-							{
-								"kind": "Value",
-								"name": "dns_timeout",
-								"title": "DNS query timeout",
-								"description": "Default timeout per DNS query in seconds (sing-box default: 10).",
-								"depends": [],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"datatype": "uinteger"
-								}
-							},
-							{
-								"kind": "Flag",
-								"name": "cache_file_store_dns",
-								"title": "Store DNS cache",
-								"description": "Persist DNS cache across restarts (replaces Store RDRC).",
-								"depends": [],
-								"values": [],
-								"subsection": null,
-								"props": {
-									"rmempty": false
 								}
 							}
 						],
