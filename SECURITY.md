@@ -53,19 +53,18 @@ maintainer will tell you.
 
 - The user has shell on the router and can read or write UCI directly.
   This is by design; the package trusts UCI to be local-writable and
-  enforces validation on every write (see the H1 / H2 / H3 fix series in
-  `docs/architecture-improvement-plan.md`).
+  enforces validation on every write (the H1 / H2 / H3 fix series; the guards
+  that pin them are in `tests/arch-guard.sh`).
 - The package drops capabilities to the minimum needed for tproxy/TUN;
   the absence of a capability that you think a process needs is a feature,
-  not a bug (see ADR-0002 in `docs/adr/`).
+  not a bug (the capability set is pinned by `tests/arch-guard.sh`).
 - The firmware does not include sing-box. Without sing-box the package does
   not function; that is documented in the README, not a security issue.
 
 ## Recent fixes worth knowing about
 
-If you found something already patched, the audit trail is in
-`docs/architecture-improvement-plan.md` and `docs/adr/`. The most relevant
-recent fixes:
+If you found something already patched, the audit trail is the commit
+history. The most relevant recent fixes:
 
 - **H1** (2026-09-16): UCI-derived values are validated in
   `firewall_utils.c` before reaching `firewall_post.ut`. Without this, a
@@ -77,8 +76,8 @@ recent fixes:
 - **M1** (2026-09-16): `tests/run.sh` no longer defaults to sshing into a
   hardcoded LAN address.
 
-Each of these has an ADR in `docs/adr/` and a guard in `tests/arch-guard.sh`
-that reverse-verifies the fix.
+Each of these has a guard in `tests/arch-guard.sh` that reverse-verifies the
+fix.
 
 ## Disclosure policy
 

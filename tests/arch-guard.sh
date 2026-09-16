@@ -888,12 +888,27 @@ else
 fi
 
 # CONTRIBUTING.md must say where the architectural rules live, otherwise
-# contributors land PRs that the maintainer has to bounce.
-if grep -qE 'homeproxy_architecture_refactor_agent_guide' "$ROOT/CONTRIBUTING.md" && \
-   grep -qE 'arch-guard|arch_guard' "$ROOT/CONTRIBUTING.md"; then
-	pass "CONTRIBUTING.md points at the agent guide and the arch-guard"
+# contributors land PRs that the maintainer has to bounce.  The rule set that
+# actually ships is the arch-guard, so that is what it has to name.
+if grep -qE 'arch-guard|arch_guard' "$ROOT/CONTRIBUTING.md"; then
+	pass "CONTRIBUTING.md points at the arch-guard"
 else
-	fail "CONTRIBUTING.md does not point at the agent guide or the arch-guard - contributors cannot find the rules"
+	fail "CONTRIBUTING.md does not point at the arch-guard - contributors cannot find the rules"
+fi
+
+# No shipped file may cite docs/.  The whole directory is gitignored, so every
+# pointer to it is a dead link in a fresh clone - that is how README.md,
+# CONTRIBUTING.md and SECURITY.md came to reference an agent guide and an
+# improvement plan that no contributor can open.  The names are kept here so
+# they cannot quietly come back.
+DEAD_DOCS="$(grep -rlE 'docs/(adr|architecture-improvement-plan|homeproxy_architecture_refactor_agent_guide|audit-report|next-step-plan)' \
+	"$ROOT/README.md" "$ROOT/CONTRIBUTING.md" "$ROOT/SECURITY.md" \
+	"$ROOT/root" "$ROOT/htdocs" 2>/dev/null || true)"
+if [ -z "$DEAD_DOCS" ]; then
+	pass "no shipped file cites the gitignored docs/ tree"
+else
+	fail "these shipped files cite docs/ (gitignored, absent from every clone):"
+	printf '%s\n' "$DEAD_DOCS"
 fi
 
 echo
