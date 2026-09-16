@@ -127,6 +127,11 @@ done
 echo "== runtime configuration transaction =="
 sh "$ROOT/tests/runtime/test_config_transaction.sh" "$ROOT" || FAILED=1
 
+echo "== dnsmasq snippet writer (review L6) =="
+# Counts dnsmasq restarts through a stub: an unchanged snippet set must not
+# restart dnsmasq, a changed one must.  Pure shell, no ucode needed.
+sh "$ROOT/tests/runtime/test_dns_snippets.sh" "$ROOT" "$WORK/dns-snippets" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Drives the init script through a stubbed environment and compares the
 # resulting command/file trace against the pre-PR-05 trace.  It needs no
