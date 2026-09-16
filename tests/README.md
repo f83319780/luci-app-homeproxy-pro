@@ -15,17 +15,18 @@ tests/run.sh
 * The **ucode tests** need `ucode`; the generator cases additionally run
   `sing-box check`, so they need sing-box ≥ 1.14 as well (available on an
   OpenWrt/ImmortalWrt target). When the host running `tests/run.sh` has neither,
-  the checkout is copied over ssh to `$HP_TEST_HOST` (default
-  `root@192.168.1.102`, the dedicated test machine) and the tests run there:
+  set `$HP_TEST_HOST` to the dedicated test machine and the checkout is copied
+  over ssh:
 
   ```sh
-  HP_TEST_HOST=root@192.168.1.102 tests/run.sh
-  HP_TEST_DIR=/tmp/hp-tests        tests/run.sh
+  HP_TEST_HOST=root@<test-machine> tests/run.sh
+  HP_TEST_DIR=/tmp/hp-tests          tests/run.sh
   ```
 
-  Point `$HP_TEST_HOST` at the **test machine, never the production router**:
-  the fallback untars the whole checkout into `$HP_TEST_DIR` on the target, and
-  `192.168.1.1` is the box the house actually routes through.
+  If `$HP_TEST_HOST` is **not set**, the device-side suite is **SKIPPED** with
+  a clear message — `tests/run.sh` will not ssh into any guessed address.
+  The production router (`192.168.1.1` or anything in `192.168.1.1:*`) is
+  refused by the on-target workflow regardless.
 
 ### The staging policy: never install
 

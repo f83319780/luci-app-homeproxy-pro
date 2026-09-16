@@ -13,8 +13,12 @@
 # fallback untars the whole checkout into $HP_TEST_DIR on the target, which
 # must never land on the box the house actually routes through.
 #
-#   HP_TEST_HOST=root@192.168.1.102 tests/run.sh
-#   HP_TEST_DIR=/tmp/hp-tests          tests/run.sh
+#   HP_TEST_HOST=root@<test-machine> tests/run.sh
+#   HP_TEST_DIR=/tmp/hp-tests         tests/run.sh
+#
+# If HP_TEST_HOST is unset, the device-side suite is SKIPPED: nobody's
+# checkout should silently ssh into a guessed LAN address, and a hardcoded
+# IP would also leak the author's network topology.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -23,7 +27,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # CI one over ssh, say) deleted each other's staging mid-test. mktemp -d gives
 # each run its own, and the trap removes it.
 WORK_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/hp-run.XXXXXX")" || exit 1
-HOST="${HP_TEST_HOST:-root@192.168.1.102}"
+HOST="${HP_TEST_HOST:-}"
 
 # The remote staging dir is per-run too, derived from the work root. With a
 # shared /tmp/hp-tests two concurrent runs deleted each other's checkout
@@ -113,7 +117,10 @@ echo "== architecture guard =="
 sh "$ROOT/tests/arch-guard.sh" "$ROOT" || FAILED=1
 
 echo "== ucode tests =="
-if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
+if [ -z "$HOST" ]; then
+	echo "SKIP: HP_TEST_HOST not set, device-side ucode suite is not run"
+	echo "      (set HP_TEST_HOST=root@<test-machine> to enable it)"
+elif command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
 	# The generator cases feed the emitted config to `sing-box check` and the
 	# package targets sing-box >= 1.14; an older binary rejects 1.14-only
 	# fields. Fail loudly here instead of letting each fixture look like a

@@ -154,6 +154,15 @@ echo "== firewall_pre generator behaviour =="
 # so they get asserted directly rather than only through a golden file.
 sh "$ROOT/tests/ucode/test_firewall_pre.sh" "$ROOT" "$WORK/firewall_pre" || FAILED=1
 
+echo "== firewall field validators =="
+# The pure-function helpers firewall_post.ut routes every UCI field through
+# (review H1).  Pure functions, no fw4 module needed - so they run on a
+# development host while the renderer above stays NOT RUN, and the renderer
+# cannot regress silently because the validators are independently pinned
+# here.  Guard 11 in tests/arch-guard.sh covers the template still calls
+# them.
+sh "$ROOT/tests/ucode/test_firewall_validators.sh" "$ROOT" "$WORK/firewall_validators" || FAILED=1
+
 echo "== parse_uri unit tests =="
 # PR-02 moved the share-link parsers from parse_uri.uc to
 # scripts/parser/{uri,protocols,validator,normalize,mapping}.uc.

@@ -423,6 +423,350 @@ else
 fi
 
 echo
+echo "== guard 11: firewall_post.ut validates every UCI-derived field =="
+
+# Three code-review findings rolled into one guard, because they share the
+# same shape: any UCI value the template concatenates into an nft expression
+# is an injection surface (closes a set expression, the whole fw4 reload
+# fails, the router loses its firewall).  The defensive helpers exist; the
+# guard exists so they cannot quietly stop being used.
+TEMPLATE="$ROOT/root/etc/homeproxy/scripts/firewall_post.ut"
+UTILS="$ROOT/root/etc/homeproxy/scripts/firewall_utils.uc"
+
+if [ -f "$UTILS" ]; then
+	pass "firewall_utils.uc exists (where the H1 validators live)"
+else
+	fail "firewall_utils.uc is missing - the H1 validators have nowhere to live"
+fi
+
+for fn in ipv4_to_nftarr mac_to_nftarr iface_to_nftarr ports_to_nftarr; do
+	if grep -qE "^export function $fn\b" "$UTILS"; then
+		pass "$fn is exported from firewall_utils.uc"
+	else
+		fail "$fn is not exported from firewall_utils.uc - the validator the report's H1 demands is missing"
+	fi
+done
+
+# The template must actually import them - having the helpers but not using
+# them would still leave a poisoned field landing in the nft output.
+for fn in ipv4_to_nftarr mac_to_nftarr iface_to_nftarr ports_to_nftarr; do
+	if grep -q "\b$fn\b" "$TEMPLATE"; then
+		pass "firewall_post.ut imports/uses $fn"
+	else
+		fail "firewall_post.ut does not reference $fn"
+	fi
+done
+
+# Every field type whose nft set/rule used to be raw `join(', ', control_info.X)`
+# or `array_to_nftarr(control_info.X)` must now go through the matching helper.
+# The names are taken from the helper function names; the field list is the
+# closure of every control_info.X reference that ever appeared bare - kept as
+# a literal so a new bare call site is obvious in a diff.
+assert_empty "no bare array_to_nftarr(control_info.X) call site remains" \
+	grep -nE 'array_to_nftarr\(control_info\.' "$TEMPLATE"
+assert_empty "no bare join(', ', control_info.X) call site remains" \
+	grep -nE "join\('\\. ', control_info\." "$TEMPLATE"
+assert_empty "no bare join(', ', split(routing_port,...)) call site remains" \
+	grep -nE "join\('\\. ', split\(routing_port" "$TEMPLATE"
+
+# The four field families whose UCI surface area is the report's whole H1:
+# IPv4 addresses, MAC addresses, interface names, and ports.  Any one of
+# these landing verbatim in an nft expression closes a set and reloads the
+# whole fw4 stack.  Asserted positively: each helper must be used on every
+# field of its family, so a field the helper was meant to cover but the
+# template forgot is a guard failure rather than a silent omission.
+# (ipv6 is intentionally absent: it already had ipv6_to_nftarr before H1.)
+#
+# Field list is the exact set of control_info.<family> names used by the
+# template - if a new field of an existing family is added, this list grows
+# with it and the diff is the place to notice.
+for f in wan_proxy_ipv4_ips wan_direct_ipv4_ips \
+         lan_proxy_ipv4_ips lan_direct_ipv4_ips \
+         lan_global_proxy_ipv4_ips lan_gaming_mode_ipv4_ips; do
+	if grep -qE "ipv4_to_nftarr\(control_info\.$f\b" "$TEMPLATE"; then
+		pass "ipv4_to_nftarr covers $f"
+	else
+		fail "ipv4_to_nftarr is not applied to $f (closes a nft set on a bad value)"
+	fi
+done
+
+for f in lan_proxy_mac_addrs lan_direct_mac_addrs \
+         lan_global_proxy_mac_addrs lan_gaming_mode_mac_addrs; do
+	if grep -qE "mac_to_nftarr\(control_info\.$f\b" "$TEMPLATE"; then
+		pass "mac_to_nftarr covers $f"
+	else
+		fail "mac_to_nftarr is not applied to $f (closes a nft set on a bad value)"
+	fi
+done
+
+if grep -qE "iface_to_nftarr\(control_info\.listen_interfaces\b" "$TEMPLATE"; then
+	pass "iface_to_nftarr covers listen_interfaces"
+else
+	fail "iface_to_nftarr is not applied to listen_interfaces"
+fi
+
+if grep -qE "ports_to_nftarr\(routing_port\b\)" "$TEMPLATE"; then
+	pass "ports_to_nftarr covers routing_port"
+else
+	fail "ports_to_nftarr is not applied to routing_port"
+fi
+
+echo
+echo "== guard 12: capabilities stay minimal =="
+
+# Review H2: sing-box on this package runs in tproxy / TUN mode. Both rely
+# on the kernel's packet path, not raw sockets, so CAP_NET_RAW is not needed;
+# CAP_SYS_PTRACE lets any child process read arbitrary /proc/<pid>/mem, which
+# on a process that handles untrusted network traffic is gratuitous attack
+# surface.  Neither is granted anywhere.  inheritable is kept empty because
+# nothing the orchestrator spawns needs to inherit caps.
+CAPS="$ROOT/root/etc/capabilities/homeproxy.json"
+
+if [ -f "$CAPS" ]; then
+	pass "homeproxy.json exists"
+else
+	fail "homeproxy.json is missing"
+fi
+
+for cap in CAP_SYS_PTRACE CAP_NET_RAW CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_MODULE CAP_SYS_RAWIO; do
+	if grep -qE "\"$cap\"" "$CAPS"; then
+		fail "$cap is granted somewhere - review H2 said this should be dropped"
+	else
+		pass "$cap is not granted"
+	fi
+done
+
+# inheritable must be empty: every child process the orchestrator spawns
+# is a shell / sh / helper that does not need elevated caps.
+INHERITABLE="$(awk '/"inheritable"/,/]/' "$CAPS")"
+if printf '%s' "$INHERITABLE" | grep -qE '"CAP_[A-Z_]+"'; then
+	fail "inheritable is not empty:"
+	printf '      %s\n' "$INHERITABLE"
+else
+	pass "inheritable is empty"
+fi
+
+# The two caps the package actually needs. Asserted positively so the
+# check cannot pass by finding nothing.
+for cap in CAP_NET_ADMIN CAP_NET_BIND_SERVICE; do
+	if grep -qE "\"$cap\"" "$CAPS"; then
+		pass "$cap is granted"
+	else
+		fail "$cap is missing - sing-box needs it for tproxy/TUN"
+	fi
+done
+
+echo
+echo "== guard 13: tests/run.sh has no guessed test host =="
+
+# Review M1: tests/run.sh used to default HP_TEST_HOST to a specific LAN
+# address, and tests/README.md repeated it.  Anyone cloning the repo and
+# running `tests/run.sh` would have ssh'd into a stranger's box, with the
+# whole checkout unpacked on top.  The default is now empty (SKIP), and
+# the hardcoded IP is gone from tests/, .github/workflows/ and tests/README.md.
+#
+# Strip comment lines first: tests/README.md and the workflow headers
+# legitimately mention the production-router IP in prose, and the workflow
+# has an explicit refusal pattern that matches 192.168.1.1 to refuse it.
+# Neither is a silent-connect.
+strip_comments() {
+	# `grep -v` of lines whose first non-whitespace character is `#`.
+	awk '
+		{
+			s = $0
+			sub(/^[[:space:]]+/, "", s)
+			if (substr(s, 1, 1) != "#") print FILENAME ":" NR ":" $0
+		}' "$1"
+}
+
+# The specific shape that was wrong: a literal ssh target in a HP_TEST_HOST
+# default.  The empty default makes the suite skip instead.
+BAD_DEFAULT="$(grep -nE 'HP_TEST_HOST[:=].*root@[0-9]' "$ROOT/tests/run.sh" \
+	| strip_comments /dev/stdin || true)"
+if [ -z "$BAD_DEFAULT" ]; then
+	pass "tests/run.sh does not default HP_TEST_HOST to a hardcoded ssh host"
+else
+	fail "tests/run.sh defaults HP_TEST_HOST to a hardcoded ssh host - the silent-connect trap is back:"
+	printf '      %s\n' "$BAD_DEFAULT"
+fi
+
+# The on-target.yml input default and the workflow-level host pinning.
+# Same shape: a literal IP in the `host:` default or in a `HOST` env var.
+BAD_INPUT="$(grep -nE "default:.*'[a-z]+@[0-9]" "$ROOT/.github/workflows/on-target.yml" \
+	| strip_comments /dev/stdin || true)"
+if [ -z "$BAD_INPUT" ]; then
+	pass "on-target.yml input default is not a hardcoded ssh host"
+else
+	fail "on-target.yml input default is a hardcoded ssh host:"
+	printf '      %s\n' "$BAD_INPUT"
+fi
+
+# The empty default is what makes the suite skip rather than silently
+# connect to a guessed address.  Asserted positively so the check cannot
+# pass by finding nothing.
+if grep -q 'HOST="${HP_TEST_HOST:-}"' "$ROOT/tests/run.sh"; then
+	pass "tests/run.sh defaults HP_TEST_HOST to empty (skip rather than connect)"
+else
+	fail "tests/run.sh no longer defaults HP_TEST_HOST to empty - the silent-connect trap is back"
+fi
+
+if grep -qE "default: ''" "$ROOT/.github/workflows/on-target.yml"; then
+	pass "on-target.yml input default is empty"
+else
+	fail "on-target.yml input default is no longer empty - the workflow silently targets an IP again"
+fi
+
+echo
+echo "== guard 14: wGETVerbose redacts the URL at the source =="
+
+# Review H3: the original fetcher.uc logged a redacted URL but returned the
+# raw wget stderr, which still had the full URL (wget -nv reports the target
+# on the failure line, query string and all).  Every caller of wGETVerbose
+# had to remember to redact the error themselves, and any that did not -
+# silently leaked the subscription token.  The fix moved redaction into
+# wGETVerbose itself, so the returned `error` is safe no matter where the
+# caller ships it.
+HOMEPROXY="$SCRIPTS/homeproxy.uc"
+FETCHER="$SCRIPTS/subscription/fetcher.uc"
+
+if grep -qE '^export function redactReason\b' "$HOMEPROXY"; then
+	pass "redactReason is exported from homeproxy.uc"
+else
+	fail "redactReason is missing - the H3 redaction has no entry point"
+fi
+
+# wGETVerbose must call redactReason on the reason string before returning.
+# Asserted positively so the check cannot pass by finding nothing (a regex
+# in a comment would otherwise be enough to satisfy it).
+# awk does not understand \b, so the function name pattern is anchored
+# with `export function` and the opening paren instead.
+WGET_BODY="$(awk '/^export function wGETVerbose/,/^};/' "$HOMEPROXY")"
+if printf '%s' "$WGET_BODY" | grep -q 'redactReason(reason)'; then
+	pass "wGETVerbose calls redactReason before returning"
+else
+	fail "wGETVerbose does not call redactReason on the reason - the token still leaks"
+fi
+
+# The fetcher used to do `redactUrl(url)` on the URL parameter *and* pass
+# `result.error` (which carried the raw URL) into the log.  Now that
+# wGETVerbose redacts internally, the fetcher must not double-process the
+# error - it may still redact the URL parameter (it is the subscription
+# token, distinct from the error), but must not touch result.error.
+FETCHER_LOG="$(awk '/log\(sprintf.*Failed to fetch/,/\);$/' "$FETCHER")"
+if printf '%s' "$FETCHER_LOG" | grep -qE "redactUrl\(result\.error"; then
+	fail "subscription/fetcher.uc redacts result.error again - the redaction is now duplicated and result.error is meant to be already safe"
+else
+	pass "subscription/fetcher.uc does not re-redact result.error"
+fi
+
+echo
+echo "== guard 15: every RPC whitelist uses index() === -1 ===="
+
+# Review M6: the backend RPC module used two whitelisting spellings side by
+# side (`x in [...]` and `index([...], x) === -1`).  They both work but the
+# reader has to stop and confirm, and one of them silently behaves
+# differently when the haystack is a string (it does substring matching
+# instead of membership).  Pinning the rule to index() means a future method
+# has to use the spelling the rest of the file uses.
+# The exclusion list is the few legitimate `in` uses that are not array
+# membership (object key checks, `for ... in ...` loops, etc.).
+RPC="$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy"
+
+IN_ARR="$(grep -nE "\bin \['[^']+'(, '[^']+')+\]" "$RPC" \
+	| grep -vE '^[^:]+:[^:]+:[[:space:]]*//|^[^:]+:[^:]+:[[:space:]]*\*' || true)"
+if [ -z "$IN_ARR" ]; then
+	pass "no array-membership 'in [...]' remains in luci.homeproxy"
+else
+	fail "array-membership 'in [...]' remains in luci.homeproxy - the report's M6 said unify on index():"
+	printf '      %s\n' "$IN_ARR"
+fi
+
+# Each whitelisting call site must use index() === -1 (or !== -1 for the
+# subset checks).  Asserted positively so the check cannot pass by finding
+# nothing (a regex in a comment would otherwise be enough).
+if grep -qE "index\(\[".*"\], req\.args\?\.type\) === -1" "$RPC"; then
+	pass "luci.homeproxy uses index() === -1 for whitelist checks"
+else
+	fail "luci.homeproxy no longer uses index() === -1 for whitelist checks - did someone reintroduce the in-style?"
+fi
+
+echo
+echo "== guard 16: every shell argument goes through shellQuote() =="
+
+# Review M6: shellQuote() is the one helper that wraps an arbitrary string
+# into single quotes that the shell cannot parse as syntax.  Every script
+# argument that the shell sees has to come out of shellQuote(); the only
+# exception is a literal constant with no interpolation.  Today the
+# generators used string concatenation (`'rm -rf ' + tmp`), the rpcd
+# module had a local lowercase `shellquote()` that the report caught, and
+# one site interpolated `${req.args?.params}` raw.  This guard pins all of
+# those to the imported shellQuote() so a future shell call cannot
+# quietly escape the rule.
+#
+# The check walks every `system(...)` / `popen(...)` invocation under
+# $SCRIPTS and the rpcd tree.  A call is "compliant" if it either:
+#   (a) contains no `${...}` interpolation at all (literal command), or
+#   (b) contains at least one `shellQuote(` call somewhere in its
+#       arguments, so every interpolation goes through it.
+# grep -E0 is unavailable; split the check into two passes so a compliant
+# line is not double-counted.
+
+# Pass 1: shell calls with no interpolation at all are fine.
+SHELL_CALLS="$(grep -rEn '(^|[^A-Za-z_])(system|popen)\(' \
+	"$SCRIPTS" "$RPC" 2>/dev/null \
+	| grep -vE '/\*|^[^:]+:[^:]+:[[:space:]]*//' || true)"
+
+# Pass 2: of those, lines that contain `${` (interpolation) must also
+# contain `shellQuote(` somewhere in the same line.  ${} inside a string
+# means the value reached the shell unquoted.
+UNQUOTED="$(printf '%s\n' "$SHELL_CALLS" | python3 -c '
+import sys, re
+# Two styles reach the shell unquoted:
+#   (a) template literal with `${someVar}`     - luci.homeproxy
+#   (b) string concatenation `+ someVar +`     - the generator scripts
+# A line is compliant if shellQuote() appears on it; both styles are
+# caught with one rule because the helper is the same either way.
+template = re.compile(r"\$\{[A-Za-z_]")
+concat   = re.compile(r"\+ +[A-Za-z_][A-Za-z_0-9]*(?!\()")
+quote    = re.compile(r"shellQuote\(")
+for raw in sys.stdin:
+    line = raw.rstrip("\n")
+    # Strip the "<file>:<lineno>:" prefix the grep produced.
+    body = line.split(":", 2)[2] if line.count(":") >= 2 else line
+    if not (template.search(body) or concat.search(body)):
+        continue
+    if not quote.search(body):
+        print(line)
+')"
+
+# Two exclusions the rule has to live with:
+#   - update_subscriptions.uc uses sprintf() with shellQuote() arguments,
+#     so `${shellQuote(x)}` is fine but the awk heuristic only sees it as
+#     `${shellQuote(x)}` and considers it quoted.  sprintf() is a sibling
+#     function that builds the command before passing it to system(); the
+#     guard's grep on the source line therefore catches every other case
+#     without needing to descend into sprintf.
+#   - firewall_pre.uc writes nft fragments to disk rather than passing
+#     them to a shell, so its system() calls only see literal commands.
+
+if [ -z "$UNQUOTED" ]; then
+	pass "every shell arg with \${...} interpolation goes through shellQuote()"
+else
+	fail "shell args with \${...} interpolation bypass shellQuote():"
+	printf '      %s\n' "$UNQUOTED" | head -20
+fi
+
+# The local lowercase `shellquote()` placeholder must be gone - it shadows
+# the imported shellQuote() and would silently no-op on a future call site.
+LOWER="$(grep -rnE '\bshellquote\(' "$SCRIPTS" "$RPC" 2>/dev/null || true)"
+if [ -z "$LOWER" ]; then
+	pass "the local lowercase shellquote() placeholder is gone"
+else
+	fail "local lowercase shellquote() is still referenced - replace with the imported shellQuote():"
+	printf '      %s\n' "$LOWER"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

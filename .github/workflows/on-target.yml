@@ -30,7 +30,8 @@ name: On-target test
 #
 # and one optional repository variable:
 #
-#   HP_TEST_HOST   defaults to root@192.168.1.102
+#   HP_TEST_HOST   no default; supply a value or leave blank (the workflow
+#                  then fails fast rather than ssh into a guessed address)
 
 on:
   workflow_dispatch:
@@ -39,7 +40,7 @@ on:
         description: 'Test machine (user@host). The production router is refused.'
         required: false
         type: string
-        default: 'root@192.168.1.102'
+        default: ''
       require_fw4:
         description: 'Fail instead of skipping the fw4 render layer (a target always has firewall4)'
         required: false
@@ -76,6 +77,10 @@ jobs:
               exit 1
               ;;
           esac
+          if [ -z "$HOST" ]; then
+            echo "::error title=No target::HP_TEST_HOST is empty; supply one (e.g. root@<test-machine>) or skip this workflow"
+            exit 1
+          fi
           echo "target: $HOST (the test machine, not the production router)"
 
       - name: Set up the SSH key

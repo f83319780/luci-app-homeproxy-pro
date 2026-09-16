@@ -153,16 +153,25 @@ else {
 	for (const s of sets)
 		check(`capabilities has '${s}'`, Array.isArray(caps[s]), typeof caps[s]);
 
-	/* The five sets describe one privilege set; a capability in `bounding` but
-	 * not in `effective` is silently dropped by procd, which is the kind of
-	 * thing nobody notices until the service cannot bind. */
+	/* The four non-inheritable sets (bounding / effective / ambient / permitted)
+	 * describe one privilege set; a capability in `bounding` but not in
+	 * `effective` is silently dropped by procd, which is the kind of thing
+	 * nobody notices until the service cannot bind.  `inheritable` is
+	 * allowed to be empty (and indeed should be): the review H2 hardened it
+	 * to `[]` because nothing the orchestrator spawns needs to inherit caps,
+	 * and an empty inheritable prevents accidental propagation to children. */
 	const present = sets.filter((s) => Array.isArray(caps[s]));
 	if (present.length > 1) {
-		const first = JSON.stringify([...caps[present[0]]].sort());
-		for (const s of present.slice(1))
-			check(`capabilities '${s}' matches '${present[0]}'`,
-				JSON.stringify([...caps[s]].sort()) === first,
-				`${JSON.stringify(caps[s])} vs ${JSON.stringify(caps[present[0]])}`);
+		const nonInheritable = present.filter((s) => s !== 'inheritable');
+		if (nonInheritable.length > 1) {
+			const first = JSON.stringify([...caps[nonInheritable[0]]].sort());
+			for (const s of nonInheritable.slice(1))
+				check(`capabilities '${s}' matches '${nonInheritable[0]}'`,
+					JSON.stringify([...caps[s]].sort()) === first,
+					`${JSON.stringify(caps[s])} vs ${JSON.stringify(caps[nonInheritable[0]])}`);
+		}
+		/* inheritable stays independent of the other four - assert only that
+		 * it is well-formed (already done by the has-set check above). */
 	}
 }
 
