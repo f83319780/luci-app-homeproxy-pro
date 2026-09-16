@@ -285,7 +285,7 @@ msgstr ""
 msgid "Base64"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:170
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:154
 msgid "Based on google/gvisor."
 msgstr ""
 
@@ -312,7 +312,7 @@ msgstr ""
 msgid "Blacklist mode"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:211
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:195
 msgid "Block"
 msgstr ""
 
@@ -322,7 +322,7 @@ msgstr ""
 msgid "Both"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:190
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:174
 msgid "Bypass CN traffic"
 msgstr ""
 
@@ -330,7 +330,7 @@ msgstr ""
 msgid "Bypass mainland China"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:191
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:175
 msgid "Bypass mainland China traffic via firewall rules by default."
 msgstr ""
 
@@ -419,7 +419,7 @@ msgstr ""
 msgid "Cloudflare"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:122
+#: htdocs/luci-static/resources/view/homeproxy/client.js:123
 #: htdocs/luci-static/resources/view/homeproxy/server.js:146
 #: htdocs/luci-static/resources/view/homeproxy/status.js:162
 msgid "Collecting data..."
@@ -511,7 +511,7 @@ msgstr ""
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:38
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:61
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:273
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:228
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:212
 msgid "Default DNS (issued by WAN)"
 msgstr ""
 
@@ -519,7 +519,7 @@ msgstr ""
 msgid "Default DNS server"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:223
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:207
 msgid "Default DNS server for resolving domain name in the server address."
 msgstr ""
 
@@ -527,15 +527,15 @@ msgstr ""
 msgid "Default DNS strategy"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:203
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:187
 msgid "Default outbound"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:222
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:206
 msgid "Default outbound DNS"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:204
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:188
 msgid "Default outbound for connections not matched by any routing rules."
 msgstr ""
 
@@ -556,7 +556,7 @@ msgstr ""
 #: htdocs/luci-static/resources/view/homeproxy/client/common.js:322
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:93
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:311
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:210
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:194
 #: htdocs/luci-static/resources/view/homeproxy/client/subscription.js:96
 msgid "Direct"
 msgstr ""
@@ -590,7 +590,7 @@ msgstr ""
 msgid "Disable"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:209
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:193
 msgid "Disable (the service)"
 msgstr ""
 
@@ -651,7 +651,7 @@ msgstr ""
 msgid "Disable optimistic cache"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:135
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:31
 msgid "Disabled"
 msgstr ""
 
@@ -672,7 +672,7 @@ msgid "Domain resolver"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:73
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:198
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:182
 msgid "Domain strategy"
 msgstr ""
 
@@ -823,11 +823,11 @@ msgstr ""
 msgid "Enable connection reuse (the Snell v2 CONNECT command)."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:175
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:159
 msgid "Enable endpoint-independent NAT"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:195
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:179
 msgid ""
 "Enable neighbor resolution so rules can match LAN devices by hostname (1.14)."
 msgstr ""
@@ -954,7 +954,7 @@ msgstr ""
 msgid "Filter nodes"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:194
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:178
 msgid "Find neighbor hosts"
 msgstr ""
 
@@ -1124,12 +1124,12 @@ msgstr ""
 msgid "Heartbeat interval"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:137
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:33
 msgid "Hijack"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:69
-#: htdocs/luci-static/resources/view/homeproxy/client.js:111
+#: htdocs/luci-static/resources/view/homeproxy/client.js:70
+#: htdocs/luci-static/resources/view/homeproxy/client.js:112
 #: htdocs/luci-static/resources/view/homeproxy/status.js:269
 #: root/usr/share/luci/menu.d/luci-app-homeproxy.json:3
 msgid "HomeProxy"
@@ -1243,7 +1243,7 @@ msgid ""
 "connections."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:199
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:183
 msgid ""
 "If set, the requested domain name will be resolved to IP before routing."
 msgstr ""
@@ -1274,7 +1274,7 @@ msgstr ""
 msgid "Import share links"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:183
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:167
 #: htdocs/luci-static/resources/view/homeproxy/server.js:611
 msgid "In seconds."
 msgstr ""
@@ -1367,7 +1367,7 @@ msgid ""
 "compatibility purposes only, use of alterId > 1 is not recommended."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:172
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:156
 msgid "Less compatibility and sometimes better performance."
 msgstr ""
 
@@ -1681,11 +1681,11 @@ msgid "Minimum streams"
 msgstr ""
 
 #: htdocs/luci-static/resources/homeproxy.js:111
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:157
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:141
 msgid "Mixed"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:168
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:152
 msgid "Mixed <code>system</code> TCP stack and <code>gVisor</code> UDP stack."
 msgstr ""
 
@@ -1719,7 +1719,7 @@ msgid "NS"
 msgstr ""
 
 #: htdocs/luci-static/resources/homeproxy.js:310
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:136
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:32
 msgid "Native"
 msgstr ""
 
@@ -1906,7 +1906,7 @@ msgstr ""
 msgid "Peer pubkic key"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:176
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:160
 msgid ""
 "Performance may degrade slightly, so it is not recommended to enable on when "
 "it is not needed."
@@ -2371,7 +2371,7 @@ msgstr ""
 msgid "Shadowsocks"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:133
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:29
 msgid ""
 "Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the "
 "platform interface DNS and hijacks port 53. On OpenWrt this overlaps with "
@@ -2525,7 +2525,7 @@ msgid ""
 "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:160
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:144
 msgid "System"
 msgstr ""
 
@@ -2534,7 +2534,7 @@ msgstr ""
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:39
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:62
 #: htdocs/luci-static/resources/view/homeproxy/client/nodes.js:274
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:229
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:213
 msgid "System DNS"
 msgstr ""
 
@@ -2549,11 +2549,11 @@ msgstr ""
 msgid "TCP fast open"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:154
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:138
 msgid "TCP/IP stack"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:155
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:139
 msgid "TCP/IP stack."
 msgstr ""
 
@@ -2597,11 +2597,15 @@ msgstr ""
 msgid "TLS spoof method (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:143
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:26
+msgid "TUN DNS"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:39
 msgid "TUN DNS addresses (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:132
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:28
 msgid "TUN DNS mode (1.14)"
 msgstr ""
 
@@ -2750,7 +2754,7 @@ msgstr ""
 msgid "The minimum TLS version that is acceptable."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client.js:112
+#: htdocs/luci-static/resources/view/homeproxy/client.js:113
 #: htdocs/luci-static/resources/view/homeproxy/server.js:137
 msgid "The modern ImmortalWrt proxy platform for ARM64/AMD64."
 msgstr ""
@@ -2904,7 +2908,7 @@ msgstr ""
 msgid "UDP NAT Settings"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:182
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:166
 #: htdocs/luci-static/resources/view/homeproxy/server.js:610
 msgid "UDP NAT expiration time"
 msgstr ""
@@ -2965,7 +2969,7 @@ msgstr ""
 msgid "Unknown error: %s"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:134
+#: htdocs/luci-static/resources/view/homeproxy/client/tun_dns.js:30
 msgid "Unset (default)"
 msgstr ""
 
@@ -3162,7 +3166,7 @@ msgstr ""
 msgid "gRPC service name"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:158
+#: htdocs/luci-static/resources/view/homeproxy/client/routing.js:142
 msgid "gVisor"
 msgstr ""
 

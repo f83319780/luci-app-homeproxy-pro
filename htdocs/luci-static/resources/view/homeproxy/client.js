@@ -21,6 +21,7 @@
 'require view.homeproxy.client.access as access';
 'require view.homeproxy.client.subscription as subscription';
 'require view.homeproxy.client.udp_nat as udp_nat';
+'require view.homeproxy.client.tun_dns as tun_dns';
 
 /* Module-scoped guard: register the view-level status poll exactly
  * once, regardless of how many times the view's render() runs (LuCI
@@ -152,12 +153,12 @@ return view.extend({
 
 		/* Tab ordering follows the order of these calls: routing,
 		 * routing_node, routing_rule, dns, dns_server, dns_rule, ruleset,
-		 * dns_cache, control, udp_nat. The DNS tab sits before Access
-		 * Control because the pages a preset-routing-mode user actually
-		 * sees are Routing Settings, DNS Settings, Access Control and UDP
-		 * NAT Settings, in that order. The shared rule-section bodies live
-		 * in common.js and are called out-of-order with respect to their
-		 * file to keep the rendering sequence intact. */
+		 * dns_cache, control, udp_nat, tun_dns. The DNS tab sits before
+		 * Access Control because the pages a preset-routing-mode user
+		 * actually sees are Routing Settings, DNS Settings, Access Control,
+		 * UDP NAT Settings and TUN DNS, in that order. The shared
+		 * rule-section bodies live in common.js and are called out-of-order
+		 * with respect to their file to keep the rendering sequence intact. */
 		routing.render(ctx);
 		nodes.renderRoutingNodes(ctx);
 		routing.renderRoutingRules(ctx);
@@ -168,6 +169,7 @@ return view.extend({
 		dns.renderDnsCache(ctx);
 		access.render(ctx);
 		udp_nat.renderUdpNat(ctx);
+		tun_dns.renderTunDns(ctx);
 
 		return m.render();
 	}
