@@ -275,6 +275,7 @@ export function generate(dm) {
 	config.endpoints = [];
 
 	build_outbounds(config, dm, ctx, direct_overrides);
+
 	build_route(config, dm, ctx, direct_overrides);
 
 	/* User-defined rulesets are custom-mode only; passing an empty
@@ -286,6 +287,48 @@ export function generate(dm) {
 	const http_clients = build_http_clients(config.route.rule_set, dm, ctx);
 	if (length(http_clients))
 		config.http_clients = http_clients;
+
+	/* A direct node used as the main node yields a main-out with no fields of
+	 * its own: generate_outbound() turns its override_address / override_port
+	 * into a route action rather than outbound fields, leaving a bare
+	 * {"type":"direct","tag":"main-out"}.  sing-box refuses to detour into
+	 * such an outbound and the service never starts:
+	 *
+	 *   FATAL start service: start dns/tcp[main-dns]: detour to an empty
+	 *   direct outbound makes no sense
+	 *   FATAL start service: initialize rule-set[0]: ... detour to an empty
+	 *   direct outbound makes no sense
+	 *
+	 * Dropping the detour is the equivalent behaviour - the query or the
+	 * rule-set download leaves through the host's own network, which is what a
+	 * direct outbound does - and mirrors the `ctx.self_mark ? 'direct-out' :
+	 * null` that build_dns already applies to the other DNS servers.  Only
+	 * main-out is touched: direct-out is deliberate and carries a routing
+	 * mark.
+	 *
+	 * This has to run after build_http_clients(): the rule-set downloads
+	 * reach main-out through an http_client, not through a detour of their
+	 * own. */
+	let bare_main_out = false;
+	for (let i = 0; i < length(config.outbounds); i++) {
+		const ob = config.outbounds[i];
+		/* build_outbounds leaves a null in the array for a node it could not
+		 * emit (a pruned urltest candidate); skip those. */
+		if (ob && ob.tag === 'main-out' && ob.type === 'direct' && length(keys(ob)) === 2)
+			bare_main_out = true;
+	}
+	if (bare_main_out) {
+		for (let i = 0; i < length(config.dns.servers); i++) {
+			const s = config.dns.servers[i];
+			if (s && s.detour === 'main-out')
+				delete s.detour;
+		}
+		for (let i = 0; i < length(config.http_clients || []); i++) {
+			const c = config.http_clients[i];
+			if (c && c.detour === 'main-out')
+				delete c.detour;
+		}
+	}
 
 	if (isEmpty(config.route.rule_set))
 		config.route.rule_set = null;
