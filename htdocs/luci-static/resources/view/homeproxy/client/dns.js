@@ -88,10 +88,10 @@ function renderDnsRules(ctx) {
 	/* DNS rules end */
 }
 
-/* DNS tab for the preset routing modes - the rightmost tab.  Titled 'DNS
- * Settings' exactly like the custom-mode tab in renderDnsSettings(): the two
- * are mutually exclusive (custom vs the presets), so whichever one a user
- * lands on is called the same thing.
+/* DNS tab for the preset routing modes.  Titled 'DNS Settings' exactly like
+ * the custom-mode tab in renderDnsSettings(): the two are mutually exclusive
+ * (custom vs the presets), so whichever one a user lands on is called the
+ * same thing.
  *
  * The three server options below are config.* (not dns.*) options that used
  * to live on the routing tab.  They are DNS settings, and the routing page

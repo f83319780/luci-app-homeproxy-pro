@@ -149,11 +149,14 @@ return view.extend({
 			stubValidator, self: this,
 		};
 
-		/* Tab ordering must match the original 1682-line monolith: routing,
+		/* Tab ordering follows the order of these calls: routing,
 		 * routing_node, routing_rule, dns, dns_server, dns_rule, ruleset,
-		 * control, dns_cache. The shared rule-section bodies live in
-		 * common.js and are called out-of-order with respect to their file
-		 * to keep the rendering sequence intact. */
+		 * dns_cache, control. The DNS tab sits before Access Control
+		 * because the pages a preset-routing-mode user actually sees are
+		 * Routing Settings, DNS Settings and Access Control, in that order.
+		 * The shared rule-section bodies live in common.js and are called
+		 * out-of-order with respect to their file to keep the rendering
+		 * sequence intact. */
 		routing.render(ctx);
 		nodes.renderRoutingNodes(ctx);
 		routing.renderRoutingRules(ctx);
@@ -161,8 +164,8 @@ return view.extend({
 		nodes.renderDnsServers(ctx);
 		dns.renderDnsRules(ctx);
 		subscription.render(ctx);
-		access.render(ctx);
 		dns.renderDnsCache(ctx);
+		access.render(ctx);
 
 		return m.render();
 	}
