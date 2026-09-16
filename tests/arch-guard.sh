@@ -536,14 +536,33 @@ for cap in CAP_SYS_PTRACE CAP_NET_RAW CAP_SYS_ADMIN CAP_DAC_OVERRIDE CAP_SYS_MOD
 	fi
 done
 
-# inheritable must be empty: every child process the orchestrator spawns
-# is a shell / sh / helper that does not need elevated caps.
-INHERITABLE="$(awk '/"inheritable"/,/]/' "$CAPS")"
-if printf '%s' "$INHERITABLE" | grep -qE '"CAP_[A-Z_]+"'; then
-	fail "inheritable is not empty:"
-	printf '      %s\n' "$INHERITABLE"
+# inheritable must cover ambient.  A capability can only be raised into the
+# ambient set while it is in BOTH the permitted and the inheritable set
+# (capabilities(7), PR_CAP_AMBIENT_RAISE), and procd/ujail does exactly that
+# when it launches the jailed sing-box.  The M1 review assumed an empty
+# inheritable set was harmless ("every child is a shell that does not need
+# elevated caps") and asserted that here - but the raise then fails with EPERM,
+# sing-box never gets CAP_NET_BIND_SERVICE, and procd crash-loops:
+#
+#   jail: prctl(PR_CAP_AMBIENT, PR_CAP_AMBIENT_RAISE, 10, 0, 0) failed: Operation not permitted
+#
+# So the invariant is "ambient is a subset of inheritable", not "inheritable is
+# empty".  Verified on the test device: with an empty inheritable set
+# `homeproxy start` exits 1 and sing-box-c never runs; restoring the two
+# entries makes start/reload/stop pass and the instances come up.
+AMBIENT="$(awk '/"ambient"/,/]/' "$CAPS" | grep -oE 'CAP_[A-Z_]+' | sort -u)"
+INHERITABLE="$(awk '/"inheritable"/,/]/' "$CAPS" | grep -oE 'CAP_[A-Z_]+' | sort -u | tr '\n' ' ')"
+MISSING=""
+for cap in $AMBIENT; do
+	case " $INHERITABLE " in
+	*" $cap "*) ;;
+	*) MISSING="$MISSING $cap" ;;
+	esac
+done
+if [ -n "$MISSING" ]; then
+	fail "inheritable does not cover ambient:$MISSING - PR_CAP_AMBIENT_RAISE needs both sets, sing-box will crash-loop in the jail"
 else
-	pass "inheritable is empty"
+	pass "inheritable covers every ambient capability"
 fi
 
 # The two caps the package actually needs. Asserted positively so the
