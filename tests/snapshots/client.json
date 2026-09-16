@@ -46,7 +46,7 @@
 				],
 				[
 					"dns_cache",
-					"DNS Cache (1.14)"
+					"DNS Settings"
 				]
 			],
 			"options": [
@@ -215,96 +215,6 @@
 					}
 				},
 				{
-					"kind": "Value",
-					"name": "dns_server",
-					"title": "DNS server",
-					"description": "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified.",
-					"depends": [
-						{
-							"routing_mode": "custom",
-							"!reverse": true
-						}
-					],
-					"values": [
-						[
-							"wan",
-							"WAN DNS (read from interface)"
-						],
-						[
-							"1.1.1.1",
-							"CloudFlare Public DNS (1.1.1.1)"
-						],
-						[
-							"208.67.222.222",
-							"Cisco Public DNS (208.67.222.222)"
-						],
-						[
-							"8.8.8.8",
-							"Google Public DNS (8.8.8.8)"
-						],
-						[
-							"",
-							"---"
-						],
-						[
-							"223.5.5.5",
-							"Aliyun Public DNS (223.5.5.5)"
-						],
-						[
-							"119.29.29.29",
-							"Tencent Public DNS (119.29.29.29)"
-						],
-						[
-							"117.50.10.10",
-							"ThreatBook Public DNS (117.50.10.10)"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "8.8.8.8",
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "Value",
-					"name": "china_dns_server",
-					"title": "China DNS server",
-					"description": "The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.",
-					"depends": [
-						[
-							"routing_mode",
-							"bypass_mainland_china"
-						]
-					],
-					"values": [
-						[
-							"wan",
-							"WAN DNS (read from interface)"
-						],
-						[
-							"223.5.5.5",
-							"Aliyun Public DNS (223.5.5.5)"
-						],
-						[
-							"210.2.4.8",
-							"CNNIC Public DNS (210.2.4.8)"
-						],
-						[
-							"119.29.29.29",
-							"Tencent Public DNS (119.29.29.29)"
-						],
-						[
-							"117.50.10.10",
-							"ThreatBook Public DNS (117.50.10.10)"
-						]
-					],
-					"subsection": null,
-					"props": {
-						"default": "223.5.5.5",
-						"rmempty": false
-					}
-				},
-				{
 					"kind": "ListValue",
 					"name": "routing_mode",
 					"title": "Routing mode",
@@ -393,23 +303,6 @@
 					"title": "IPv6 support",
 					"description": null,
 					"depends": [],
-					"values": [],
-					"subsection": null,
-					"props": {
-						"rmempty": false
-					}
-				},
-				{
-					"kind": "Flag",
-					"name": "cn_ip_fallback",
-					"title": "CN-IP DNS fallback (sing-box 1.14)",
-					"description": "When the main DNS returns a mainland China IP, re-resolve via China DNS using evaluate/match_response.",
-					"depends": [
-						[
-							"routing_mode",
-							"bypass_mainland_china"
-						]
-					],
 					"values": [],
 					"subsection": null,
 					"props": {
@@ -3893,6 +3786,113 @@
 						"subsection": null
 					},
 					"props": {}
+				},
+				{
+					"kind": "Value",
+					"name": "dns_server",
+					"title": "DNS server",
+					"description": "Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified.",
+					"depends": [
+						{
+							"routing_mode": "custom",
+							"!reverse": true
+						}
+					],
+					"values": [
+						[
+							"wan",
+							"WAN DNS (read from interface)"
+						],
+						[
+							"1.1.1.1",
+							"CloudFlare Public DNS (1.1.1.1)"
+						],
+						[
+							"208.67.222.222",
+							"Cisco Public DNS (208.67.222.222)"
+						],
+						[
+							"8.8.8.8",
+							"Google Public DNS (8.8.8.8)"
+						],
+						[
+							"",
+							"---"
+						],
+						[
+							"223.5.5.5",
+							"Aliyun Public DNS (223.5.5.5)"
+						],
+						[
+							"119.29.29.29",
+							"Tencent Public DNS (119.29.29.29)"
+						],
+						[
+							"117.50.10.10",
+							"ThreatBook Public DNS (117.50.10.10)"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "8.8.8.8",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "Value",
+					"name": "china_dns_server",
+					"title": "China DNS server",
+					"description": "The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.",
+					"depends": [
+						[
+							"routing_mode",
+							"bypass_mainland_china"
+						]
+					],
+					"values": [
+						[
+							"wan",
+							"WAN DNS (read from interface)"
+						],
+						[
+							"223.5.5.5",
+							"Aliyun Public DNS (223.5.5.5)"
+						],
+						[
+							"210.2.4.8",
+							"CNNIC Public DNS (210.2.4.8)"
+						],
+						[
+							"119.29.29.29",
+							"Tencent Public DNS (119.29.29.29)"
+						],
+						[
+							"117.50.10.10",
+							"ThreatBook Public DNS (117.50.10.10)"
+						]
+					],
+					"subsection": null,
+					"props": {
+						"default": "223.5.5.5",
+						"rmempty": false
+					}
+				},
+				{
+					"kind": "Flag",
+					"name": "cn_ip_fallback",
+					"title": "CN-IP DNS fallback (sing-box 1.14)",
+					"description": "When the main DNS returns a mainland China IP, re-resolve via China DNS using evaluate/match_response.",
+					"depends": [
+						[
+							"routing_mode",
+							"bypass_mainland_china"
+						]
+					],
+					"values": [],
+					"subsection": null,
+					"props": {
+						"rmempty": false
+					}
 				},
 				{
 					"kind": "SectionValue",
