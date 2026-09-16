@@ -58,6 +58,14 @@ function getConnStat(o, site) {
 function getResVersion(o, type) {
 	return hp.rpcCall('resources_get_version', [type],
 			{ params: ['type'], expect: { '': {} } }).then((res) => {
+		/* Review M7: the version string (the upstream commit date) and
+		 * `res.updated_at` (when *this router* last succeeded) are
+		 * distinct.  Show both: the upstream date stays the same across
+		 * a successful re-run, so it cannot answer "did the cron job run
+		 * last night" - only `updated_at` does. */
+		const updated_label = res.updated_at
+			? _('(last updated %s)').format(res.updated_at)
+			: _('(never updated on this device)');
 		let spanTemp = E('div', { 'style': 'cbi-value-field' }, [
 			E('button', {
 				'class': 'btn cbi-button cbi-button-action',
@@ -90,6 +98,8 @@ function getResVersion(o, type) {
 			E('strong', { 'style': (res.error ? 'color:red' : 'color:green') },
 				[ res.error ? 'not found' : res.version ]
 			),
+			' ',
+			E('small', { 'style': 'color:gray' }, [ updated_label ]),
 		]);
 
 		o.default = spanTemp;

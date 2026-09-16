@@ -78,12 +78,18 @@ const methods = {
 					content += '\n';
 
 				/* Domains only: reject lines that could break the downstream
-				   dnsmasq/nftset injection (whitespace / shell or directive chars). */
-				for (let line in split(content, /\n/)) {
+				   dnsmasq/nftset injection (whitespace / shell or directive chars).
+				   Review L1: the rejection used to say "invalid character in
+				   domain list" with no line number, so a 200-line list with one
+				   bad entry forced the user to bisect by hand.  Report line 1
+				   for the first bad row so the user can jump straight to it. */
+				const lines = split(content, /\n/);
+				for (let i = 0; i < length(lines); i++) {
+					const line = lines[i];
 					if (!trim(line))
 						continue;
 					if (match(line, /[ \t\/\\;<>="'&#|]/))
-						return { result: false, error: 'invalid character in domain list' };
+						return { result: false, error: `line ${i + 1}: invalid character in domain list (only domains, no spaces/comments)` };
 				}
 			}
 
@@ -296,12 +302,18 @@ const methods = {
 		call: function(req) {
 			/* whitelist resource types to prevent path traversal */
 			if (index(['china_ip4', 'china_ip6', 'gfw_list', 'china_list'], req.args?.type) === -1)
-				return { error: 'illegal type', version: null };
+				return { error: 'illegal type', version: null, updated_at: null };
 			let version = trim(readfile(`${HP_DIR}/resources/${req.args?.type}.ver`));
+			/* Review M7: the version file holds the upstream commit date
+			 * and SHA; .updated_at is when *this router* last succeeded.
+			 * The two are not the same - a successful run on a stale
+			 * router still records the same upstream date, so the UI
+			 * shows both. */
 			const fields = version ? match(version, /^(\S+) (\S+)$/) : null;
 			if (fields)
 				version = fields[1];
-			return { version: version, error: error() };
+			const updated_at = trim(readfile(`${HP_DIR}/resources/${req.args?.type}.updated_at`));
+			return { version: version, updated_at: updated_at || null, error: error() };
 		}
 	},
 	resources_update: {

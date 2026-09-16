@@ -20,6 +20,39 @@ to_upper() {
 	echo -e "$1" | tr "[a-z]" "[A-Z]"
 }
 
+# Review M7: each entry is tried in order, success stops the loop.  Order
+# matters: fastly.jsdelivr.net is the CDN edge closest to the original
+# report and used to be the only mirror; gcore and cdn are sibling edges;
+# raw.githubusercontent.com is the upstream fallback (the file lives in
+# the same GitHub repo we just queried for the SHA, so it is reachable
+# whenever the version query was reachable).  Putting the CDN edges first
+# keeps the common case fast; the GitHub fallback catches the case where
+# the CDN is blocked but GitHub is reachable - which is the shape of the
+# `api.github.com` rate-limit problem the report calls out.
+MIRRORS="fastly.jsdelivr.net gcore.jsdelivr.net cdn.jsdelivr.net raw.githubusercontent.com"
+
+# Pick the first mirror that responds to a HEAD with HTTP 200 in 10s.
+# Called with: <path-suffix>.  Echoes the chosen base URL on stdout, or
+# fails the script if every mirror timed out.
+pick_mirror() {
+	local path_suffix="$1"
+	for base in $MIRRORS; do
+		if [ "$base" = "raw.githubusercontent.com" ]; then
+			# GitHub raw serves paths from the repo root, not the
+			# /gh/<repo>@<sha>/<file> shape jsdelivr uses. The caller
+			# passes the suffix already split out, so we re-stitch it.
+			local probe_url="https://$base/$listrepo@$list_sha/$listname"
+		else
+			local probe_url="https://$base/gh/$listrepo@$list_sha/$listname"
+		fi
+		if wget --timeout=10 --spider -q "$probe_url" 2>"/dev/null"; then
+			printf '%s\n' "$base"
+			return 0
+		fi
+	done
+	return 1
+}
+
 check_list_update() {
 	local listtype="$1"
 	local listrepo="$2"
@@ -74,15 +107,37 @@ check_list_update() {
 		log "[$(to_upper "$listtype")] Local version: $local_list_disp, latest version: ${list_ver%% *}."
 	fi
 
-	if ! $wget "https://fastly.jsdelivr.net/gh/$listrepo@$list_sha/$listname" -O "$RUN_DIR/$listname" || [ ! -s "$RUN_DIR/$listname" ]; then
+	# Pick a mirror, then download. pick_mirror walks the list and uses
+	# the first reachable one; raw.githubusercontent.com is a separate
+	# path shape so the helper handles it.
+	local mirror="$(pick_mirror)"
+	if [ -z "$mirror" ]; then
+		log "[$(to_upper "$listtype")] All mirrors unreachable (tried: $MIRRORS)."
+		return 1
+	fi
+	local mirror_url
+	if [ "$mirror" = "raw.githubusercontent.com" ]; then
+		mirror_url="https://raw.githubusercontent.com/$listrepo@$list_sha/$listname"
+	else
+		mirror_url="https://$mirror/gh/$listrepo@$list_sha/$listname"
+	fi
+	log "[$(to_upper "$listtype")] Downloading from $mirror."
+
+	if ! $wget -O "$RUN_DIR/$listname" "$mirror_url" || [ ! -s "$RUN_DIR/$listname" ]; then
 		rm -f "$RUN_DIR/$listname"
-		log "[$(to_upper "$listtype")] Download failed."
+		log "[$(to_upper "$listtype")] Download failed ($mirror)."
 		return 1
 	fi
 
 	if mv -f "$RUN_DIR/$listname" "$RESOURCES_DIR/$listtype.${listname##*.}"; then
 		echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
-		log "[$(to_upper "$listtype")] Successfully updated."
+		# Review M7: persist the time *this router* last succeeded.
+		# $list_date is the upstream commit date and can be months old
+		# even on a successful run, so it is not a stand-in.  Stored in
+		# the same directory as the .ver file so resources_get_version
+		# can read it.
+		date -u +"%Y-%m-%dT%H:%M:%SZ" > "$RESOURCES_DIR/$listtype.updated_at"
+		log "[$(to_upper "$listtype")] Successfully updated via $mirror."
 	else
 		rm -f "$RUN_DIR/$listname"
 		log "[$(to_upper "$listtype")] Failed to install update (mv failed)."
