@@ -74,6 +74,29 @@ function renderDnsSettings(ctx) {
 		_('Persist DNS cache across restarts (sing-box 1.14, replaces Store RDRC).'));
 	so.depends('disable_cache', '0');
 	so.rmempty = false;
+
+	/* TUN-mode DNS.  config.* options like the server fields, not dns.* like
+	 * the block above, and they depend on proxy_mode rather than
+	 * routing_mode - so they stay hidden until a TUN proxy mode is picked,
+	 * on this tab as much as on dns_cache.  Both tabs carry a copy because
+	 * the two are mutually exclusive and a TUN proxy mode is orthogonal to
+	 * the routing mode: the same reason optimistic_cache and friends are
+	 * defined twice. */
+	o = s.taboption('dns', form.ListValue, 'tun_dns_mode', _('TUN DNS mode (1.14)'),
+		_('Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.'));
+	o.value('default', _('Unset (default)'));
+	o.value('disabled', _('Disabled'));
+	o.value('native', _('Native'));
+	o.value('hijack', _('Hijack'));
+	o.depends('proxy_mode', 'redirect_tun');
+	o.depends('proxy_mode', 'tun');
+	o.default = 'default';
+	o.rmempty = true;
+
+	o = s.taboption('dns', form.DynamicList, 'tun_dns_address', _('TUN DNS addresses (1.14)'));
+	o.datatype = 'ipaddr';
+	o.depends({'proxy_mode': /^((?!custom).)+$/, 'tun_dns_mode': /^(disabled|native|hijack)$/});
+	o.modalonly = true;
 	/* DNS settings end */
 }
 
@@ -199,6 +222,24 @@ function renderDnsCache(ctx) {
 	so = ss.option(form.Flag, 'cache_file_store_dns', _('Store DNS cache'),
 		_('Persist DNS cache across restarts (replaces Store RDRC).'));
 	so.rmempty = false;
+
+	/* TUN-mode DNS - see the copy in renderDnsSettings() for why this block
+	 * appears on both tabs. */
+	o = s.taboption('dns_cache', form.ListValue, 'tun_dns_mode', _('TUN DNS mode (1.14)'),
+		_('Since sing-box 1.14 the default (Unset) behaves as hijack: sing-box sets the platform interface DNS and hijacks port 53. On OpenWrt this overlaps with the own dnsmasq/nftables DNS hijack of this plugin, so keep Disabled on a gateway unless you need sing-box to own TUN DNS.'));
+	o.value('default', _('Unset (default)'));
+	o.value('disabled', _('Disabled'));
+	o.value('native', _('Native'));
+	o.value('hijack', _('Hijack'));
+	o.depends('proxy_mode', 'redirect_tun');
+	o.depends('proxy_mode', 'tun');
+	o.default = 'default';
+	o.rmempty = true;
+
+	o = s.taboption('dns_cache', form.DynamicList, 'tun_dns_address', _('TUN DNS addresses (1.14)'));
+	o.datatype = 'ipaddr';
+	o.depends({'proxy_mode': /^((?!custom).)+$/, 'tun_dns_mode': /^(disabled|native|hijack)$/});
+	o.modalonly = true;
 }
 
 return baseclass.extend({ renderDnsSettings, renderDnsRules, renderDnsCache });
