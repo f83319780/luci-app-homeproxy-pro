@@ -10,9 +10,8 @@
 # of being inlined in init.d/homeproxy.
 #
 # A single "is a matching process alive?" probe is NOT a health check, and the
-# first version of this file learned that the hard way (see
-# docs/architecture-improvement-plan.md 2.14).  Measured on the test device
-# with a configuration whose mixed_port was already taken:
+# first version of this file learned that the hard way.  Measured on the test
+# device with a configuration whose mixed_port was already taken:
 #
 #   * procd restarts the crashing instance about once a second, and a STALE
 #     sing-box process from an earlier run kept matching `pgrep -f`, so the

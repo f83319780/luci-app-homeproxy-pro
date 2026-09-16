@@ -15,8 +15,7 @@
 #                       It is the record that the extraction itself was
 #                       behaviour-preserving (360 identical lines across three
 #                       scenarios, commit c2aeac5).
-#   trace.golden.txt    the baseline after the health-gate fix
-#                       (docs/architecture-improvement-plan.md 2.14).  The
+#   trace.golden.txt    the baseline after the health-gate fix.  The
 #                       difference between the two files IS the intentional
 #                       change: start_service now waits for hp_wait_service
 #                       before logging "started", records known-good only

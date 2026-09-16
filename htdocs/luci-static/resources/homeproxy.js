@@ -75,10 +75,9 @@ return baseclass.extend({
 	   ("unknown method: chacha20") - offering it let a user pick a method
 	   that made the generated configuration fail to validate.  The IETF
 	   variant is accepted and is kept.
-	   The server form does not offer these; that asymmetry is deliberate and
-	   recorded in docs/architecture-improvement-plan.md 2.11 - it is data
-	   here rather than two hand-maintained lists, so changing it is one line
-	   rather than a hunt for a second copy. */
+	   The server form does not offer these; that asymmetry is deliberate:
+	   it is data here rather than two hand-maintained lists, so changing it
+	   is one line rather than a hunt for a second copy. */
 	shadowsocks_stream_methods: [
 		'aes-128-ctr',
 		'aes-192-ctr',

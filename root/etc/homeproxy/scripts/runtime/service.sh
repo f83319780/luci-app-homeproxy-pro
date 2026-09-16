@@ -10,7 +10,7 @@
 # the "generate -> known-good" transaction that start_service runs for each
 # side.
 #
-# Layering note (see docs/architecture-improvement-plan.md §2.10): unlike
+# Layering note: unlike
 # runtime/config.sh and runtime/health.sh - which are deliberately pure and
 # only take explicit paths - the modules extracted by PR-05 are device-side
 # by nature.  They call `log`, `config_get` and `procd_*`, so a caller must

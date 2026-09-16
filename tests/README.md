@@ -129,8 +129,7 @@ too permissive; rebuild it with `tests/toolchain/build-ucode-macos.sh` (or
 for `HP_ALLOW_PERMISSIVE_UCODE=1`: on a permissive toolchain the canary's
 "rejected" probes pass for the wrong reason, and a real
 missing-`;`/destructuring regression would go unnoticed — which is precisely
-how the generator subtree shipped unloadable (see the `;` row in
-`docs/architecture-improvement-plan.md` §2.3.2).
+how the generator subtree shipped unloadable.
 
 ### What the local testbed cannot cover
 

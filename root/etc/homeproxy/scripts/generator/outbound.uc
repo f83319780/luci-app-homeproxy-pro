@@ -1,8 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor (see
- * homeproxy_architecture_refactor_agent_guide.md):
+ * Stage PHASE 4 of the architecture refactor:
  *
  *     generator/outbound.uc: build the sing-box `outbounds` and `endpoints`
  *                            blocks, plus the urltest pruning the route

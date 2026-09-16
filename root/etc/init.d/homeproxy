@@ -35,8 +35,7 @@
 # single "is a matching process alive?" probe, which was satisfied by a stale
 # process and by procd's own respawn loop while the service was dead - and
 # because the generated file was recorded as known-good *before* that probe
-# ran, the rollback had nothing left to restore.  See
-# docs/architecture-improvement-plan.md 2.14 for the measurements.
+# ran, the rollback had nothing left to restore.
 
 USE_PROCD=1
 

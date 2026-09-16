@@ -1,8 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage A1.1 of the architecture refactor (see
- * homeproxy_architecture_refactor_agent_guide.md):
+ * Stage A1.1 of the architecture refactor:
  *
  *     UCI -> Config Loader -> HomeProxyConfig / Node -> Adapter -> sing-box
  *

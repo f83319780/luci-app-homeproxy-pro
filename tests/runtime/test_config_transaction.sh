@@ -102,7 +102,7 @@ echo "== health probe =="
 #
 # The gate asks procd first (ubus + jsonfilter) and only falls back to a
 # process scan when procd cannot be asked at all.  That order is the fix for
-# the P0 in docs/architecture-improvement-plan.md 2.14: with the process scan
+# the P0: with the process scan
 # first, a STALE sing-box process left over from an earlier run kept answering
 # "alive" while procd restarted a crashing instance, so a dead service was
 # accepted and recorded as the new known-good.  The first case below pins
