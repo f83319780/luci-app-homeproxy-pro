@@ -157,6 +157,63 @@ export function getTime(epoch) {
 
 };
 
+/* Redact the credential-bearing parts of a URL before logging it. Any
+ * subscription URL we ship into /var/run/homeproxy/homeproxy.log is
+ * readable by anyone who can read /var/run/homeproxy - including UCI
+ * defaults that ship on the device and anyone with shell on the LAN.
+ * The plain host and path are useful for debugging ("which endpoint
+ * failed?"); the query string and userinfo are not - they hold the
+ * subscription token. The original URL is still passed to wGETVerbose.
+ *
+ *   https://user:token@host.example.com/path?q=abc&token=secret
+ *     -> https://***@host.example.com/path?q=*** */
+export function redactUrl(url) {
+	if (!url || type(url) !== 'string')
+		return '';
+
+	let u = url;
+
+	/* userinfo: scheme://user:pass@host -> scheme://***@host */
+	const at = index(u, '@');
+	const scheme = match(u, /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//);
+	if (scheme && at !== -1 && at > length(scheme[0]))
+		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
+
+	/* query: redact everything after the first '?'. The path itself
+	 * stays so logs still identify which endpoint failed. */
+	const q = index(u, '?');
+	if (q !== -1)
+		u = substr(u, 0, q) + '?***';
+
+	return u;
+};
+
+/* Scan a free-form error string and redact every URL in it.  GNU wget's
+ * stderr writes the requested URL back into the message:
+ *
+ *   https://host/path?q=token=secret: Bad port '80080'.
+ *
+ * The trailing `:` separator is greedy-matched here, which is harmless -
+ * redactUrl leaves it as-is.  Doing this here, in wGETVerbose, means the
+ * returned `error` is safe no matter where the caller ships it - the
+ * fetcher logs it, the orchestrator returns it, anything that prints it
+ * afterwards has already lost the token.  Centralising the redaction at
+ * the source is the review H3's point: every call site used to have to
+ * remember to redact, and the one that forgot was the original bug.
+ *
+ * A non-string input is returned unchanged so this is safe to apply to
+ * the trimmed wget stderr even when it is empty.
+ *
+ * Both definitions sit above wGETVerbose on purpose: ucode does not hoist
+ * `export function`, so a call compiled before the declaration is bound
+ * fails at runtime with "access to undeclared variable". */
+export function redactReason(reason) {
+	if (!reason || type(reason) !== 'string')
+		return reason;
+
+	return replace(reason, /https?:\/\/\S+/g, (url) => redactUrl(url));
+};
+
 /*
  * Fetch a URL and report both the body and, on failure, the reason. The
  * reason is wget's own stderr (whitespace collapsed, length-capped) so the
@@ -226,58 +283,6 @@ export function wGET(url, ua) {
 	return wGETVerbose(url, ua).content;
 };
 
-/* Redact the credential-bearing parts of a URL before logging it. Any
- * subscription URL we ship into /var/run/homeproxy/homeproxy.log is
- * readable by anyone who can read /var/run/homeproxy - including UCI
- * defaults that ship on the device and anyone with shell on the LAN.
- * The plain host and path are useful for debugging ("which endpoint
- * failed?"); the query string and userinfo are not - they hold the
- * subscription token. The original URL is still passed to wGETVerbose.
- *
- *   https://user:token@host.example.com/path?q=abc&token=secret
- *     -> https://***@host.example.com/path?q=*** */
-export function redactUrl(url) {
-	if (!url || type(url) !== 'string')
-		return '';
-
-	let u = url;
-
-	/* userinfo: scheme://user:pass@host -> scheme://***@host */
-	const at = index(u, '@');
-	const scheme = match(u, /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//);
-	if (scheme && at !== -1 && at > length(scheme[0]))
-		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
-
-	/* query: redact everything after the first '?'. The path itself
-	 * stays so logs still identify which endpoint failed. */
-	const q = index(u, '?');
-	if (q !== -1)
-		u = substr(u, 0, q) + '?***';
-
-	return u;
-};
-
-/* Scan a free-form error string and redact every URL in it.  GNU wget's
- * stderr writes the requested URL back into the message:
- *
- *   https://host/path?q=token=secret: Bad port '80080'.
- *
- * The trailing `:` separator is greedy-matched here, which is harmless -
- * redactUrl leaves it as-is.  Doing this here, in wGETVerbose, means the
- * returned `error` is safe no matter where the caller ships it - the
- * fetcher logs it, the orchestrator returns it, anything that prints it
- * afterwards has already lost the token.  Centralising the redaction at
- * the source is the review H3's point: every call site used to have to
- * remember to redact, and the one that forgot was the original bug.
- *
- * A non-string input is returned unchanged so this is safe to apply to
- * the trimmed wget stderr even when it is empty. */
-export function redactReason(reason) {
-	if (!reason || type(reason) !== 'string')
-		return reason;
-
-	return replace(reason, /https?:\/\/\S+/g, (url) => redactUrl(url));
-};
 /* Utilities end */
 
 /* String helper start */
