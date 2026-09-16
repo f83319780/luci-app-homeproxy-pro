@@ -9,16 +9,13 @@
 
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
-import { isBinary, isValidECHConfig, isValidPEM } from '/etc/homeproxy/scripts/homeproxy.uc';
+import { isBinary, isValidECHConfig, isValidPEM, shellQuote } from '/etc/homeproxy/scripts/homeproxy.uc';
 import { parse_uri } from '/etc/homeproxy/scripts/parser/uri.uc';
 
-/* Kanged from ucode/luci */
-function shellquote(s) {
-	return `'${replace(s, "'", "'\\''")}'`;
-}
-
+/* Kanged from ucode/luci - replaced by the imported shellQuote() so every shell
+ * argument in this file goes through one helper (review M6). */
 function hasKernelModule(kmod) {
-	return (system(sprintf('[ -e "/lib/modules/$(uname -r)"/%s ]', shellquote(kmod))) === 0);
+	return (system(sprintf('[ -e "/lib/modules/$(uname -r)"/%s ]', shellQuote(kmod))) === 0);
 }
 
 const HP_DIR = '/etc/homeproxy';
@@ -90,7 +87,7 @@ const methods = {
 				}
 			}
 
-			system(`mkdir -p ${HP_DIR}/resources`);
+			system(`mkdir -p ${shellQuote(HP_DIR)}/resources`);
 			writefile(file, content);
 
 			return { result: true };
@@ -118,13 +115,13 @@ const methods = {
 				const filestat = lstat(tmpcert);
 
 				if (!filestat || filestat.type !== 'file' || filestat.size <= 0) {
-					system(`rm -f ${tmpcert}`);
+					system(`rm -f ${shellQuote(tmpcert)}`);
 					return { result: false, error: 'empty certificate file' };
 				}
 
 				let filecontent = readfile(tmpcert);
 				if (isBinary(filecontent)) {
-					system(`rm -f ${tmpcert}`);
+					system(`rm -f ${shellQuote(tmpcert)}`);
 					return { result: false, error: 'illegal file type: binary' };
 				}
 
@@ -134,7 +131,7 @@ const methods = {
 					: isValidPEM(filecontent, kind === 'key');
 
 				if (!wellformed) {
-					system(`rm -f ${tmpcert}`);
+					system(`rm -f ${shellQuote(tmpcert)}`);
 					return { result: false, error: 'this does not look like a correct PEM file' };
 				}
 
@@ -144,9 +141,9 @@ const methods = {
 				if (!match(filecontent, /\n$/))
 					filecontent += '\n';
 
-				system(`mkdir -p ${HP_DIR}/certs`);
+				system(`mkdir -p ${shellQuote(HP_DIR)}/certs`);
 				writefile(`${HP_DIR}/certs/${filename}.pem`, filecontent);
-				system(`rm -f ${tmpcert}`);
+				system(`rm -f ${shellQuote(tmpcert)}`);
 
 				return { result: true };
 			};
@@ -191,14 +188,14 @@ const methods = {
 				break;
 			}
 
-			return { result: (system(`/usr/bin/wget --spider -qT3 ${url} 2>"/dev/null"`, 3100) === 0) };
+			return { result: (system(`/usr/bin/wget --spider -qT3 ${shellQuote(url)} 2>"/dev/null"`, 3100) === 0) };
 		}
 	},
 
 	log_clean: {
 		args: { type: 'type' },
 		call: function(req) {
-			if (!(req.args?.type in ['homeproxy', 'sing-box-c', 'sing-box-s']))
+			if (index(['homeproxy', 'sing-box-c', 'sing-box-s'], req.args?.type) === -1)
 				return { result: false, error: 'illegal type' };
 
 			const filestat = lstat(`${RUN_DIR}/${req.args?.type}.log`);
@@ -211,13 +208,13 @@ const methods = {
 	singbox_generator: {
 		args: { type: 'type', params: 'params' },
 		call: function(req) {
-			if (!(req.args?.type in ['ech-keypair', 'uuid', 'reality-keypair', 'vapid-keypair', 'wg-keypair']))
+			if (index(['ech-keypair', 'uuid', 'reality-keypair', 'vapid-keypair', 'wg-keypair'], req.args?.type) === -1)
 				return { result: false, error: 'illegal type' };
 
 			const type = req.args?.type;
 			let result = {};
 
-			const fd = popen(`/usr/bin/sing-box generate ${type} ${shellquote(req.args?.params || '')}`);
+			const fd = popen(`/usr/bin/sing-box generate ${shellQuote(type)} ${shellQuote(req.args?.params || '')}`);
 			if (fd) {
 				let ech_cfg_set = false;
 				let ech_key_set = false;
@@ -225,14 +222,14 @@ const methods = {
 				for (let line = fd.read('line'); length(line); line = fd.read('line')) {
 					if (type === 'uuid')
 						result.uuid = trim(line);
-					else if (type in ['reality-keypair', 'vapid-keypair', 'wg-keypair']) {
+					else if (index(['reality-keypair', 'vapid-keypair', 'wg-keypair'], type) !== -1) {
 						let priv = match(trim(line), /PrivateKey: (.*)/);
 						if (priv)
 							result.private_key = priv[1];
 						let pub = match(trim(line), /PublicKey: (.*)/);
 						if (pub)
 							result.public_key = pub[1];
-					} else if (type in ['ech-keypair']) {
+					} else if (type === 'ech-keypair') {
 						if (trim(line) === '-----BEGIN ECH CONFIGS-----')
 							ech_cfg_set = true;
 						else if (trim(line) === '-----BEGIN ECH KEYS-----')
@@ -313,8 +310,7 @@ const methods = {
 			if (index(['china_ip4', 'china_ip6', 'gfw_list', 'china_list'], req.args?.type) === -1)
 				return { status: 255, error: 'illegal type' };
 			if (req.args?.type) {
-				const type = shellquote(req.args?.type);
-				const exit_code = system(`${HP_DIR}/scripts/update_resources.sh ${type}`);
+				const exit_code = system(`${shellQuote(HP_DIR)}/scripts/update_resources.sh ${shellQuote(req.args?.type)}`);
 				return { status: exit_code };
 			} else
 				return { status: 255, error: 'illegal type' };
