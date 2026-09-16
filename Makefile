@@ -23,7 +23,7 @@ LUCI_DEPENDS:= \
 
 PKG_NAME:=luci-app-homeproxy
 PKG_VERSION:=28.9.1.14
-PKG_RELEASE:=7
+PKG_RELEASE:=8
 
 define Package/luci-app-homeproxy/conffiles
 /etc/config/homeproxy
