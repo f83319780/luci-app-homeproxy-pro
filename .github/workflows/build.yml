@@ -147,8 +147,14 @@ jobs:
               echo "::error::$f 不是 apk v3 (ADB) 格式"
               exit 1
             fi
-            apk manifest --allow-untrusted "$f" > /dev/null
-            echo "   格式与元数据可解析"
+            # `apk manifest` reads the *installed* database (app_manifest.c
+            # still carries the "TODO: support package files as well"), so on
+            # a package file it only says "Failed to open apk database".
+            # adbdump is the applet that takes .apk arguments.
+            dump="$RUNNER_TEMP/$(basename "$f").dump"
+            apk adbdump "$f" > "$dump"
+            head -15 "$dump"
+            echo "   ADB 容器与元数据可解析"
           done
 
       - name: Upload package artifacts
