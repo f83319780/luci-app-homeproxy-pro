@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 
 'require homeproxy as hp';
@@ -199,4 +200,4 @@ function render(ctx) {
 	/* ACL settings end */
 }
 
-return { render };
+return baseclass.extend({ render });

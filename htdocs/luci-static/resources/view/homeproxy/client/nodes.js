@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 'require uci';
 
@@ -321,4 +322,4 @@ function renderDnsServers(ctx) {
 	/* DNS servers end */
 }
 
-return { renderRoutingNodes, renderDnsServers };
+return baseclass.extend({ renderRoutingNodes, renderDnsServers });

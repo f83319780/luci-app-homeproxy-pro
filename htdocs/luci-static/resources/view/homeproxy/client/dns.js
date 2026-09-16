@@ -6,6 +6,7 @@
 
 'use strict';
 
+'require baseclass';
 'require form';
 'require uci';
 
@@ -114,4 +115,4 @@ function renderDnsCache(ctx) {
 	so.rmempty = false;
 }
 
-return { renderDnsSettings, renderDnsRules, renderDnsCache };
+return baseclass.extend({ renderDnsSettings, renderDnsRules, renderDnsCache });
