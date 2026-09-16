@@ -57,7 +57,7 @@ for file in "$SCRIPTS_DIR"/*.uc \
 	# Modules (with export statements) cannot be compiled as a program; they
 	# are loaded through `import` below instead.
 	case "$file" in
-	*homeproxy.uc|*/parser/*.uc|*/subscription/*.uc|*/config/*.uc|*/generator/*.uc) continue ;;
+	*homeproxy.uc|*firewall_utils.uc|*/parser/*.uc|*/subscription/*.uc|*/config/*.uc|*/generator/*.uc) continue ;;
 	esac
 
 	# luci.homeproxy imports homeproxy.uc through an absolute /etc/... path
@@ -81,7 +81,7 @@ done
 # want to validate. Only top-level module names are searched in the
 # -L tree, so anything in a subdirectory is loaded by absolute path
 # in the second loop below.
-for module in homeproxy; do
+for module in homeproxy firewall_utils; do
 	if ! ucode -L "$ROOT/root/etc/homeproxy/scripts" -e "import * as m from \"$module\";" 2> "$WORK/syntax.err"; then
 		echo "FAIL: module $module"
 		head -8 "$WORK/syntax.err"
