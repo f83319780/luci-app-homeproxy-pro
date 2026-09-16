@@ -897,6 +897,61 @@ else
 fi
 
 echo
+echo "== guard 21: dnsmasq snippet writer is incremental =="
+
+# Review L6: hp_dnsmasq_write_snippets rewrote the snippet set and restarted
+# dnsmasq on every reload.  A dnsmasq restart flushes every client's DNS
+# cache, and the lists only change once a day at best - so an ordinary
+# reload was a LAN-wide cache flush for nothing.  The writer now renders
+# into a staging directory, compares, and restarts only on a real change.
+# tests/runtime/test_dns_snippets.sh pins the behaviour from the outside;
+# this guard pins the two structural pieces that make it possible, so a
+# future edit cannot quietly drop back to unconditional rewrite.
+DNS_SH="$ROOT/root/etc/homeproxy/scripts/runtime/dns.sh"
+
+if grep -qE '^hp_dnsmasq_render_snippets\(\)' "$DNS_SH"; then
+	pass "dns.sh has a side-effect-free snippet renderer"
+else
+	fail "dns.sh has no separate renderer - the staging/compare split is gone"
+fi
+
+if grep -qE '^hp_dnsmasq_dir_differs\(\)' "$DNS_SH"; then
+	pass "dns.sh has a directory comparison helper"
+else
+	fail "dns.sh has no directory comparison helper - the skip branch cannot work"
+fi
+
+# The renderer must not touch the live directory: it takes a stage dir as
+# its first argument and writes only there.
+RENDER_BODY="$(awk '/^hp_dnsmasq_render_snippets\(\)/,/^}$/' "$DNS_SH")"
+if printf '%s' "$RENDER_BODY" | grep -qE '\$stage/'; then
+	pass "the renderer writes into the staging directory"
+else
+	fail "the renderer does not write into a staging directory"
+fi
+if printf '%s' "$RENDER_BODY" | grep -qE 'dnsmasq restart'; then
+	fail "the renderer restarts dnsmasq - it is supposed to be side-effect free"
+else
+	pass "the renderer does not restart dnsmasq"
+fi
+
+# The skip branch must exist and must be reachable before the restart.
+if grep -qE 'unchanged, skipping the restart' "$DNS_SH"; then
+	pass "the skip branch is present"
+else
+	fail "the skip branch is gone - an unchanged snippet set would restart dnsmasq again"
+fi
+
+# The include file is one line of `conf-dir=`; `echo -e` renders a literal
+# "-e " prefix on a POSIX sh and dnsmasq then refuses the file.  printf is
+# the portable spelling and the only one used here.
+if grep -qE 'echo -e "conf-dir=' "$DNS_SH"; then
+	fail "dns.sh writes the conf-dir include with 'echo -e' - a POSIX sh emits a literal '-e ' prefix"
+else
+	pass "the conf-dir include is written with printf, not 'echo -e'"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

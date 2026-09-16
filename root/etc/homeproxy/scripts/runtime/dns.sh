@@ -49,46 +49,130 @@ hp_dnsmasq_resolve_dir() {
 	fi
 }
 
-# hp_dnsmasq_write_snippets <dns-dir> <hp-dir> <routing-mode>
-# Write the include file plus the mode-specific snippet, then restart
-# dnsmasq.  Requires config_load (reads ipv6_support and dns_port).
-hp_dnsmasq_write_snippets() {
-	local dnsmasq_dir="$1"
+# hp_dnsmasq_render_snippets <stage-dir> <hp-dir> <routing-mode> <dns-port> <ipv6>
+# Render the desired snippet set into <stage-dir>.  Writes nothing outside it,
+# restarts nothing: the caller decides whether the result differs from what is
+# already installed.
+#
+# The input list gates are `-s` rather than the original unconditional sed:
+# when the resource file is missing the old code produced an empty snippet
+# (or a stale one never got removed), which made "is this the same as last
+# time" undecidable.  An empty list now means "no snippet for this mode",
+# which is also what a fresh install means.
+hp_dnsmasq_render_snippets() {
+	local stage="$1"
 	local hp_dir="$2"
 	local routing_mode="$3"
-	local ipv6_support dns_port gfw_nftset_v6 wan_nftset_v6 server
-
-	config_get_bool ipv6_support "config" "ipv6_support" "0"
-	config_get dns_port "infra" "dns_port" "5333"
-
-	mkdir -p "$dnsmasq_dir" || log "Warning: failed to create ${dnsmasq_dir}."
-	echo -e "conf-dir=$dnsmasq_dir" > "$dnsmasq_dir/../dnsmasq-homeproxy.conf" \
-		|| log "Warning: failed to write the dnsmasq conf-dir file."
+	local dns_port="$4"
+	local ipv6="$5"
+	local gfw_nftset_v6="" wan_nftset_v6=""
 
 	case "$routing_mode" in
 	"bypass_mainland_china"|"custom"|"global")
-		cat <<-EOF > "$dnsmasq_dir/redirect-dns.conf"
+		cat <<-EOF > "$stage/redirect-dns.conf"
 			no-poll
 			no-resolv
 			server=127.0.0.1#$dns_port
 		EOF
 		;;
 	"gfwlist")
-		[ "$ipv6_support" -eq "0" ] || gfw_nftset_v6=",6#inet#fw4#homeproxy_gfw_list_v6"
-		sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_gfw_list_v4$gfw_nftset_v6/g" \
-			"$hp_dir/resources/gfw_list.txt" > "$dnsmasq_dir/gfw_list.conf"
+		if [ -s "$hp_dir/resources/gfw_list.txt" ]; then
+			[ "$ipv6" -eq "0" ] || gfw_nftset_v6=",6#inet#fw4#homeproxy_gfw_list_v6"
+			sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_gfw_list_v4$gfw_nftset_v6/g" \
+				"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+		fi
 		;;
 	"proxy_mainland_china")
-		sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
-			"$hp_dir/resources/china_list.txt" > "$dnsmasq_dir/china_list.conf"
+		if [ -s "$hp_dir/resources/china_list.txt" ]; then
+			sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
+				"$hp_dir/resources/china_list.txt" > "$stage/china_list.conf"
+		fi
 		;;
 	esac
 
 	if [ "$routing_mode" != "custom" ] && [ -s "$hp_dir/resources/proxy_list.txt" ]; then
-		[ "$ipv6_support" -eq "0" ] || wan_nftset_v6=",6#inet#fw4#homeproxy_wan_proxy_addr_v6"
+		[ "$ipv6" -eq "0" ] || wan_nftset_v6=",6#inet#fw4#homeproxy_wan_proxy_addr_v6"
 		sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
-			"$hp_dir/resources/proxy_list.txt" > "$dnsmasq_dir/proxy_list.conf"
+			"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
 	fi
+}
+
+# hp_dnsmasq_dir_differs <stage-dir> <live-dir>
+# 0 when the installed snippet set is not exactly the staged one, 1 when it is
+# identical.  Compares file names as well as contents, so a snippet that the
+# current routing mode no longer produces (but a previous one did) counts as a
+# change and gets cleaned up.
+hp_dnsmasq_dir_differs() {
+	local stage="$1"
+	local live="$2"
+	local staged installed f
+
+	[ -d "$live" ] || return 0
+
+	staged="$(ls -1 "$stage" 2>"/dev/null" | sort)"
+	installed="$(ls -1 "$live" 2>"/dev/null" | sort)"
+	[ "$staged" = "$installed" ] || return 0
+
+	for f in $staged; do
+		cmp -s "$stage/$f" "$live/$f" || return 0
+	done
+
+	return 1
+}
+
+# hp_dnsmasq_write_snippets <dns-dir> <hp-dir> <routing-mode>
+# Write the include file plus the mode-specific snippet, then restart
+# dnsmasq.  Requires config_load (reads ipv6_support and dns_port).
+#
+# The snippets are rendered into a staging directory first and compared with
+# what is installed.  dnsmasq restart drops every client's DNS cache, and the
+# list files it feeds on change once a day at most while the routing mode and
+# the port stay the same - so the previous unconditional rewrite-and-restart
+# flushed the LAN's DNS cache on every reload for no reason.
+hp_dnsmasq_write_snippets() {
+	local dnsmasq_dir="$1"
+	local hp_dir="$2"
+	local routing_mode="$3"
+	local ipv6_support dns_port
+	local include="$dnsmasq_dir/../dnsmasq-homeproxy.conf"
+	local stage changed=0
+
+	config_get_bool ipv6_support "config" "ipv6_support" "0"
+	config_get dns_port "infra" "dns_port" "5333"
+
+	stage="$(mktemp -d "${TMPDIR:-/tmp}/hp-dnsmasq.XXXXXX")" || {
+		log "Warning: failed to create a staging directory for the dnsmasq snippets."
+		return 1
+	}
+
+	hp_dnsmasq_render_snippets "$stage" "$hp_dir" "$routing_mode" "$dns_port" "$ipv6_support"
+
+	if [ ! -f "$include" ] || [ "$(cat "$include" 2>"/dev/null")" != "conf-dir=$dnsmasq_dir" ]; then
+		changed=1
+	fi
+	if hp_dnsmasq_dir_differs "$stage" "$dnsmasq_dir"; then
+		changed=1
+	fi
+
+	if [ "$changed" -eq 0 ]; then
+		rm -rf "$stage"
+		log "dnsmasq snippets unchanged, skipping the restart."
+		return 0
+	fi
+
+	mkdir -p "$(dirname "$dnsmasq_dir")" 2>"/dev/null" \
+		|| log "Warning: failed to create the dnsmasq conf-dir parent."
+	rm -rf "$dnsmasq_dir"
+	if ! mv "$stage" "$dnsmasq_dir"; then
+		log "Warning: failed to install the dnsmasq snippets into ${dnsmasq_dir}."
+		rm -rf "$stage"
+		return 1
+	fi
+	# printf, not `echo -e`: busybox ash honours -e but a POSIX sh does not,
+	# and on one the file would start with a literal "-e " and dnsmasq would
+	# refuse to parse it.  The file is one line of conf-dir= either way.
+	printf 'conf-dir=%s\n' "$dnsmasq_dir" > "$include" \
+		|| log "Warning: failed to write the dnsmasq conf-dir file."
 
 	/etc/init.d/dnsmasq restart >"/dev/null" 2>&1 \
 		|| log "Warning: failed to restart dnsmasq, DNS-based routing may be stale."

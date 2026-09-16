@@ -109,6 +109,13 @@ echo "== runtime extraction equivalence (PR-05) =="
 # script refactor did not change behaviour.
 sh "$ROOT/tests/runtime/test_runtime_extraction.sh" "$ROOT" "$WORK_ROOT/runtime-extraction" || FAILED=1
 
+echo "== dnsmasq snippet writer (review L6) =="
+# Pure shell too.  Counts dnsmasq restarts through a stub to pin the
+# incremental behaviour: an unchanged snippet set must not restart dnsmasq
+# (a restart flushes every client's DNS cache), while a changed resource
+# list, routing mode or ipv6 setting must.
+sh "$ROOT/tests/runtime/test_dns_snippets.sh" "$ROOT" "$WORK_ROOT/dns-snippets" || FAILED=1
+
 echo "== architecture guard =="
 # Cross-file invariants that no single-layer test can see: the generators must
 # read the production UCI directory, and the subscription updater must read the
