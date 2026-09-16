@@ -79,78 +79,6 @@ function render(ctx) {
 	o.placeholder = '50';
 	o.depends('main_udp_node', 'urltest');
 
-	o = s.taboption('routing', form.Value, 'dns_server', _('DNS server'),
-		_('Support UDP, TCP, DoH, DoQ, DoT. TCP protocol will be used if not specified.'));
-	o.value('wan', _('WAN DNS (read from interface)'));
-	o.value('1.1.1.1', _('CloudFlare Public DNS (1.1.1.1)'));
-	o.value('208.67.222.222', _('Cisco Public DNS (208.67.222.222)'));
-	o.value('8.8.8.8', _('Google Public DNS (8.8.8.8)'));
-	o.value('', '---');
-	o.value('223.5.5.5', _('Aliyun Public DNS (223.5.5.5)'));
-	o.value('119.29.29.29', _('Tencent Public DNS (119.29.29.29)'));
-	o.value('117.50.10.10', _('ThreatBook Public DNS (117.50.10.10)'));
-	o.default = '8.8.8.8';
-	o.rmempty = false;
-	o.depends({'routing_mode': 'custom', '!reverse': true});
-	o.validate = function(section_id, value) {
-		if (section_id && !['wan'].includes(value)) {
-			if (!value)
-				return _('Expecting: %s').format(_('non-empty value'));
-
-			let ipv6_support = this.section.formvalue(section_id, 'ipv6_support');
-			try {
-				let url = new URL(value.replace(/^.*:\/\//, 'http://'));
-				if (stubValidator.apply('hostname', url.hostname))
-					return true;
-				else if (stubValidator.apply('ip4addr', url.hostname))
-					return true;
-				else if ((ipv6_support === '1') && stubValidator.apply('ip6addr', url.hostname.match(/^\[(.+)\]$/)?.[1]))
-					return true;
-				else
-					return _('Expecting: %s').format(_('valid DNS server address'));
-			} catch(e) {}
-
-			if (!stubValidator.apply((ipv6_support === '1') ? 'ipaddr' : 'ip4addr', value))
-				return _('Expecting: %s').format(_('valid DNS server address'));
-		}
-
-		return true;
-	}
-
-	o = s.taboption('routing', form.Value, 'china_dns_server', _('China DNS server'),
-		_('The dns server for resolving China domains. Support UDP, TCP, DoH, DoQ, DoT.'));
-	o.value('wan', _('WAN DNS (read from interface)'));
-	o.value('223.5.5.5', _('Aliyun Public DNS (223.5.5.5)'));
-	o.value('210.2.4.8', _('CNNIC Public DNS (210.2.4.8)'));
-	o.value('119.29.29.29', _('Tencent Public DNS (119.29.29.29)'));
-	o.value('117.50.10.10', _('ThreatBook Public DNS (117.50.10.10)'));
-	o.depends('routing_mode', 'bypass_mainland_china');
-	o.default = '223.5.5.5';
-	o.rmempty = false;
-	o.validate = function(section_id, value) {
-		if (section_id && !['wan'].includes(value)) {
-			if (!value)
-				return _('Expecting: %s').format(_('non-empty value'));
-
-			try {
-				let url = new URL(value.replace(/^.*:\/\//, 'http://'));
-				if (stubValidator.apply('hostname', url.hostname))
-					return true;
-				else if (stubValidator.apply('ip4addr', url.hostname))
-					return true;
-				else if (stubValidator.apply('ip6addr', url.hostname.match(/^\[(.+)\]$/)?.[1]))
-					return true;
-				else
-					return _('Expecting: %s').format(_('valid DNS server address'));
-			} catch(e) {}
-
-			if (!stubValidator.apply('ipaddr', value))
-				return _('Expecting: %s').format(_('valid DNS server address'));
-		}
-
-		return true;
-	}
-
 	o = s.taboption('routing', form.ListValue, 'routing_mode', _('Routing mode'));
 	o.value('gfwlist', _('GFWList'));
 	o.value('bypass_mainland_china', _('Bypass mainland China'));
@@ -199,11 +127,6 @@ function render(ctx) {
 
 	o = s.taboption('routing', form.Flag, 'ipv6_support', _('IPv6 support'));
 	o.default = o.enabled;
-	o.rmempty = false;
-
-	o = s.taboption('routing', form.Flag, 'cn_ip_fallback', _('CN-IP DNS fallback (sing-box 1.14)'),
-		_('When the main DNS returns a mainland China IP, re-resolve via China DNS using evaluate/match_response.'));
-	o.depends('routing_mode', 'bypass_mainland_china');
 	o.rmempty = false;
 
 	o = s.taboption('routing', form.ListValue, 'tun_dns_mode', _('TUN DNS mode (1.14)'),
