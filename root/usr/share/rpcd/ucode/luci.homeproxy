@@ -312,8 +312,18 @@ const methods = {
 			const fields = version ? match(version, /^(\S+) (\S+)$/) : null;
 			if (fields)
 				version = fields[1];
+			/* Only a missing .ver means "not found"; that is the case the
+			 * UI paints red. */
+			if (!version)
+				return { version: null, updated_at: null, error: 'no version file' };
+			/* .updated_at is written by update_resources.sh after a
+			 * successful run, so a device that has never updated anything
+			 * legitimately has none.  Returning error() here reported the
+			 * errno left behind by *that* missing file, which made every
+			 * fresh install show "not found" in red next to a perfectly
+			 * good version string. */
 			const updated_at = trim(readfile(`${HP_DIR}/resources/${req.args?.type}.updated_at`));
-			return { version: version, updated_at: updated_at || null, error: error() };
+			return { version: version, updated_at: updated_at || null };
 		}
 	},
 	resources_update: {
