@@ -193,6 +193,13 @@ export function wGETVerbose(url, ua) {
 	const output = executeCommand(`{ /usr/bin/wget -nv -O- --user-agent ${shellQuote(ua)} --timeout=10 ${shellQuote(url)} | head -c ${HP_FETCH_CAP + 1}; }`) || {};
 	let reason = trim(output.stderr || '');
 	reason = reason ? replace(reason, /\s+/g, ' ') : '';
+	/* Review H3: the original error string carries the full URL (wget's
+	 * -nv reports the target on the failure line, including the query
+	 * string - the subscription token).  Redact at the source so every
+	 * caller of wGETVerbose gets a safe `error` whether or not it
+	 * remembers to call redactUrl itself. */
+	if (reason)
+		reason = redactReason(reason);
 
 	if (length(output.stdout || '') > HP_FETCH_CAP)
 		return { content: null, error: `response exceeds the ${HP_FETCH_CAP} byte limit` };
@@ -248,6 +255,28 @@ export function redactUrl(url) {
 		u = substr(u, 0, q) + '?***';
 
 	return u;
+};
+
+/* Scan a free-form error string and redact every URL in it.  GNU wget's
+ * stderr writes the requested URL back into the message:
+ *
+ *   https://host/path?q=token=secret: Bad port '80080'.
+ *
+ * The trailing `:` separator is greedy-matched here, which is harmless -
+ * redactUrl leaves it as-is.  Doing this here, in wGETVerbose, means the
+ * returned `error` is safe no matter where the caller ships it - the
+ * fetcher logs it, the orchestrator returns it, anything that prints it
+ * afterwards has already lost the token.  Centralising the redaction at
+ * the source is the review H3's point: every call site used to have to
+ * remember to redact, and the one that forgot was the original bug.
+ *
+ * A non-string input is returned unchanged so this is safe to apply to
+ * the trimmed wget stderr even when it is empty. */
+export function redactReason(reason) {
+	if (!reason || type(reason) !== 'string')
+		return reason;
+
+	return replace(reason, /https?:\/\/\S+/g, (url) => redactUrl(url));
 };
 /* Utilities end */
 

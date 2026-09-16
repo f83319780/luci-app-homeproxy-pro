@@ -12,7 +12,7 @@
 'use strict';
 
 import { lsdir } from 'fs';
-import { executeCommand, isValidPEM, shellQuote, wGETVerbose } from 'homeproxy';
+import { executeCommand, isValidPEM, redactReason, redactUrl, shellQuote, wGETVerbose } from 'homeproxy';
 
 let failures = 0,
     checks = 0;
@@ -76,6 +76,57 @@ expect('wget.not-a-usage-error',
 	match(wget.error || '', /unrecognized option|invalid option|Usage:/) == null, true);
 expect('wget.reports-a-reason', length(wget.error || '') > 0, true);
 expect('wget.no-content-on-failure', wget.content, null);
+
+/* Review H3: wGETVerbose's stderr arrives with the original URL (wget's
+ * `-nv` failure line is `<URL>: <reason>`); the returned error must not
+ * carry the token back to callers.  Closed port + a token-shaped URL gives
+ * wget a real network failure, and what the test sees is the post-redaction
+ * error. */
+const tokwget = wGETVerbose('http://127.0.0.1:1/?token=secret');
+expect('wget.token-not-in-error',
+	match(tokwget.error || '', /token=secret/) == null, true);
+expect('wget.redaction-marker-in-error',
+	match(tokwget.error || '', /\?\*\*\*/) != null, true);
+
+/* redactReason(): central redaction that protects every wGETVerbose caller.
+ * Tested in isolation so the assertion does not depend on wget being
+ * present - this runs anywhere ucode runs. */
+{
+	/* Canonical wget failure shape: '<URL>: <reason>' - the URL must lose
+	 * its query string and userinfo. */
+	const r1 = redactReason('https://user:tok@host.example.com/path?q=token=secret: Bad port \'80080\'.');
+	expect('redactReason.query',
+		match(r1, /\?\*\*\*/) != null, true);
+	expect('redactReason.userinfo',
+		match(r1, /user:tok/) == null, true);
+	expect('redactReason.host-preserved',
+		match(r1, /host\.example\.com/) != null, true);
+	expect('redactReason.reason-preserved',
+		match(r1, /Bad port/) != null, true);
+
+	/* A second URL in the same message - both must be redacted. */
+	const r2 = redactReason('first https://a.example/?token=A then https://b.example/?token=B end');
+	expect('redactReason.both-redacted',
+		match(r2, /token=A/) == null && match(r2, /token=B/) == null, true);
+
+	/* No URL at all: returned unchanged. */
+	expect('redactReason.no-url-unchanged',
+		redactReason('wget: bad port'), 'wget: bad port');
+
+	/* Empty / non-string: returned unchanged (the function is safe to
+	 * apply to the trimmed stderr without a guard). */
+	expect('redactReason.empty',       redactReason(''),    '');
+	expect('redactReason.null',        redactReason(null),  null);
+	expect('redactReason.non-string',  redactReason(123),   123);
+
+	/* URL with port: the port must survive (the path is what we keep;
+	 * only query and userinfo go). */
+	const r3 = redactReason('wget: https://host:80080/path?q=token=secret: failed');
+	expect('redactReason.port-survives',
+		match(r3, /host:80080/) != null, true);
+	expect('redactReason.port-query-redacted',
+		match(r3, /token=secret/) == null, true);
+}
 
 /* descriptors must not leak across calls */
 const before = fd_count();
