@@ -52,7 +52,7 @@ import {
 	isValidIPv4, ipv4_to_nftarr,
 	isValidMAC, mac_to_nftarr,
 	isValidIface, iface_to_nftarr,
-	isValidPort, ports_to_nftarr,
+	isValidPort, ports_to_nftarr
 } from 'firewall_utils';
 
 let failures = 0, checks = 0;

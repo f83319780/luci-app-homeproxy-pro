@@ -30,6 +30,12 @@
 
 'use strict';
 
+/* isEmpty() lives in homeproxy.uc, not in the ucode globals.  Without this
+ * import every helper below threw "access to undeclared variable isEmpty" the
+ * moment it was called, which no host-side test caught because the test
+ * harness stages its own stand-in module. */
+import { isEmpty } from './homeproxy.uc';
+
 /* IPv4 (with optional /CIDR) - the regex is the standard four-octet body
  * followed by an optional /0..32.  Anything outside that - "1.2.3.4.5",
  * "1.2.3", " 1.2.3.4 ", "1.2.3.4 " - is rejected.
