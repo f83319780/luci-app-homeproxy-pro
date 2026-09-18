@@ -34,6 +34,25 @@
 | 订阅 token 脱敏 | 调用点记得才脱敏 | `wGETVerbose()` 内部下沉到源头（review H3） |
 | 默认测试主机 | 硬编码作者内网 IP | 改为空，未设时 SKIP（review M1） |
 
+### 详细对比（按维度）
+
+| 维度 | upstream 形态 | pro 形态 |
+|---|---|---|
+| 后端架构 | 单文件巨型（40 KB `generate_client.uc`、15 KB `parse_uri.uc`） | orchestrator + 模块化（`config` / `parser` / `generator` / `subscription` / `runtime` 五子层） + table-driven adapters |
+| 前端架构 | 单一 66 KB `client.js` | 8 个 Tab 模块 + 共享 helpers + 集中 `RPC.declare` |
+| CI | `build` + `i18n` 两条平行 workflow | `build` 依赖 `arch-test`；`arch-test` 含翻译 fast gate、ucode toolchain cache、多套件 |
+| 测试 | 7 个脚本 / 约 27 个 check | 34 个文件 / arch-guard 21 个 guard + 独立测试 / 111+ 个 check |
+| 安全性 | 直写、宽松白名单 | staging 临时文件 + 内容白名单 + `redactUrl` token 脱敏 + line number 错误回传 |
+| 稳定性 | 单层 `init.d/homeproxy` | `init.d` 抽到 `runtime/{config,dns,firewall,health,net,service}`，事务化 `hp_known_good` / `hp_ensure_live` / `hp_rollback` |
+| 可观测性 | `ubus` + `pgrep` 简单轮询 | `hp_wait_service` 连续采样 / `procd` + `netstat` 端口归属 / 不健康自动 rollback |
+| 文档 | 标准（README + CONTRIBUTING + SECURITY） | 精简（README only），本地 `docs/` 自留 |
+
+**最核心的三件事：**
+
+- **架构层**：从"单文件能跑" → "orchestrator + table-driven adapter + 可独立测试的模块"。这是 pro 区别于上游的最大价值——增加协议是加表项而不是改 orchestrator；每个模块都可以单独跑 snapshot / golden 测试。
+- **质量层**：`tests/arch-guard.sh` 把 21 条"风格与约束"代码化为 guard，任何 PR 都会被强制检查，不会出现"靠 code review 人工盯"的回归。
+- **稳定性层**：`runtime/` 拆分 + 事务化 + rollback 链路让生产路由器上的失败**可见、可恢复**——服务起不来自动回退到上一个 known-good 配置，不会卡死在半状态。
+
 ## 从上游 homeproxy 迁移
 
 > ⚠️ **迁移前必读**：节点和订阅不会被自动迁移，请先导出再安装。
