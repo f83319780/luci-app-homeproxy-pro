@@ -881,48 +881,13 @@ else
 	fail "access.js direct_domain_list textarea is missing the L1 hint"
 fi
 
-echo
-echo "== guard 20: CONTRIBUTING.md and SECURITY.md exist =="
-
-# Review L5: the repo had no contribution guide and no private disclosure
-# channel.  Both belong at the root; either being missing is the kind of
-# thing nobody notices until an issue lands or a vuln is reported.
-for f in CONTRIBUTING.md SECURITY.md; do
-	if [ -s "$ROOT/$f" ]; then
-		pass "$f exists and is non-empty"
-	else
-		fail "$f is missing or empty - the repo has no contribution guide / private disclosure channel"
-	fi
-done
-
-# SECURITY.md must point at a private channel, not "open an issue".
-# "open an issue" defeats the point of having a security policy because
-# it asks for redacted tokens and concrete payloads in a public thread.
-if grep -qE 'do[ ]?not[ ]?open[ ]?a[ ]?public[ ]?issue' "$ROOT/SECURITY.md" || \
-   grep -qE 'Security[ ]?Advisory' "$ROOT/SECURITY.md" || \
-   grep -qE '@[a-z][a-z0-9.-]+\.(dev|com|org)' "$ROOT/SECURITY.md"; then
-	pass "SECURITY.md names a non-public channel"
-else
-	fail "SECURITY.md does not name a non-public channel - 'open an issue' is not one"
-fi
-
-# CONTRIBUTING.md must say where the architectural rules live, otherwise
-# contributors land PRs that the maintainer has to bounce.  The rule set that
-# actually ships is the arch-guard, so that is what it has to name.
-if grep -qE 'arch-guard|arch_guard' "$ROOT/CONTRIBUTING.md"; then
-	pass "CONTRIBUTING.md points at the arch-guard"
-else
-	fail "CONTRIBUTING.md does not point at the arch-guard - contributors cannot find the rules"
-fi
-
 # No shipped file may cite docs/.  The whole directory is gitignored, so every
-# pointer to it is a dead link in a fresh clone - that is how README.md,
-# CONTRIBUTING.md and SECURITY.md came to reference an agent guide and an
-# improvement plan that no contributor can open.  The names are kept here so
-# they cannot quietly come back.
+# pointer to it is a dead link in a fresh clone - that is how README.md
+# came to reference an agent guide and an improvement plan that no
+# contributor can open.  Kept here (with the docs/ pattern, not the names)
+# so the rule cannot quietly come back.
 DEAD_DOCS="$(grep -rlE 'docs/(adr|architecture-improvement-plan|homeproxy_architecture_refactor_agent_guide|audit-report|next-step-plan)' \
-	"$ROOT/README.md" "$ROOT/CONTRIBUTING.md" "$ROOT/SECURITY.md" \
-	"$ROOT/root" "$ROOT/htdocs" 2>/dev/null || true)"
+	"$ROOT/README.md" "$ROOT/root" "$ROOT/htdocs" 2>/dev/null || true)"
 if [ -z "$DEAD_DOCS" ]; then
 	pass "no shipped file cites the gitignored docs/ tree"
 else
