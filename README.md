@@ -74,8 +74,8 @@ apk add luci-app-homeproxy luci-i18n-homeproxy-zh-cn
 ## 贡献
 
 欢迎 issue / PR。架构边界规则是可执行的，固化在 `tests/arch-guard.sh`（PR 必跑，
-每条规则都注明对应的 guard）；具体流程见 `CONTRIBUTING.md`。架构层面的变更请先开
-issue 讨论，避免在 PR review 里来回拉扯。
+每条规则都注明对应的 guard）；架构层面的变更请先开 issue 讨论，避免在
+PR review 里来回拉扯。
 
 ## 漏洞上报
 
