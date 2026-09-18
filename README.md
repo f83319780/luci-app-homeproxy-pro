@@ -19,7 +19,7 @@
 - sing-box ≥ 1.14.0（ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1）
 - 低于 1.14 时服务拒绝启动并记录明确日志
 
-## 与上游 homeproxy 的差异
+## 按功能性对比
 
 | 项 | 上游 homeproxy | 本仓库 |
 |---|---|---|
@@ -37,7 +37,7 @@
 | 订阅 token 脱敏 | 调用点记得才脱敏 | `wGETVerbose()` 内部下沉到源头（review H3） |
 | 默认测试主机 | 硬编码作者内网 IP | 改为空，未设时 fail-fast 拒绝运行（不去猜测地址，review M1） |
 
-### 详细对比（按维度）
+### 按维度对比
 
 | 维度 | upstream 形态 | pro 形态 |
 |---|---|---|
@@ -56,42 +56,11 @@
 - **质量层**：`tests/arch-guard.sh` 把 21 条"风格与约束"代码化为 guard，任何 PR 都会被强制检查，不会出现"靠 code review 人工盯"的回归。
 - **稳定性层**：`runtime/` 拆分 + 事务化 + rollback 链路让生产路由器上的失败**可见、可恢复**——服务起不来自动回退到上一个 known-good 配置，不会卡死在半状态。
 
-## 从上游 homeproxy 迁移
-
-> ⚠️ **迁移前必读**：节点和订阅不会被自动迁移，请先导出再安装。
-
-```sh
-# 1. 导出当前节点（不可恢复项）
-uci export homeproxy > /tmp/homeproxy.before-pro.conf
-
-# 2. 停掉上游 homeproxy 服务
-/etc/init.d/homeproxy stop
-
-# 3. 安装新包
-apk add luci-app-homeproxy luci-i18n-homeproxy-zh-cn
-# 或 opkg install ...
-
-# 4. 手动重建：节点 / DNS / server / subscription
-#    LuCI → 服务 → HomeProxy Pro 重建这四个 section
-```
-
-迁移工具 `migrate_config.uc` 会处理 1.14 的 DNS 重命名、`rcode://` → 预定义规则、
-`block-out`/`block-dns` → `action='reject'` 等结构性变更，但**只动非破坏性的结构**，
-节点、订阅和服务器配置需要你重建。
-
 ## 已知限制
 
 - **试验性**：不承诺 API/配置稳定，重大变更可能在 minor 版本里发生。
 - **真机实测单平台**：本仓库只在 x86-64 软路由上做过端到端验证。
 - 本包不会编译 sing-box。系统固件必须自带 sing-box 1.14+;否则依赖解析直接失败。
-
-## 版本号语义
-
-- `PKG_VERSION = YY.MM.PATCH.<sing-box_minor>`，例如 `28.9.1.14`：
-  - `28.9` = 就理解为时间吧
-  - `1.14` = 目标 sing-box minor 版本
-- `PKG_RELEASE` 是该 `PKG_VERSION` 下的迭代号（`r1`, `r2`, ...），只在修补
-  同一版本时递增。
 
 ## 贡献
 
