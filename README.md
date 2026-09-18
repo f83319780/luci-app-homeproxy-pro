@@ -39,7 +39,7 @@
 
 ### 按维度对比
 
-| 维度 | upstream 形态 | pro 形态 |
+| 维度 | 上游 homeproxy | pro 形态 |
 |---|---|---|
 | 后端架构 | 单文件巨型（40 KB `generate_client.uc`、15 KB `parse_uri.uc`） | orchestrator + 模块化（`config` / `parser` / `generator` / `subscription` / `runtime` 五子层） + table-driven adapters |
 | 前端架构 | 单一 66 KB `client.js` | 8 个 Tab 模块 + 共享 helpers + 集中 `RPC.declare` |
