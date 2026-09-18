@@ -76,6 +76,18 @@ jobs:
         # `id: cache` is required so the next step can read the cache-hit
         # output; without it the conditional is unbound and the build step
         # would either always run or never run.
+
+      # Fast translation gate. Used to live as its own workflow
+      # (.github/workflows/i18n.yml); merged in here so a translation gap
+      # fails before the ucode toolchain build is paid for. python3 +
+      # po/templates/homeproxy.pot + po/zh_Hans/homeproxy.po are all that
+      # is needed - no ucode, no sing-box, no node - so this step runs in
+      # seconds and short-circuits the rest of the job when a translator
+      # falls behind. The .pot-vs-source check stays where it was,
+      # because that one needs the freshly built toolchain.
+      - name: Check zh_Hans translation coverage (fast gate)
+        run: python3 tests/i18n-coverage.py --fail-below 100
+
       - name: Restore ucode toolchain cache
         id: cache
         uses: actions/cache@v4
@@ -130,21 +142,15 @@ jobs:
         # form was missing - is covered behaviourally instead.
         run: node tests/frontend-validators.js .
 
-      - name: Check zh_Hans translation coverage
-        # Mirrors .github/workflows/i18n.yml so a PR that breaks translation
-        # coverage fails here even when i18n.yml is still queued.
-        # --fail-below: the comment above claims a PR that breaks translation
-        # coverage fails here, and with --warn-below it never could.
-        run: python3 tests/i18n-coverage.py --fail-below 100
-
       - name: Check the translation template is current
-        # The coverage check above only reads po/templates/homeproxy.pot ->
-        # po/zh_Hans/homeproxy.po, so it cannot see a string that was never
-        # added to the template.  Adding `_('brand new string')` to a view left
-        # it reporting 100%: the .pot was simply never regenerated, and the new
-        # string was invisible to every gate.  Regenerating from source and
-        # requiring no diff closes that hole - a new string must appear in the
-        # template (and therefore in the coverage count) before it can pass.
+        # The fast translation gate earlier in this job only reads
+        # po/templates/homeproxy.pot -> po/zh_Hans/homeproxy.po, so it cannot
+        # see a string that was never added to the template.  Adding
+        # `_('brand new string')` to a view left it reporting 100%: the .pot
+        # was simply never regenerated, and the new string was invisible to
+        # every gate.  Regenerating from source and requiring no diff closes
+        # that hole - a new string must appear in the template (and therefore
+        # in the coverage count) before it can pass.
         run: |
           bash .github/rescan-translation.sh
 
@@ -155,9 +161,9 @@ jobs:
           # cries wolf gets ignored.
           #
           # A msgid that appears or disappears is the thing this step is for:
-          # a new string must reach the template, where the coverage check
-          # above can insist it is translated. Removing one is equally
-          # deliberate and worth seeing.
+          # a new string must reach the template, where the fast translation
+          # gate earlier in this job can insist it is translated. Removing one
+          # is equally deliberate and worth seeing.
           changed="$(git diff -U0 -- po/ | grep -E '^[-+]msgid ' | grep -vE '^[-+]msgid ""$' || true)"
 
           if [ -n "$changed" ]; then
