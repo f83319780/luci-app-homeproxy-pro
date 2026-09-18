@@ -23,16 +23,19 @@
 
 | 项 | 上游 homeproxy | 本仓库 |
 |---|---|---|
-| 架构分层 | 一锅端（homeproxy.uc ~1200 行） | 6 层（parser / config / generator / subscription / runtime / orchestrator） |
-| reload 事务 | 写完直接 restart | 生成 → 校验 → 停旧实例 → 健康门 → 提为 known-good，失败回滚 |
-| 架构守卫 | 无 | `tests/arch-guard.sh` 16 条跨层不变量（PR-07） |
+| 架构分层 | 单文件巨型（`generate_client.uc` 1217 行 / 40 KB；`parse_uri.uc` ~400 行 / 15 KB） | 5 子层 + 公共库（`parser` / `config` / `generator` / `subscription` / `runtime`）+ 顶层 `homeproxy.uc` / `firewall_utils.uc` |
+| 前端视图 | 单一 `client.js`（66 KB） | `client.js` thin 入口 + 8 个 Tab 模块（`access` / `common` / `dns` / `nodes` / `routing` / `subscription` / `tun_dns` / `udp_nat`），共享 helpers + 集中 `RPC.declare` |
+| reload 事务 | 写完直接 restart | 生成 → `sing-box check` 校验 → 新实例 probe → 健康门（连续采样）→ 提为 known-good；不健康自动回滚 |
+| 健康门 | `ubus` + `pgrep` 简单轮询 | `hp_wait_service` 连续 N 次健康采样（默认 3/30s），含端口归属校验（`netstat -p`），不健康自动 rollback |
+| 架构守卫 | 无 | `tests/arch-guard.sh` **21 个 guard / 111 个 check**（PR-07 起；guard 编号 1-19, 21, 22） |
 | 防火墙渲染 | stub（设备侧强约束） | 强制 + 渲染层（PR-06） |
 | 后端字段校验 | 仅前端 | 前后端两道：UI 是 UX，后端强制（review H1） |
-| 资源更新策略 | jsdelivr 单一镜像 | 计划中加多镜像 fallback + UI「上次成功时间」（review M7） |
+| 资源更新策略 | jsdelivr 单一镜像 | 多镜像 fallback（`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `cdn.jsdelivr.net` / `raw.githubusercontent.com`）+ UI「上次成功时间」（review M7） |
+| CI | `build` + `i18n` 两条平行 workflow | `build` 依赖 `arch-test`；`arch-test` 含翻译 fast gate、ucode toolchain cache、11 步离线套件 |
 | ECH 上传 | 仅后端 case 缺失 | 补齐 `client_ech_conf`（P0-4） |
-| capabilities | 含 `CAP_SYS_PTRACE` + `CAP_NET_RAW` | 仅 `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`，`inheritable` 留空（review H2） |
+| capabilities | 含 `CAP_SYS_PTRACE` + `CAP_NET_RAW` | 仅 `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`；`inheritable` 保留 ambient 子集以支撑跨 fork 传承（review H2） |
 | 订阅 token 脱敏 | 调用点记得才脱敏 | `wGETVerbose()` 内部下沉到源头（review H3） |
-| 默认测试主机 | 硬编码作者内网 IP | 改为空，未设时 SKIP（review M1） |
+| 默认测试主机 | 硬编码作者内网 IP | 改为空，未设时 fail-fast 拒绝运行（不去猜测地址，review M1） |
 
 ### 详细对比（按维度）
 
