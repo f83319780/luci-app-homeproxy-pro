@@ -10,7 +10,7 @@
 
 ## 项目定位
 
-本项目是试验性产品，对 homeproxy 架构重构版：以 sing-box **1.14** 内核为唯一目标，
+本项目是试验性产品，对 [homeproxy](https://github.com/szwjp/luci-app-homeproxy) 架构重构版：以 sing-box **1.14** 内核为唯一目标，
 充分利用 1.14 引入的新特性，不再兼容 1.13 及更早内核。
 
 ## 运行要求
