@@ -14,19 +14,30 @@ tests/run.sh
   `tests/snapshots/*.json`.
 * The **ucode tests** need `ucode`; the generator cases additionally run
   `sing-box check`, so they need sing-box ≥ 1.14 as well (available on an
-  OpenWrt/ImmortalWrt target). When the host running `tests/run.sh` has neither,
-  set `$HP_TEST_HOST` to the dedicated test machine and the checkout is copied
-  over ssh:
+  OpenWrt/ImmortalWrt target). `tests/run.sh` picks its branch in this order:
+
+  1. **local toolchain** — if both `ucode` and `sing-box` are on `PATH`, the
+     layer runs here, gated on sing-box ≥ 1.14;
+  2. **ssh** — otherwise, if `$HP_TEST_HOST` is set, the checkout is copied to
+     that machine and run there;
+  3. **skip** — otherwise the layer is skipped with a clear message.
+
+  The local toolchain is checked **first** on purpose: the testbed is the
+  documented way to run this layer off-target, so an unset `$HP_TEST_HOST` must
+  not shadow it. A skip is reported as `SKIP`, never as a pass.
 
   ```sh
-  HP_TEST_HOST=root@<test-machine> tests/run.sh
+  tests/toolchain/build-ucode-macos.sh        # or -linux.sh, then:
+  export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
+  tests/run.sh                                # branch 1
+
+  HP_TEST_HOST=root@<test-machine> tests/run.sh   # branch 2
   HP_TEST_DIR=/tmp/hp-tests          tests/run.sh
   ```
 
-  If `$HP_TEST_HOST` is **not set**, the device-side suite is **SKIPPED** with
-  a clear message — `tests/run.sh` will not ssh into any guessed address.
-  The production router (`192.168.1.1` or anything in `192.168.1.1:*`) is
-  refused by the on-target workflow regardless.
+  `tests/run.sh` will not ssh into any guessed address, and the production
+  router (`192.168.1.1` or anything in `192.168.1.1:*`) is refused by the
+  on-target workflow regardless.
 
 ### The staging policy: never install
 

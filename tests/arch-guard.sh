@@ -465,9 +465,9 @@ done
 assert_empty "no bare array_to_nftarr(control_info.X) call site remains" \
 	grep -nE 'array_to_nftarr\(control_info\.' "$TEMPLATE"
 assert_empty "no bare join(', ', control_info.X) call site remains" \
-	grep -nE "join\('\\. ', control_info\." "$TEMPLATE"
+	grep -nE "join\(', ', control_info\." "$TEMPLATE"
 assert_empty "no bare join(', ', split(routing_port,...)) call site remains" \
-	grep -nE "join\('\\. ', split\(routing_port" "$TEMPLATE"
+	grep -nE "join\(', ', split\(routing_port" "$TEMPLATE"
 
 # The four field families whose UCI surface area is the report's whole H1:
 # IPv4 addresses, MAC addresses, interface names, and ports.  Any one of
@@ -972,6 +972,74 @@ for f in "$VIEWS"/view/homeproxy/client/*.js; do
 		fail "$(basename "$f") does not return baseclass.extend(...) - luci.js rejects it as an invalid constructor"
 	fi
 done
+
+echo
+echo "== guard 23: an hp method that reads \`this\` is bound to hp =="
+
+# A method that reaches a sibling through `this` only works when the receiver
+# is the module object itself.  Six call sites bound loadModalTitle() to a view
+# instance, so `this.escapeTitleText` was undefined and every edit modal for a
+# section that has a label threw a TypeError; four more did the same to
+# uploadCertificate(), so no certificate upload ever reached its RPC.  Nothing
+# caught it: the form snapshot does not record function-valued properties, and
+# the frontend tests call hp.method() directly - where `this` *is* hp, so the
+# only broken path was the one production uses.
+#
+# The rule: when a view binds an hp method through L.bind(), and that method's
+# body reads `this`, the receiver has to be `hp`.
+BOUND_WRONG="$(python3 - "$ROOT" <<'PY'
+import re, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+hp = (root / 'htdocs/luci-static/resources/homeproxy.js').read_text(encoding='utf-8')
+
+# Top-level method -> does its body read `this`?
+uses_this, cur, body = set(), None, []
+for line in hp.split('\n'):
+    m = re.match(r'^\t([A-Za-z_$][\w$]*)\(', line)
+    if m and cur is None:
+        cur, body = m.group(1), []
+    if cur is not None:
+        body.append(line)
+        if line == '\t},':
+            if any('this.' in b for b in body):
+                uses_this.add(cur)
+            cur = None
+
+bad = []
+for f in sorted((root / 'htdocs').rglob('*.js')):
+    if f.name == 'homeproxy.js':
+        continue
+    for n, line in enumerate(f.read_text(encoding='utf-8').split('\n'), 1):
+        for meth, recv in re.findall(r'L\.bind\(hp\.([A-Za-z_$][\w$]*),\s*([A-Za-z_$][\w$]*)', line):
+            if meth in uses_this and recv != 'hp':
+                bad.append(f'{f.relative_to(root)}:{n}: L.bind(hp.{meth}, {recv}, ...)')
+print('\n'.join(bad))
+PY
+)"
+if [ -z "$BOUND_WRONG" ]; then
+	pass "every receiver-dependent hp method is bound to hp"
+else
+	fail "an hp method that reads \`this\` is bound to a foreign receiver:"
+	printf '      %s\n' "$BOUND_WRONG"
+fi
+
+echo
+echo "== guard 24: dns-in listens on loopback only =="
+
+# dns-in is a `direct` inbound, and a direct inbound forwards a connection
+# without consulting the route rules.  It used to listen on '::' - every
+# interface - so any host that reached the DNS port had its connection dialled
+# straight out; a router log showed blocked addresses timing out through the
+# built-in `direct` outbound while every route rule named main-out.  The only
+# client that has any business at that port is the local resolver: dnsmasq is
+# pointed at 127.0.0.1#<dns_port> by runtime/dns.sh, and it is the only DNS
+# entry point on the LAN.
+if awk "/tag: 'dns-in'/,/listen_port/" "$SCRIPTS/generator/inbound.uc" \
+	| grep -qF "listen: '127.0.0.1'"; then
+	pass "dns-in listens on 127.0.0.1 only"
+else
+	fail "dns-in does not listen on 127.0.0.1 - the DNS port is reachable from other hosts, and a direct inbound bypasses the routing rules"
+fi
 
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
