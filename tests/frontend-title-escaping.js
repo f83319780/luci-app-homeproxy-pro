@@ -120,14 +120,23 @@ for (const name of ['Tokyo-01', '香港 01', 'a & b', 'node (backup)', 'im?possi
 }
 
 /* escapeHtml is the one-decode sink: it must not emit a literal '<' at all,
- * and exactly one decode must still leave text. */
+ * and exactly one decode must give the original back - no more (the value is
+ * fully escaped) and no less (it is escaped deeply enough that a single decode
+ * cannot re-introduce markup).
+ *
+ * This check used to read `!decodeEntitiesOnce(escaped).includes('<') || true`,
+ * which is unconditionally true, so it never checked anything: for the raw-tag
+ * payloads one decode *does* contain '<' (that is what a one-level escape
+ * means), and the `|| true` was papering over the wrong property. */
 for (const p of PAYLOADS) {
 	const escaped = hp.escapeHtml(p);
 	check(`escapeHtml emits no literal '<' for ${JSON.stringify(p)}`,
 		!escaped.includes('<') && !escaped.includes('>'),
 		JSON.stringify(escaped));
-	check(`escapeHtml survives one decode for ${JSON.stringify(p)}`,
-		!decodeEntitiesOnce(escaped).includes('<') || true);
+	const decoded = decodeEntitiesOnce(escaped);
+	check(`escapeHtml survives exactly one decode for ${JSON.stringify(p)}`,
+		decoded === p,
+		`one decode gave ${JSON.stringify(decoded)}, expected ${JSON.stringify(p)}`);
 }
 
 /* The reason escapeTitleText exists at all: on the *raw* tag case, plain

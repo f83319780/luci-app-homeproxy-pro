@@ -103,44 +103,31 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         run: sh tests/toolchain/build-ucode-linux.sh
 
-      - name: Run LuCI form snapshot tests
-        # The snapshot renderer is a plain node script; it just re-renders
-        # the CBI form definitions through a LuCI mock and diffs the
-        # result. No build / no ucode required.
+      - name: Run the off-target test suite
+        # tests/run.sh is the single list of what the suite is.  The steps that
+        # used to live here re-implemented parts of it (the form snapshots, the
+        # three frontend invariants, the ucode suite), and the two lists
+        # drifted: arch-guard.sh, json-assets.js, frontend-rpc-fallbacks.js and
+        # frontend-title-escaping.js all ran under tests/run.sh but never in
+        # CI - the note on the snapshot step said to keep the lists in sync and
+        # nothing enforced it.  Calling the script deletes the second list.
         #
-        # Keep this list in sync with tests/run.sh: a target that is added
-        # there but not here would be snapshot-tested locally and silently
-        # skipped in CI, which is where the protection actually matters.
+        # HP_TEST_HOST is unset so run.sh takes its local branch: the toolchain
+        # is on PATH from the cache step above.  run.sh checks the local
+        # toolchain first, then the ssh fallback, then skips - and a skip here
+        # would be a silent coverage hole, which is why the toolchain is a hard
+        # prerequisite of this job rather than an optional cache.
+        env:
+          # PATH must put the toolchain bin first so the matching sing-box wins
+          # over any /usr/local/bin stray.  $HOME is a shell variable here, not
+          # the env context - env.HOME is empty in GitHub Actions because HOME
+          # is not part of the runner's declared env - so PATH has to be
+          # assembled in the shell where $HOME expands.
+          HP_VALIDATE_DATA: ${{ github.workspace }}/tests/toolchain/validate-data.sh
         run: |
-          set -e
-          for target in node client server; do
-            node tests/luci-form-snapshot.js . "$target" > "/tmp/snap-$target.json"
-            if ! diff -q "tests/snapshots/$target.json" "/tmp/snap-$target.json" > /dev/null; then
-              echo "::error::LuCI form snapshot for $target changed:"
-              diff "tests/snapshots/$target.json" "/tmp/snap-$target.json" | head -40
-              exit 1
-            fi
-          done
-          echo "PASS: LuCI form snapshots (node, client, server)"
-
-      - name: Check the frontend protocol inventory
-        # The frontend keeps one ordered protocol table (homeproxy.js) and both
-        # forms render from it; this asserts it agrees with the backend tables.
-        # The form snapshots cannot see this - they do not record a picker's
-        # value set, and the node form's picker is not in the dump at all.
-        run: node tests/frontend-protocol-inventory.js .
-
-      - name: Check the frontend RPC boundary
-        # One rpc.declare site (homeproxy.js's rpcCall) and no view wrapping an
-        # RPC call in L.resolveDefault, which reads like error handling and is
-        # not: it does not catch a rejection.
-        run: node tests/frontend-rpc-inventory.js .
-
-      - name: Check the frontend validators
-        # The snapshots cannot see a `validate` callback (it is a function), so
-        # the shared password validator - and the 2022-blake3 key check the node
-        # form was missing - is covered behaviourally instead.
-        run: node tests/frontend-validators.js .
+          export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
+          unset HP_TEST_HOST
+          sh tests/run.sh
 
       - name: Check the translation template is current
         # The fast translation gate earlier in this job only reads
@@ -178,15 +165,3 @@ jobs:
           # Location comments are therefore allowed to be stale. Regenerating
           # them is a separate, optional chore; keeping the .pot free of churn
           # matters more than keeping its line numbers exact.
-
-      - name: Run ucode test suite
-        env:
-          # PATH must put the toolchain bin first so the matching sing-box
-          # wins over any /usr/local/bin stray. $HOME is a shell variable
-          # here, not the env context - env.HOME is empty in GitHub Actions
-          # because HOME is not part of the runner's declared env, so the
-          # PATH has to be assembled in the shell where $HOME expands.
-          HP_VALIDATE_DATA: ${{ github.workspace }}/tests/toolchain/validate-data.sh
-        run: |
-          export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
-          sh tests/ucode/run.sh .

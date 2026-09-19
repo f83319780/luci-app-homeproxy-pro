@@ -124,10 +124,14 @@ echo "== architecture guard =="
 sh "$ROOT/tests/arch-guard.sh" "$ROOT" || FAILED=1
 
 echo "== ucode tests =="
-if [ -z "$HOST" ]; then
-	echo "SKIP: HP_TEST_HOST not set, device-side ucode suite is not run"
-	echo "      (set HP_TEST_HOST=root@<test-machine> to enable it)"
-elif command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
+# Order matters here: local toolchain first, then the ssh fallback, then an
+# honest skip.  With `HP_TEST_HOST` tested first, a developer who had built the
+# testbed (tests/toolchain/build-ucode-macos.sh) still got this whole layer
+# skipped - and a final "ALL TESTS PASSED" - for as long as the variable was
+# unset.  That is the same shape as the skips that once let an unparseable
+# update_subscriptions.uc reach a device.  The testbed is the documented way to
+# run this layer off-target, so an unset variable must not shadow it.
+if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
 	# The generator cases feed the emitted config to `sing-box check` and the
 	# package targets sing-box >= 1.14; an older binary rejects 1.14-only
 	# fields. Fail loudly here instead of letting each fixture look like a
@@ -141,7 +145,7 @@ elif command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>
 		;;
 	esac
 	sh "$ROOT/tests/ucode/run.sh" "$ROOT" "$WORK_ROOT/ucode" || FAILED=1
-else
+elif [ -n "$HOST" ]; then
 	echo "(no local ucode/sing-box, executing on $HOST)"
 	# BatchMode: a host-key or password prompt would otherwise hang the suite
 	# forever with no output. ConnectTimeout bounds an unreachable host.
@@ -193,6 +197,10 @@ else
 		echo "FAIL: could not stage the tests on $HOST"
 		FAILED=1
 	fi
+else
+	echo "SKIP: no local ucode/sing-box and HP_TEST_HOST is not set"
+	echo "      (build the toolchain with tests/toolchain/build-ucode-*.sh, or"
+	echo "       set HP_TEST_HOST=root@<test-machine> to stage the suite there)"
 fi
 
 if [ "$FAILED" -eq 0 ]; then
