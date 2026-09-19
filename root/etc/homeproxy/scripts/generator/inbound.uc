@@ -16,15 +16,23 @@
 
 import { isEmpty, strToInt, strToTime, strToBool } from '../homeproxy.uc';
 
-/* Append the always-on inbounds. dns-in is the local UDP listener the
- * DNS chain hands queries to; mixed-in is the SOCKS/HTTP listener the
- * LAN redirects into. Their order matters because dns-in has to come
- * first when sing-box matches inbounds in declaration order. */
+/* Append the always-on inbounds. dns-in is the local listener the DNS chain
+ * hands queries to - runtime/dns.sh points dnsmasq at 127.0.0.1#<dns_port>,
+ * so nothing outside this host has any reason to reach it.  It used to
+ * listen on '::', every interface, and a `direct` inbound forwards without
+ * consulting the route rules: any client that connected to the DNS port got
+ * its traffic dialled straight out instead of routed.  A router log showed
+ * exactly that - connections to a blocked address timing out through the
+ * built-in `direct` outbound while every rule pointed at main-out.
+ * Loopback-only removes the entry point; mixed-in stays on '::' because that
+ * one is the SOCKS/HTTP listener clients are meant to reach.  Their order
+ * matters because dns-in has to come first when sing-box matches inbounds in
+ * declaration order. */
 function pushBaseInbounds(inbounds, ctx) {
 	push(inbounds, {
 		type: 'direct',
 		tag: 'dns-in',
-		listen: '::',
+		listen: '127.0.0.1',
 		listen_port: int(ctx.dns_port)
 	});
 
