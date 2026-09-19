@@ -29,7 +29,7 @@ function renderRoutingNodes(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, this, _('Routing node'), _('Add a routing node'), data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Routing node'), _('Add a routing node'), data[0]);
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
@@ -208,7 +208,7 @@ function renderDnsServers(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, this, _('DNS server'), _('Add a DNS server'), data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('DNS server'), _('Add a DNS server'), data[0]);
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 

@@ -24,7 +24,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	s.rowcolors = true;
 	s.sortable = true;
 	s.nodescriptions = true;
-	s.modaltitle = L.bind(hp.loadModalTitle, this, _('Node'), _('Add a node'), data[0]);
+	s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Node'), _('Add a node'), data[0]);
 	s.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 
 	if (routing_mode !== 'custom') {
@@ -437,7 +437,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.inputstyle = 'action';
 	o.inputtitle = _('Upload...');
 	o.depends({'tls_self_sign': '1', 'tls_cert_path': '/etc/homeproxy/certs/client_ca.pem'});
-	o.onclick = L.bind(hp.uploadCertificate, this, _('certificate'), 'client_ca');
+	o.onclick = L.bind(hp.uploadCertificate, hp, _('certificate'), 'client_ca');
 	o.modalonly = true;
 
 	o = s.option(form.Flag, 'tls_ech', _('Enable ECH'),
@@ -456,7 +456,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o.inputstyle = 'action';
 	o.inputtitle = _('Upload...');
 	o.depends({'tls_ech': '1', 'tls_ech_config_path': '/etc/homeproxy/certs/client_ech_conf.pem'});
-	o.onclick = L.bind(hp.uploadCertificate, this, _('ECH config'), 'client_ech_conf');
+	o.onclick = L.bind(hp.uploadCertificate, hp, _('ECH config'), 'client_ech_conf');
 	o.modalonly = true;
 
 	if (features.with_utls) {
