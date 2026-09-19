@@ -31,7 +31,7 @@ function renderRuleSection(s, kind, self, data) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, self, is_dns ? _('DNS rule') : _('Routing rule'),
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, is_dns ? _('DNS rule') : _('Routing rule'),
 		is_dns ? _('Add a DNS rule') : _('Add a routing rule'), data[0]);
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, self, data[0]);
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, self, ss);

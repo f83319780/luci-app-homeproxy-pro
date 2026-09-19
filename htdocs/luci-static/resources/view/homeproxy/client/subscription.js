@@ -28,7 +28,7 @@ function render(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, this, _('Rule set'), _('Add a rule set'), data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Rule set'), _('Add a rule set'), data[0]);
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
