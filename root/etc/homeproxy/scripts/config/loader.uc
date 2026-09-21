@@ -94,14 +94,6 @@ export function load_tls(get) {
 			enabled: get('tls_reality'),
 			public_key: get('tls_reality_public_key'),
 			short_id: get('tls_reality_short_id')
-		},
-		/* kept verbatim: the server-side builder owns the key material format */
-		raw: {
-			tls_reality_public_key: get('tls_reality_public_key'),
-			tls_reality_short_id: get('tls_reality_short_id'),
-			tls_utls: get('tls_utls'),
-			tls_sni: get('tls_sni'),
-			tls_insecure: get('tls_insecure')
 		}
 	};
 };

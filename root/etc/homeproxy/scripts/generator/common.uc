@@ -31,8 +31,8 @@ import { ConfigQuery } from '../config/model.uc';
 
 /* Resolve a UCI outbound-style reference (string or array of strings)
  * into the sing-box tag the generator should emit. The arrays carry
- * either 'block-out' / 'direct-out' / 'any-out' sentinels or routing_node
- * section names; a single string is the same thing with one entry.
+ * either 'block-out' / 'direct-out' sentinels or routing_node section
+ * names; a single string is the same thing with one entry.
  *
  * `dm` is needed for the routing_node -> node id lookup; we deliberately
  * do not read `dm.routing.nodes` until we know we need it (the common
@@ -42,9 +42,6 @@ export function get_outbound(cfg, dm) {
 		return null;
 
 	if (type(cfg) === 'array') {
-		if ('any-out' in cfg)
-			return 'any';
-
 		let outbounds = [];
 		for (let i in cfg)
 			push(outbounds, get_outbound(i, dm));

@@ -121,6 +121,10 @@ uci.foreach(uciconfig, ucidnsserver, (cfg) => {
 	/* legacy format was deprecated in sb 1.12 */
 	if (cfg.address) {
 		const addr = parseURL((!match(cfg.address, /:\/\//) ? 'udp://' : '') + (validation('ip6addr', cfg.address) ? `[${cfg.address}]` : cfg.address));
+		/* parseURL() gives null for an address it cannot parse; the old code
+		 * dereferenced it immediately and aborted the migration. */
+		if (!addr)
+			return;
 		/* RCode was moved into DNS rules */
 		if (addr.protocol === 'rcode') {
 			dns_server_migration[cfg['.name']] = { action: 'predefined' };

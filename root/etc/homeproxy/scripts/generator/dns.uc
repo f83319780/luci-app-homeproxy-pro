@@ -42,7 +42,14 @@ function parse_dnsserver(server_addr, default_protocol) {
 
 	if (!match(server_addr, /:\/\//))
 		server_addr = (default_protocol || 'udp') + '://' + (validation('ip6addr', server_addr) ? `[${server_addr}]` : server_addr);
+
+	/* parseURL() returns null for an address it cannot make sense of (a bad
+	 * host, an unknown scheme).  The old code dereferenced the result straight
+	 * away, so one malformed UCI value took the whole generator down with
+	 * "left-hand side expression is null" instead of naming the dns_server. */
 	server_addr = parseURL(server_addr);
+	if (!server_addr)
+		return null;
 
 	return {
 		type: server_addr.protocol,
