@@ -182,7 +182,11 @@ uci.foreach(uciconfig, ucidnsrule, (cfg) => {
 		if (!cfg.enabled)
 			return;
 
-		map(cfg.outbound, (outbound) => {
+		/* uci.foreach hands a single-valued option over as a string, and map()
+		 * returns null for anything that is not an array - so a rule with one
+		 * outbound was deleted on the line above and then never migrated. */
+		const outbounds = (type(cfg.outbound) === 'array') ? cfg.outbound : [ cfg.outbound ];
+		map(outbounds, (outbound) => {
 			switch (outbound) {
 			case 'direct-out':
 			case 'block-out':
@@ -221,8 +225,12 @@ uci.foreach(uciconfig, ucidnsrule, (cfg) => {
 			uci.set(uciconfig, cfg['.name'], 'client_subnet', dns_server_migration[cfg.server].client_subnet);
 
 		if (dns_server_migration[cfg.server].rcode) {
+			/* The key the generator and the form both read is
+			 * `predefined_rcode`; writing `rcode` left the migrated rule with
+			 * no rcode at all, so a NXDOMAIN / REFUSED predefined answer
+			 * silently became the default. */
 			uci.set(uciconfig, cfg['.name'], 'action', 'predefined');
-			uci.set(uciconfig, cfg['.name'], 'rcode', dns_server_migration[cfg.server].rcode);
+			uci.set(uciconfig, cfg['.name'], 'predefined_rcode', dns_server_migration[cfg.server].rcode);
 			uci.delete(uciconfig, cfg['.name'], 'server');
 		}
 	}

@@ -183,6 +183,20 @@ exit 0
 EOF
 chmod +x "$BIN/sing-box"
 
+# dnsmasq --version decides whether the DNS snippets may carry nftset=.  The
+# stand-in reports the dnsmasq-full feature set, which is what a device able to
+# run this package has; runtime/dns.sh's hp_dnsmasq_has_nftset() reads it.  Not
+# traced: it is a feature probe, not part of the orchestration under test.
+cat > "$BIN/dnsmasq" <<'EOF'
+#!/bin/sh
+[ "$1" = "--version" ] && {
+	echo "Dnsmasq version 2.93  Copyright (c) 2000-2024 Simon Kelley"
+	echo "Compile time options: IPv6 GNU-getopt no-DBus UBus no-i18n no-IDN DHCP DHCPv6 no-Lua TFTP conntrack no-ipset nftset auth DNSSEC no-ID loop-detect inotify dumpfile"
+}
+exit 0
+EOF
+chmod +x "$BIN/dnsmasq"
+
 # `ucode -S generate_*.uc` is where the live configuration comes from.  The
 # stub writes whichever mixed_port the fixture currently declares; whether that
 # configuration can actually run is decided from its content by

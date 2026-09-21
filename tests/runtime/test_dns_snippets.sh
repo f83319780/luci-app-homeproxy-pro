@@ -84,6 +84,13 @@ LOG="$WORK/log"
 
 # --- stubs --------------------------------------------------------------
 
+# runtime/dns.sh probes `dnsmasq --version` for nftset support before emitting
+# nftset= directives.  This suite stubs the init script, not the binary, so
+# state the answer instead: nftset snippets are what a full dnsmasq emits, and
+# that is what the cases below are about.
+HP_DNSMASQ_NFTSET=1
+export HP_DNSMASQ_NFTSET
+
 # Stand-in for /etc/init.d/dnsmasq: counts restarts instead of running one.
 cat > "$WORK/init.d/dnsmasq" <<EOF
 #!/bin/sh

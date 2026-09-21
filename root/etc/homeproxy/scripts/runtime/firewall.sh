@@ -33,12 +33,39 @@ hp_firewall_apply() {
 	local run_dir="$2"
 	local client_enabled="$3"
 
-	ucode "$hp_dir/scripts/firewall_pre.uc" 2>"/dev/null" || log "Error: firewall pre-script failed."
+	local failed=0
+
+	# Truncate the include fragments first.  firewall_pre.uc only writes them
+	# when it has something to put in them, so a start that produces no
+	# forward/input rules would leave the previous run's files in place and fw4
+	# would keep loading them.  teardown already truncates for the same reason.
+	: > "$run_dir/fw4_forward.nft"
+	: > "$run_dir/fw4_input.nft"
+
+	ucode "$hp_dir/scripts/firewall_pre.uc" 2>"/dev/null" \
+		|| { log "Error: firewall pre-script failed."; failed=1; }
+
 	if [ "$client_enabled" = "1" ]; then
-		utpl -S "$hp_dir/scripts/firewall_post.ut" > "$run_dir/fw4_post.nft" 2>"/dev/null" || log "Error: firewall post-script failed."
+		# Render to a temp file and install it only on success.  The old
+		# `> "$run_dir/fw4_post.nft"` truncated the very file fw4 is about to
+		# include, so a failed render left fw4 loading an empty ruleset.
+		if utpl -S "$hp_dir/scripts/firewall_post.ut" > "$run_dir/fw4_post.nft.new" 2>"/dev/null"; then
+			mv -f "$run_dir/fw4_post.nft.new" "$run_dir/fw4_post.nft"
+		else
+			rm -f "$run_dir/fw4_post.nft.new"
+			log "Error: firewall post-script failed."
+			failed=1
+		fi
 	fi
-	fw4 reload >"/dev/null" 2>&1 || log "Error: fw4 reload failed."
+
+	fw4 reload >"/dev/null" 2>&1 \
+		|| { log "Error: fw4 reload failed."; failed=1; }
+
+	# The return value has to describe this function, not whatever
+	# hp_restore_upnp_mappings happened to return last.
 	hp_restore_upnp_mappings
+
+	return "$failed"
 }
 
 # hp_firewall_teardown <run-dir>
