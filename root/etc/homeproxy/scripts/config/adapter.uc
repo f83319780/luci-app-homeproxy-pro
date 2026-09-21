@@ -595,7 +595,11 @@ const INBOUND_OPTION_FIELDS = {
 			password: inbound.protocol_options.obfs_password,
 			min_packet_size: strToInt(inbound.protocol_options.obfs_min_packet_size),
 			max_packet_size: strToInt(inbound.protocol_options.obfs_max_packet_size)
-		} : inbound.protocol_options.obfs_password,
+		/* hysteria2 takes an obfs *object* here.  Falling back to the bare
+		 * password string (which is what hysteria v1 wants) makes sing-box
+		 * reject the inbound with "cannot unmarshal string into Go struct
+		 * field Hysteria2InboundOptions.obfs" - so no type means no obfs. */
+		} : null,
 		ignore_client_bandwidth: (inbound) => strToBool(inbound.protocol_options.ignore_client_bandwidth),
 		masquerade: (inbound) => inbound.protocol_options.masquerade
 	},

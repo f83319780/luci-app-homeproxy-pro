@@ -49,6 +49,30 @@ hp_dnsmasq_resolve_dir() {
 	fi
 }
 
+# hp_dnsmasq_has_nftset
+# 0 when the running dnsmasq understands `nftset=`.  The base dnsmasq variant
+# is built without HAVE_NFTSET, and it does not ignore the directive: it aborts
+# with "recompile with HAVE_NFTSET defined", and because the snippet is read
+# through conf-dir that abort takes dnsmasq itself down - the LAN loses DNS and
+# DHCP, not just the domain routing.  Probe once and degrade instead.
+hp_dnsmasq_has_nftset() {
+	if [ -z "${HP_DNSMASQ_NFTSET:-}" ]; then
+		# Look it up through PATH so the off-target harness can stand in a
+		# dnsmasq of either flavour; fall back to the absolute path for an
+		# init environment with a bare PATH.
+		local bin
+		bin="$(command -v dnsmasq 2>"/dev/null" || echo /usr/sbin/dnsmasq)"
+
+		if "$bin" --version 2>"/dev/null" | grep -qw nftset; then
+			HP_DNSMASQ_NFTSET=1
+		else
+			HP_DNSMASQ_NFTSET=0
+		fi
+	fi
+
+	[ "$HP_DNSMASQ_NFTSET" = "1" ]
+}
+
 # hp_dnsmasq_render_snippets <stage-dir> <hp-dir> <routing-mode> <dns-port> <ipv6>
 # Render the desired snippet set into <stage-dir>.  Writes nothing outside it,
 # restarts nothing: the caller decides whether the result differs from what is
@@ -66,6 +90,9 @@ hp_dnsmasq_render_snippets() {
 	local dns_port="$4"
 	local ipv6="$5"
 	local gfw_nftset_v6="" wan_nftset_v6=""
+	local nftset_ok=1
+
+	hp_dnsmasq_has_nftset || nftset_ok=0
 
 	case "$routing_mode" in
 	"bypass_mainland_china"|"custom"|"global")
@@ -77,9 +104,15 @@ hp_dnsmasq_render_snippets() {
 		;;
 	"gfwlist")
 		if [ -s "$hp_dir/resources/gfw_list.txt" ]; then
-			[ "$ipv6" -eq "0" ] || gfw_nftset_v6=",6#inet#fw4#homeproxy_gfw_list_v6"
-			sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_gfw_list_v4$gfw_nftset_v6/g" \
-				"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+			if [ "$nftset_ok" = "1" ]; then
+				[ "$ipv6" -eq "0" ] || gfw_nftset_v6=",6#inet#fw4#homeproxy_gfw_list_v6"
+				sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_gfw_list_v4$gfw_nftset_v6/g" \
+					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+			else
+				log "Warning: this dnsmasq has no nftset support; gfwlist routing degrades to plain server= entries (no address sets)."
+				sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
+					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+			fi
 		fi
 		;;
 	"proxy_mainland_china")
@@ -91,9 +124,15 @@ hp_dnsmasq_render_snippets() {
 	esac
 
 	if [ "$routing_mode" != "custom" ] && [ -s "$hp_dir/resources/proxy_list.txt" ]; then
-		[ "$ipv6" -eq "0" ] || wan_nftset_v6=",6#inet#fw4#homeproxy_wan_proxy_addr_v6"
-		sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
-			"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
+		if [ "$nftset_ok" = "1" ]; then
+			[ "$ipv6" -eq "0" ] || wan_nftset_v6=",6#inet#fw4#homeproxy_wan_proxy_addr_v6"
+			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
+				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
+		else
+			log "Warning: this dnsmasq has no nftset support; the proxy list degrades to plain server= entries."
+			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
+				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
+		fi
 	fi
 }
 

@@ -26,7 +26,7 @@
 
 'use strict';
 
-import { isEmpty, decodeBase64Str } from '../homeproxy.uc';
+import { isEmpty, decodeBase64Str, redactUrl } from '../homeproxy.uc';
 
 export function decode(content, log, url) {
 	if (isEmpty(content))
@@ -58,7 +58,10 @@ export function decode(content, log, url) {
 					nodes[i].nodetype = 'sip008';
 		}
 	} catch (e) {
-		const tag = url ? sprintf('for %s, ', url) : '';
+		/* The URL carries the subscription token and this line lands in
+		 * homeproxy.log, which is world-readable.  fetcher.uc and the
+		 * orchestrator both redact; this path was missed. */
+		const tag = url ? sprintf('for %s, ', redactUrl(url)) : '';
 		log(sprintf('JSON parse failed %strying base64: %s', tag, e.message));
 		const decoded = decodeBase64Str(content);
 		nodes = decoded ? split(trim(decoded), '\n') : [];

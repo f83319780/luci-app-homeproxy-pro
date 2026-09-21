@@ -299,6 +299,11 @@ export function strToBool(str) {
 };
 
 export function strToInt(str) {
+	/* Zero reads back as "not set" on purpose: several sing-box fields mean
+	 * "omit me" at zero - a vmess user's alterId, for instance - and the
+	 * generators depend on removeBlankAttrs() dropping the null this produces.
+	 * A review flagged it as "a legitimate 0 becomes null"; the golden outbound
+	 * snapshot and the vmess alterId assertion both say otherwise. */
 	return !isEmpty(str) ? (int(str) || null) : null;
 };
 
@@ -323,8 +328,13 @@ export function parse_port(strport) {
 		return null;
 
 	let ports = [];
-	for (let i in strport)
-		push(ports, int(i));
+	for (let i in strport) {
+		/* Only a bare decimal is a port: int() truncates, so '80-90' used to
+		 * become 80 and '443/tcp' become 443, silently widening the rule
+		 * instead of dropping the malformed entry. */
+		if (match(i, /^[0-9]+$/) && int(i) >= 1 && int(i) <= 65535)
+			push(ports, int(i));
+	}
 
 	return ports;
 };

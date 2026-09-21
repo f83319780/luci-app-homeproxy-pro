@@ -40,6 +40,26 @@ export function decodeBase64Str(str) {
 	return b64dec(str);
 };
 
+/* Verbatim copy of homeproxy.uc:redactUrl - decoder.uc imports it so the
+ * subscription token stays out of the parse-failed log line. */
+export function redactUrl(url) {
+	if (!url || type(url) !== 'string')
+		return '';
+
+	let u = url;
+
+	const at = index(u, '@');
+	const scheme = match(u, /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//);
+	if (scheme && at !== -1 && at > length(scheme[0]))
+		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
+
+	const q = index(u, '?');
+	if (q !== -1)
+		u = substr(u, 0, q) + '?***';
+
+	return u;
+};
+
 /* Pure-ucode stand-in for /sbin/validate_data (host/port/ip4/ip6/hostname). */
 export function validation(datatype, data) {
 	if (!datatype || !data)

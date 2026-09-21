@@ -241,7 +241,11 @@ function append_custom_dns(config, dm, ctx) {
 		rule.source_hostname = cfg.source_hostname;
 
 		const legacy_filter = !isEmpty(cfg.ip_cidr) || strToBool(cfg.ip_is_private) === true;
-		if (legacy_filter && !rule.match_response && cfg.action === 'route') {
+		/* Every action needs the evaluate prefix to see the response, not just
+		 * `route`: with the old `&& cfg.action === 'route'` an address-filtered
+		 * reject rule lost the filter entirely and became an unconditional
+		 * reject - a DNS black hole for every query. */
+		if (legacy_filter && !rule.match_response) {
 			/* Wrap a legacy address-filter rule into the 1.14 evaluate/match_response
 			   paradigm. Carry the original query-matching fields onto the evaluate
 			   prefix rule so only queries that would have hit this rule get

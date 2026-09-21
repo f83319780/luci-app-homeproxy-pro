@@ -367,8 +367,9 @@ export function parse_vless_uri(uri, features, log) {
 export function parse_vmess_uri(uri, features, log) {
 	uri = split(trim(uri), '://');
 
-	/* "Lovely" shadowrocket format */
-	if (match(uri, /&/)) {
+	/* "Lovely" shadowrocket format.  `uri` is the split() result, so the old
+	 * match(uri, /&/) could never fire - match() takes a string. */
+	if (length(uri) > 1 && match(uri[1], /&/)) {
 		log(sprintf('Skipping unsupported %s format.', uri[0]));
 		return null;
 	}

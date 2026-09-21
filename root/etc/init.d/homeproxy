@@ -153,7 +153,14 @@ start_service() {
 
 	hp_prepare_runtime_files "$HP_DIR" "$RUN_DIR" "$routing_mode" "$client_enabled" "$server_enabled"
 
-	hp_firewall_apply "$HP_DIR" "$RUN_DIR" "$client_enabled"
+	# A firewall that did not apply means traffic is not actually being
+	# intercepted.  sing-box still runs (the service stays up), but the
+	# configuration must not become the rollback target - service_started()
+	# reads this marker before promoting.
+	if ! hp_firewall_apply "$HP_DIR" "$RUN_DIR" "$client_enabled"; then
+		log "Error: the firewall rules were not applied completely; the proxy may not be enforced."
+		printf '%s\n' "firewall" > "$RUN_DIR/failed-firewall"
+	fi
 
 	# Nothing is verified here on purpose.  With USE_PROCD=1 the
 	# procd_open_instance/procd_close_instance calls above only *register* the
@@ -227,9 +234,17 @@ service_started() {
 
 	rm -f "$RUN_DIR/failed-side"
 
-	# Proven good: this is what a later failed reload rolls back to.
-	[ "$client_enabled" = "1" ] && hp_promote_known_good c "$RUN_DIR" "$GOOD_DIR"
-	[ "$server_enabled" = "1" ] && hp_promote_known_good s "$RUN_DIR" "$GOOD_DIR"
+	# Proven good: this is what a later failed reload rolls back to.  A
+	# configuration whose firewall did not apply is not "good" - traffic is not
+	# being intercepted - so it is not recorded, and the previous known-good
+	# survives as the rollback target.
+	if [ -s "$RUN_DIR/failed-firewall" ]; then
+		rm -f "$RUN_DIR/failed-firewall"
+		log "Warning: the firewall rules did not apply; keeping the previous known-good configuration."
+	else
+		[ "$client_enabled" = "1" ] && hp_promote_known_good c "$RUN_DIR" "$GOOD_DIR"
+		[ "$server_enabled" = "1" ] && hp_promote_known_good s "$RUN_DIR" "$GOOD_DIR"
+	fi
 
 	log "sing-box $(sing-box version -n 2>/dev/null || echo "unknown") started."
 	return 0
@@ -246,7 +261,7 @@ stop_service() {
 
 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log" \
-		"$RUN_DIR/failed-side"
+		"$RUN_DIR/failed-side" "$RUN_DIR/failed-firewall"
 
 	log "Service stopped."
 }

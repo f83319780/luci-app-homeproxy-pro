@@ -244,20 +244,30 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
 			invert: strToBool(cfg.invert),
 			action: cfg.action,
-			outbound: rule_outbound,
-			override_address: rule_override_address,
-			override_port: rule_override_port,
-			udp_disable_domain_unmapping: strToBool(cfg.udp_disable_domain_unmapping),
-			udp_connect: strToBool(cfg.udp_connect),
-			udp_timeout: strToTime(cfg.udp_timeout),
-			tls_fragment: strToBool(cfg.tls_fragment),
-			tls_fragment_fallback_delay: strToTime(cfg.tls_fragment_fallback_delay),
-			tls_record_fragment: strToBool(cfg.tls_record_fragment),
-			tls_spoof: cfg.tls_spoof || null,
-			tls_spoof_method: cfg.tls_spoof_method || null,
 			source_mac_address: cfg.source_mac_address,
 			source_hostname: cfg.source_hostname
 		};
+
+		/* Route-option fields belong to the actions that dial out (`route` and
+		 * `route-options`).  They used to be assigned unconditionally, which
+		 * stayed invisible as long as the UI kept them hidden per action - but
+		 * changing a rule's action leaves the previous values in UCI, and
+		 * sing-box then refuses the whole configuration with "unknown field" on
+		 * the first one the new action does not take. */
+		if (cfg.action !== 'resolve' && cfg.action !== 'reject') {
+			rule.outbound = rule_outbound;
+			rule.override_address = rule_override_address;
+			rule.override_port = rule_override_port;
+			rule.udp_disable_domain_unmapping = strToBool(cfg.udp_disable_domain_unmapping);
+			rule.udp_connect = strToBool(cfg.udp_connect);
+			rule.udp_timeout = strToTime(cfg.udp_timeout);
+			rule.tls_fragment = strToBool(cfg.tls_fragment);
+			rule.tls_fragment_fallback_delay = strToTime(cfg.tls_fragment_fallback_delay);
+			rule.tls_record_fragment = strToBool(cfg.tls_record_fragment);
+			rule.tls_spoof = cfg.tls_spoof || null;
+			rule.tls_spoof_method = cfg.tls_spoof_method || null;
+		}
+
 		if (cfg.action === 'resolve') {
 			rule.server = get_resolver(cfg.resolve_server);
 			rule.strategy = cfg.resolve_strategy;
