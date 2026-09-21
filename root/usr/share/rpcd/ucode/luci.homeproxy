@@ -316,12 +316,15 @@ const methods = {
 			 * shows both. */
 			/* The shipped .ver files hold a single timestamp (the format the
 			 * resource updater used before it started recording the upstream
-			 * commit); a runtime update writes "<date> <sha>".  Accept both and
-			 * show the date part, so a fresh install does not display a raw
-			 * digit run as if it were the version. */
-			const fields = version ? match(version, /^(\S+)(?: (\S+))?$/) : null;
-			if (fields)
-				version = fields[1];
+			 * commit); a runtime update writes "<date> <sha>".  Show the date
+			 * part when there is one, and the value as it stands otherwise.
+			 *
+			 * No non-capturing groups: ucode's regex engine rejects `(?:...)`
+			 * with "Repetition not preceded by valid expression" when the
+			 * literal is evaluated, so it compiles fine and then takes this
+			 * method down at call time. */
+			const fields = version ? match(version, /^(\S+) \S+$/) : null;
+			version = fields ? fields[1] : version;
 			/* Only a missing .ver means "not found"; that is the case the
 			 * UI paints red. */
 			if (!version)

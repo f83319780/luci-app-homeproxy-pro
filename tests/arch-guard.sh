@@ -1170,6 +1170,24 @@ else
 fi
 
 echo
+echo "== guard 26: ucode sources carry no PCRE-only regex syntax =="
+
+# ucode's regex engine is not PCRE, and it does not reject the unsupported
+# construct at parse time: `(?:...)` compiles fine and then fails when the
+# literal is evaluated ("Repetition not preceded by valid expression").  That
+# is how r11 shipped a luci.homeproxy whose resources_get_version threw on
+# every call - the build, `ucode -c` and every syntax check stayed green while
+# the resources panel rendered "undefined".  One grep keeps it out.
+PCRE_ONLY="$(grep -rn '(?:' "$ROOT/root" --include='*.uc' --include='*.ut' 2>"/dev/null" \
+	| grep -vE ':[0-9]+:[[:space:]]*(\*|/\*|//|#)' || true)"
+if [ -z "$PCRE_ONLY" ]; then
+	pass "no non-capturing groups in ucode sources"
+else
+	fail "ucode does not support (?: ...) - it compiles and then fails at run time:"
+	printf '      %s\n' "$PCRE_ONLY"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
