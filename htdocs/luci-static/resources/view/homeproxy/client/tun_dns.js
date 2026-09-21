@@ -38,7 +38,12 @@ function renderTunDns(ctx) {
 
 	o = s.taboption('tun_dns', form.DynamicList, 'tun_dns_address', _('TUN DNS addresses (1.14)'));
 	o.datatype = 'ipaddr';
-	o.depends({'proxy_mode': /^((?!custom).)+$/, 'tun_dns_mode': /^(disabled|native|hijack)$/});
+	/* The old `proxy_mode: /^((?!custom).)+$/` was written as if proxy_mode
+	 * could be 'custom' - it cannot (the values are redirect / redirect_tproxy
+	 * / redirect_tun / tun), so the condition was always true and the address
+	 * field showed up in plain redirect mode too.  Match the two TUN modes,
+	 * the same way tun_dns_mode above does. */
+	o.depends({'proxy_mode': /^(redirect_tun|tun)$/, 'tun_dns_mode': /^(disabled|native|hijack)$/});
 	o.modalonly = true;
 }
 

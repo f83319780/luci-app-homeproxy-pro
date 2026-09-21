@@ -42,7 +42,13 @@ system('mkdir -p ' + shellQuote(RUN_DIR));
  * invariant, not a comment about today's safety. */
 const work_dir = mkdtemp();
 const tmp = work_dir + '/sing-box-s.json';
-writefile(tmp, sprintf('%.J\n', cleaned));
+
+/* Same reason as the client path: a failed write used to be reported as a
+ * failed `sing-box check`. */
+if (writefile(tmp, sprintf('%.J\n', cleaned)) == null) {
+	system('rm -rf ' + shellQuote(work_dir));
+	die('failed to write the generated server configuration to ' + tmp);
+}
 
 if (system('sing-box check --config ' + shellQuote(tmp)) !== 0) {
 	system('rm -rf ' + shellQuote(work_dir));

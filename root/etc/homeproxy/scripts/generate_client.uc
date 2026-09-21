@@ -48,7 +48,14 @@ system('mkdir -p ' + shellQuote(RUN_DIR));
  * invariant, not a comment about today's safety. */
 const work_dir = mkdtemp();
 const tmp = work_dir + '/sing-box-c.json';
-writefile(tmp, sprintf('%.J\n', config));
+
+/* writefile() returns null on failure, and ignoring that turned a full disk or
+ * a permission error into a later "sing-box check failed", which points at the
+ * wrong thing entirely. */
+if (writefile(tmp, sprintf('%.J\n', config)) == null) {
+	system('rm -rf ' + shellQuote(work_dir));
+	die('failed to write the generated client configuration to ' + tmp);
+}
 
 if (system('sing-box check --config ' + shellQuote(tmp)) !== 0) {
 	system('rm -rf ' + shellQuote(work_dir));
