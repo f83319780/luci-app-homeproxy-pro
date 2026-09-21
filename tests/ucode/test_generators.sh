@@ -23,6 +23,15 @@ WORK="${2:-/tmp/hp-generator-test}"
 ROOT="$(cd "$ROOT" && pwd)"
 FAILED=0
 
+# The local rule-set fixture has to live under /tmp/homeproxy_ (see below), so
+# it cannot sit inside $WORK; this is the per-run root that holds it instead.
+# Created lazily by the first case that needs one.
+RULESET_ROOT=""
+cleanup() {
+	[ -n "$RULESET_ROOT" ] && rm -rf "$RULESET_ROOT"
+}
+trap cleanup EXIT INT TERM
+
 run_case() {
 	name="$1"
 	fixture="$2"
@@ -50,7 +59,18 @@ run_case() {
 		# Stage the ruleset under a /tmp/homeproxy_* directory so the
 		# whitelist recognises the staging path. Production paths
 		# typically live at /etc/homeproxy/ruleset/...
-		HP_RULESET="/tmp/homeproxy_test_ruleset/$name"
+		#
+		# The path cannot move under $WORK (validateHomeProxyPath() in
+		# homeproxy.uc whitelists /etc/homeproxy/ and /tmp/homeproxy_
+		# only), but it can still be per-run: mktemp gives each run its
+		# own tree, and the trap removes it even when a case bails out
+		# early.  The old fixed /tmp/homeproxy_test_ruleset/$name leaked
+		# one directory per run and let two concurrent runs overwrite
+		# each other's compiled .srs.
+		if [ -z "$RULESET_ROOT" ]; then
+			RULESET_ROOT="$(mktemp -d /tmp/homeproxy_test_ruleset.XXXXXX)"
+		fi
+		HP_RULESET="$RULESET_ROOT/$name"
 		mkdir -p "$HP_RULESET"
 		cp "$dir/ruleset/test.srs" "$HP_RULESET/test.srs"
 		sed "s#__RULESET_DIR__#$HP_RULESET#" "$fixture" > "$dir/config/homeproxy"

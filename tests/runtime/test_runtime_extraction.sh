@@ -48,25 +48,65 @@ OWN_WORK=0
 # The dnsmasq conf path is the one shared resource left: it must stay at
 # /tmp/etc/dnsmasq.conf.hp_test because the payload is what derives the section
 # name, so it cannot move into $WORK. Concurrent runs therefore take turns on
-# it, via mkdir (atomic everywhere, no flock dependency), with a bounded wait so
-# a stale lock cannot hang the suite.
+# it, via mkdir (atomic everywhere, no flock dependency), with a bounded wait.
+#
+# The lock records the owner PID and its start time.  A fixed mkdir lock with
+# no owner information left the directory behind whenever a run was SIGKILLed,
+# and the next run then burned the full two-minute timeout and failed - a
+# "flaky" test whose real cause was a stale artifact.  Now a lock whose holder
+# is gone, or that is older than the stale threshold, is reclaimed instead of
+# waited out.  The pid is written immediately after mkdir; a crash in that
+# microsecond-wide window is covered by the short no-pid grace below.
 DNSMASQ_LOCK="/tmp/etc/.hp-runtime-trace.lock"
+LOCK_TIMEOUT=120
+# Reclaim a lock held longer than this before the full timeout: a live but
+# wedged holder should not cost the next run two minutes.  Well above the
+# few seconds this test needs, so a healthy run is never stolen.
+LOCK_STALE=90
 mkdir -p "$(dirname "$DNSMASQ_LOCK")"
 _lock_tries=0
 while ! mkdir "$DNSMASQ_LOCK" 2>/dev/null; do
+	owner="$(cat "$DNSMASQ_LOCK/pid" 2>/dev/null || true)"
+	started="$(cat "$DNSMASQ_LOCK/started" 2>/dev/null || true)"
+	now="$(date +%s)"
+	case "$owner" in ''|*[!0-9]*) owner="" ;; esac
+	case "$started" in ''|*[!0-9]*) started="" ;; esac
+
+	if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+		echo "WARN: reclaiming stale lock $DNSMASQ_LOCK (holder pid $owner is gone)" >&2
+		rm -rf "$DNSMASQ_LOCK"
+		continue
+	fi
+	if [ -n "$started" ] && [ "$((now - started))" -gt "$LOCK_STALE" ]; then
+		echo "WARN: reclaiming lock $DNSMASQ_LOCK (held for $((now - started))s)" >&2
+		rm -rf "$DNSMASQ_LOCK"
+		continue
+	fi
+	if [ -z "$owner" ] && [ "$_lock_tries" -ge 5 ]; then
+		echo "WARN: reclaiming lock $DNSMASQ_LOCK (no owner pid was ever written)" >&2
+		rm -rf "$DNSMASQ_LOCK"
+		continue
+	fi
+
 	_lock_tries=$((_lock_tries + 1))
-	if [ "$_lock_tries" -gt 120 ]; then
-		echo "FAIL: another run has held $DNSMASQ_LOCK for over two minutes"
+	if [ "$_lock_tries" -gt "$LOCK_TIMEOUT" ]; then
+		echo "FAIL: another run has held $DNSMASQ_LOCK for over $LOCK_TIMEOUT seconds"
 		exit 1
 	fi
 	sleep 1
 done
+printf '%s\n' "$$" > "$DNSMASQ_LOCK/pid"
+date +%s > "$DNSMASQ_LOCK/started"
 
 # A trap rather than a line at the end: this script exits early on several
 # failure paths, and the first version of this cleanup was inserted into the
-# middle of one of them.
+# middle of one of them.  Release only if this run still owns the lock (the
+# pid/started files make that check possible), so a reclaimed lock is never
+# removed out from under its new owner.
 cleanup() {
-	rmdir "$DNSMASQ_LOCK" 2>/dev/null
+	if [ "$(cat "$DNSMASQ_LOCK/pid" 2>/dev/null || true)" = "$$" ]; then
+		rm -rf "$DNSMASQ_LOCK"
+	fi
 	[ "$OWN_WORK" = 1 ] && rm -rf "$WORK"
 }
 trap cleanup EXIT INT TERM

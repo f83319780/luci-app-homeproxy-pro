@@ -97,9 +97,45 @@ assert_empty "no source derives the UCI dir from HP_DIR" \
 # Every Loader.load() call site must use one of exactly two forms: the shared
 # constant, or the bare default cursor().  A literal path - or any other
 # expression - is how the original mistake would come back.
-BADLOAD="$(grep -rhoE 'Loader\.load\([^)]*\)' "$SCRIPTS" \
-	| grep -vE '^Loader\.load\((UCICONFIG_DIR)?\)$' | sort -u)"
-if [ -z "$BADLOAD" ]; then
+#
+# Coverage boundary: comments are removed and all whitespace is collapsed
+# before matching, so a call split over several lines
+# (`Loader.load(` / newline / `UCICONFIG_DIR)`) is still one call site, and a
+# call mentioned only inside a comment is not a call site at all.  A call the
+# code assembles through a variable (`const f = Loader.load; f(...)`) is out
+# of scope for a static guard; that boundary is stated, not silently assumed.
+BADLOAD="$(python3 - "$SCRIPTS" <<'PY'
+import pathlib, re, sys
+
+# Blank out comments only; string literals are kept, because the argument of a
+# Loader.load() call has to stay visible.  SQ and DQ exist because an escaped
+# quote inside this here-document upsets the shell command-substitution
+# scanner and truncates the program, which would leave the check passing
+# without testing anything.
+SQ, DQ = "'", '"'
+STRING = DQ + r'(?:\\.|[^"\\])*' + DQ + '|' + SQ + r"(?:\\.|[^'\\])*" + SQ
+COMMENT = r'/\*.*?\*/|//[^\n]*'
+TOKENS = re.compile(STRING + '|' + COMMENT, re.S)
+
+
+def blank(match):
+    return ' ' if match.group(0).startswith('/') else match.group(0)
+
+
+bad = set()
+for f in sorted(pathlib.Path(sys.argv[1]).rglob('*.uc')):
+    src = TOKENS.sub(blank, f.read_text(encoding='utf-8', errors='replace'))
+    flat = re.sub(r'\s+', ' ', src)
+    for arg in re.findall(r'Loader\s*\.\s*load\s*\(([^()]*)\)', flat):
+        arg = arg.strip()
+        if arg not in ('', 'UCICONFIG_DIR'):
+            bad.add('%s: Loader.load(%s)' % (f.relative_to(sys.argv[1]), arg))
+print('\n'.join(sorted(bad)))
+PY
+)" || BADLOAD="__SCAN_FAILED__"
+if [ "$BADLOAD" = "__SCAN_FAILED__" ]; then
+	fail "the Loader.load() scan could not run - fix the guard before trusting a pass"
+elif [ -z "$BADLOAD" ]; then
 	pass "every Loader.load() call site uses UCICONFIG_DIR or the bare default"
 else
 	fail "unexpected Loader.load() argument:"
@@ -298,18 +334,44 @@ else
 	fail "the frontend calls methods the backend does not define:$UNKNOWN"
 fi
 
-# And every one of them must be exercised somewhere, so a method cannot be
-# shipped - or a call site broken - without a test noticing.
-UNTESTED=""
-for m in $FRONTEND_METHODS; do
-	[ "$m" = "list" ] && continue
-	grep -rq "$m" "$ROOT/tests" || UNTESTED="$UNTESTED $m"
-done
+# And every one of them must be exercised by a test *script*, so a method
+# cannot be shipped - or a call site broken - without a test noticing.  The
+# old check was `grep -rq "$m" "$ROOT/tests"`: it counted the method name
+# appearing anywhere under tests/, including tests/README.md prose, so a
+# method could lose its only test and the guard would still pass on a
+# sentence.  A script qualifies only when it both names the method and
+# dispatches through the RPC layer (`.call(...)` - e.g. the
+# `rpc[method].call({...})` sweep in test_rpc_methods.sh - or a frontend
+# `rpcCall(...)` driven from a JS harness).  arch-guard.sh itself is excluded:
+# it names every method while parsing the frontend, which is not exercising
+# them.
+UNTESTED="$(python3 - "$ROOT" $FRONTEND_METHODS <<'PY'
+import pathlib, re, sys
 
-if [ -z "$UNTESTED" ]; then
-	pass "every RPC the frontend calls is referenced by a test"
+root = pathlib.Path(sys.argv[1]) / 'tests'
+methods = sys.argv[2:]
+files = [p for p in root.rglob('*')
+         if p.suffix in ('.sh', '.uc') and p.name != 'arch-guard.sh']
+bodies = [p.read_text(encoding='utf-8', errors='replace') for p in files]
+dispatch = re.compile(r'\.call\s*\(|rpcCall\s*\(')
+
+bad = []
+for m in methods:
+    if m == 'list':
+        continue
+    name = re.compile(r'\b%s\b' % re.escape(m))
+    if not any(name.search(b) and dispatch.search(b) for b in bodies):
+        bad.append(m)
+print(' '.join(bad))
+PY
+)" || UNTESTED="__SCAN_FAILED__"
+
+if [ "$UNTESTED" = "__SCAN_FAILED__" ]; then
+	fail "the test-script scan could not run - fix the guard before trusting a pass"
+elif [ -z "$UNTESTED" ]; then
+	pass "every RPC the frontend calls is exercised by a test script"
 else
-	fail "these RPCs are called by the frontend but referenced by no test:$UNTESTED"
+	fail "these RPCs are called by the frontend but exercised by no test script:$UNTESTED"
 fi
 
 echo
@@ -411,7 +473,7 @@ echo "== guard 10: nothing installs or removes packages on a target =="
 # version with `apk list -I`, and the opkg fallback reads `opkg status`.
 # grep -v drops comment lines: this guard's own explanation quotes the command
 # it forbids, and the first version flagged itself.
-MUTATING="$(grep -rnE '(^|[^a-z-])(apk|opkg)[[:space:]]+(add|del|delete|remove|upgrade|fix|update)([[:space:]]|$)' \
+MUTATING="$(grep -rnE '(^|[^a-z-])(apk|opkg)[[:space:]]+(add|install|del|delete|remove|upgrade|fix|update)([[:space:]]|$)' \
 	"$ROOT/.github/workflows" "$ROOT/tests" 2>/dev/null \
 	| grep -vE ':[0-9]+:[[:space:]]*#' || true)"
 
@@ -687,13 +749,45 @@ echo "== guard 15: every RPC whitelist uses index() === -1 ===="
 # differently when the haystack is a string (it does substring matching
 # instead of membership).  Pinning the rule to index() means a future method
 # has to use the spelling the rest of the file uses.
-# The exclusion list is the few legitimate `in` uses that are not array
-# membership (object key checks, `for ... in ...` loops, etc.).
+#
+# Coverage boundary: after comments are stripped and the source is flattened,
+# the pattern matches a string-literal array with one or more elements in
+# either quote style - so `x in ['a']` (single element) and `x in ["a", "b"]`
+# (double quotes) are caught, as is a membership test split over several lines.
+# Object key checks (`in {}`), `for ... in ...` over a non-literal and a
+# mention inside a comment are deliberately not matches.
 RPC="$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy"
 
-IN_ARR="$(grep -nE "\bin \['[^']+'(, '[^']+')+\]" "$RPC" \
-	| grep -vE '^[^:]+:[^:]+:[[:space:]]*//|^[^:]+:[^:]+:[[:space:]]*\*' || true)"
-if [ -z "$IN_ARR" ]; then
+IN_ARR="$(python3 - "$RPC" <<'PY'
+import pathlib, re, sys
+
+# SQ and DQ exist because an escaped quote inside this here-document upsets the
+# shell command-substitution scanner and truncates the program, which would
+# leave the check matching nothing and silently pass.
+SQ, DQ = "'", '"'
+COMMENT = r'/\*.*?\*/|//[^\n]*'
+TOKENS = re.compile(
+    DQ + r'(?:\\.|[^"\\])*' + DQ + '|' + SQ + r"(?:\\.|[^'\\])*" + SQ + '|' + COMMENT, re.S)
+
+
+def blank(match):
+    return ' ' if match.group(0).startswith('/') else match.group(0)
+
+
+src = TOKENS.sub(blank, pathlib.Path(sys.argv[1]).read_text(encoding='utf-8', errors='replace'))
+flat = re.sub(r'\s+', ' ', src)
+# One or more string elements, single- or double-quoted.  The old pattern
+# required a single-quoted pair, so `x in ['a']` and `x in ["a", "b"]` both
+# slipped through.  Comments are stripped and the source is flattened first,
+# so a membership test split over several lines is seen too.
+LIT = '(?:' + DQ + '[^' + DQ + ']*' + DQ + '|' + SQ + '[^' + SQ + ']*' + SQ + ')'
+for m in re.finditer(r'\bin\s*\[\s*' + LIT + r'(?:\s*,\s*' + LIT + r')*\s*\]', flat):
+    print(m.group(0))
+PY
+)" || IN_ARR="__SCAN_FAILED__"
+if [ "$IN_ARR" = "__SCAN_FAILED__" ]; then
+	fail "the 'in [...]' scan could not run - fix the guard before trusting a pass"
+elif [ -z "$IN_ARR" ]; then
 	pass "no array-membership 'in [...]' remains in luci.homeproxy"
 else
 	fail "array-membership 'in [...]' remains in luci.homeproxy - the report's M6 said unify on index():"
