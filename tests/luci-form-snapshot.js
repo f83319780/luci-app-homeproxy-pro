@@ -17,6 +17,80 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+/* --- Function fingerprints --------------------------------------------- *
+ * `props` used to drop every function-valued property, which made the 36
+ * `o.validate = ...` assignments in the views invisible: deleting one, or
+ * pointing it at a different function, produced a byte-identical snapshot.
+ *
+ * Record a digest of the function body instead of its source text, so a
+ * comment or an indentation change is not noise. The digest is
+ * `<length>:<sha1-12>` of the comment- and whitespace-normalised source.
+ *
+ * L.bind() returns a native-code bound function whose toString() is
+ * `function () { [native code] }` for every bound function, so six of the
+ * validators would be indistinguishable. L.bind() below therefore remembers
+ * the target and the stable bound arguments, and the fingerprint folds them
+ * in: `bind(<target>;arg,arg)`.
+ */
+const bindSources = new WeakMap();
+
+function describeArg(value) {
+	if (value === null)
+		return 'null';
+	if (value === undefined)
+		return 'undefined';
+	const kind = typeof value;
+	if (kind === 'string')
+		return JSON.stringify(value);
+	if (kind === 'number' || kind === 'boolean')
+		return String(value);
+	return `<${kind}>`;
+}
+
+/* Remove // and /* *\/ comments without touching string/template literals.
+ * Regex literals are left alone: an unescaped '/' cannot appear in one. */
+function stripComments(src) {
+	let out = '';
+	let quote = null;
+
+	for (let i = 0; i < src.length; i++) {
+		const c = src[i], d = src[i + 1];
+
+		if (quote) {
+			out += c;
+			if (c === '\\') { out += d === undefined ? '' : d; i++; }
+			else if (c === quote) quote = null;
+			continue;
+		}
+		if (c === '"' || c === "'" || c === '`') { quote = c; out += c; continue; }
+		if (c === '/' && d === '/') {
+			while (i < src.length && src[i] !== '\n') i++;
+			out += '\n';
+			continue;
+		}
+		if (c === '/' && d === '*') {
+			i += 2;
+			while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+			i++;
+			out += ' ';
+			continue;
+		}
+		out += c;
+	}
+	return out;
+}
+
+function fnFingerprint(fn) {
+	const bound = bindSources.get(fn);
+	const src = stripComments(String(bound ? bound.target : fn)).replace(/\s+/g, ' ').trim();
+	const digest = crypto.createHash('sha1').update(src).digest('hex').slice(0, 12);
+
+	if (bound)
+		return `bind(${src.length}:${digest};${bound.args.join(',')})`;
+	return `fn(${src.length}:${digest})`;
+}
 
 /* --- LuCI runtime mock start ------------------------------------------- */
 
@@ -33,7 +107,12 @@ function E(tag, attrs, children) {
 function _(text) { return text; }
 
 const L = {
-	bind: (fn, self, ...args) => fn.bind(self, ...args),
+	bind: (fn, self, ...args) => {
+		const bound = fn.bind(self, ...args);
+		if (typeof fn === 'function')
+			bindSources.set(bound, { target: fn, args: args.map(describeArg) });
+		return bound;
+	},
 	resolveDefault: (promise, fallback) => promise.catch(() => fallback),
 	ui: { hideModal: () => {}, addNotification: () => {}, changes: { apply: () => {} } },
 	env: { paths: {} }
@@ -60,8 +139,14 @@ class Option {
 			if (key.startsWith('__') || key === 'subsection')
 				continue;
 			const value = this[key];
-			if (typeof value === 'function' || value === undefined)
+			if (value === undefined)
 				continue;
+			/* A function-valued prop (validate, load, onclick, ...) gets a
+			   stable digest rather than being dropped. */
+			if (typeof value === 'function') {
+				props[key] = fnFingerprint(value);
+				continue;
+			}
 			props[key] = value;
 		}
 		return {

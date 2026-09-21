@@ -15,6 +15,10 @@
 #   HP_UPDATE_SNAPSHOTS=1 sh tests/ucode/test_golden_outbounds.sh <repo-root>
 # regenerates the snapshot (review the diff before committing it).
 #
+# Without sing-box on PATH the diff still runs but the schema check is only
+# reported as NOT RUN (degraded). HP_REQUIRE_SINGBOX=1 turns that into a
+# failure; it mirrors HP_REQUIRE_FW4 in test_firewall_template.sh.
+#
 # Usage: sh tests/ucode/test_golden_outbounds.sh <repo-root> [work-dir]
 
 ROOT="${1:-.}"
@@ -135,6 +139,19 @@ EOF
 	fi
 else
 	echo "NOT RUN: sing-box is not on PATH, schema check skipped"
+	# A skipped schema check must not read as "verified". The snapshot diff
+	# above catches a *change* and says nothing about whether the emitted JSON
+	# is one sing-box would accept, so say plainly that this run is degraded.
+	# HP_REQUIRE_SINGBOX=1 (the same shape as HP_REQUIRE_FW4 in
+	# test_firewall_template.sh) turns the skip into a failure for callers that
+	# know sing-box must be there - a target always has it.
+	echo "         DEGRADED: the golden outbounds were only diffed against the"
+	echo "         snapshot, not verified against the real sing-box schema"
+	if [ "${HP_REQUIRE_SINGBOX:-0}" = "1" ]; then
+		echo "FAIL: HP_REQUIRE_SINGBOX=1 but sing-box is not on PATH, so the"
+		echo "      golden outbounds are unverified"
+		FAILED=1
+	fi
 fi
 
 exit $FAILED

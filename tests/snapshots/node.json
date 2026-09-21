@@ -38,7 +38,9 @@
 								"props": {
 									"editable": true,
 									"inputstyle": "apply",
-									"modalonly": false
+									"inputtitle": "fn(151:ab827fc082c1)",
+									"modalonly": false,
+									"onclick": "fn(159:4eb1c6ebf7bd)"
 								}
 							},
 							{
@@ -50,7 +52,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"node\",\"label\")"
 								}
 							},
 							{
@@ -242,7 +246,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"password": true
+									"password": true,
+									"validate": "fn(624:74c3361baecc)"
 								}
 							},
 							{
@@ -350,7 +355,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(390:7d62701c74bd)"
 								}
 							},
 							{
@@ -962,7 +968,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"password": true
+									"password": true,
+									"validate": "fn(299:0114ce7d7e57)"
 								}
 							},
 							{
@@ -1246,7 +1253,8 @@
 								],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"onchange": "fn(1218:cbfda099eee4)"
 								}
 							},
 							{
@@ -1558,7 +1566,8 @@
 								"props": {
 									"modalonly": true,
 									"password": true,
-									"rmempty": false
+									"rmempty": false,
+									"validate": "bind(320:e98d3a5b6fdc;44)"
 								}
 							},
 							{
@@ -1576,7 +1585,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"rmempty": false
+									"rmempty": false,
+									"validate": "bind(320:e98d3a5b6fdc;44)"
 								}
 							},
 							{
@@ -1594,7 +1604,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"password": true
+									"password": true,
+									"validate": "bind(320:e98d3a5b6fdc;44)"
 								}
 							},
 							{
@@ -1989,7 +2000,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(372:8e41ef948891)"
 								}
 							},
 							{
@@ -2040,7 +2052,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"onchange": "fn(170:bb557571428c)"
 								}
 							},
 							{
@@ -2262,7 +2275,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"rmempty": false
+									"rmempty": false,
+									"validate": "fn(258:4c200a6512f3)"
 								}
 							},
 							{
@@ -2281,7 +2295,8 @@
 								"props": {
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
-									"modalonly": true
+									"modalonly": true,
+									"onclick": "bind(674:951101e37638;\"certificate\",\"client_ca\")"
 								}
 							},
 							{
@@ -2339,7 +2354,8 @@
 								"props": {
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
-									"modalonly": true
+									"modalonly": true,
+									"onclick": "bind(674:951101e37638;\"ECH config\",\"client_ech_conf\")"
 								}
 							},
 							{
@@ -2401,7 +2417,8 @@
 								],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(479:ff5aa0d89d05)"
 								}
 							},
 							{
@@ -2697,7 +2714,9 @@
 					"depends": [],
 					"values": [],
 					"subsection": null,
-					"props": {}
+					"props": {
+						"validate": "fn(239:6318979ec65f)"
+					}
 				},
 				{
 					"kind": "ListValue",
@@ -2763,6 +2782,7 @@
 					"values": [],
 					"subsection": null,
 					"props": {
+						"onchange": "fn(170:bb557571428c)",
 						"rmempty": false
 					}
 				},
@@ -2799,7 +2819,8 @@
 					"subsection": null,
 					"props": {
 						"inputstyle": "apply",
-						"inputtitle": "Save current settings"
+						"inputtitle": "Save current settings",
+						"onclick": "fn(88:ffd1b9ffd515)"
 					}
 				},
 				{
@@ -2811,7 +2832,9 @@
 					"values": [],
 					"subsection": null,
 					"props": {
-						"inputstyle": "apply"
+						"inputstyle": "apply",
+						"inputtitle": "fn(255:dcc5d87fa8b8)",
+						"onclick": "fn(281:55b704409a95)"
 					}
 				},
 				{
@@ -2823,7 +2846,9 @@
 					"values": [],
 					"subsection": null,
 					"props": {
-						"inputstyle": "reset"
+						"inputstyle": "reset",
+						"inputtitle": "fn(289:86850ffbbc67)",
+						"onclick": "fn(573:20171489e8c9)"
 					}
 				}
 			],
