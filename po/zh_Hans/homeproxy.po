@@ -91,7 +91,7 @@ msgstr "访问密钥 ID"
 
 #: htdocs/luci-static/resources/view/homeproxy/server.js:404
 msgid "Access key secret"
-msgstr "访问密钥"
+msgstr "访问密钥 Secret"
 
 #: htdocs/luci-static/resources/view/homeproxy/client/common.js:160
 msgid "Action"
