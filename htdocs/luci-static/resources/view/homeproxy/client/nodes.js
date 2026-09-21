@@ -29,13 +29,13 @@ function renderRoutingNodes(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Routing node'), _('Add a routing node'), data[0]);
-	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Routing node'), _('Add a routing node'), 'homeproxy');
+	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 	so = ss.option(form.Value, 'label', _('Label'));
-	so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
-	so.validate = L.bind(hp.validateUniqueValue, this, data[0], 'routing_node', 'label');
+	so.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
+	so.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'routing_node', 'label');
 	so.modalonly = true;
 
 	so = ss.option(form.Flag, 'enabled', _('Enable'));
@@ -48,7 +48,7 @@ function renderRoutingNodes(ctx) {
 	so.value('urltest', _('URLTest'));
 	for (let i in proxy_nodes)
 		so.value(i, proxy_nodes[i]);
-	so.validate = L.bind(hp.validateUniqueValue, this, data[0], 'routing_node', 'node');
+	so.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'routing_node', 'node');
 	so.editable = true;
 
 	so = ss.option(form.ListValue, 'domain_resolver', _('Domain resolver'),
@@ -60,7 +60,7 @@ function renderRoutingNodes(ctx) {
 		this.value('', _('Default'));
 		this.value('default-dns', _('Default DNS (issued by WAN)'));
 		this.value('system-dns', _('System DNS'));
-		uci.sections(data[0], 'dns_server', (res) => {
+		uci.sections('homeproxy', 'dns_server', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -91,7 +91,7 @@ function renderRoutingNodes(ctx) {
 		delete this.vallist;
 
 		this.value('', _('Direct'));
-		uci.sections(data[0], 'routing_node', (res) => {
+		uci.sections('homeproxy', 'routing_node', (res) => {
 			if (res['.name'] !== section_id && res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -103,7 +103,7 @@ function renderRoutingNodes(ctx) {
 			let node = this.section.formvalue(section_id, 'node');
 
 			let conflict = false;
-			uci.sections(data[0], 'routing_node', (res) => {
+			uci.sections('homeproxy', 'routing_node', (res) => {
 				if (res['.name'] !== section_id) {
 					if (res.outbound === section_id && res['.name'] == value)
 						conflict = true;
@@ -208,13 +208,13 @@ function renderDnsServers(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('DNS server'), _('Add a DNS server'), data[0]);
-	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('DNS server'), _('Add a DNS server'), 'homeproxy');
+	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 	so = ss.option(form.Value, 'label', _('Label'));
-	so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
-	so.validate = L.bind(hp.validateUniqueValue, this, data[0], 'dns_server', 'label');
+	so.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
+	so.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'dns_server', 'label');
 	so.modalonly = true;
 
 	so = ss.option(form.Flag, 'enabled', _('Enable'));
@@ -272,7 +272,7 @@ function renderDnsServers(ctx) {
 		this.value('', _('None'));
 		this.value('default-dns', _('Default DNS (issued by WAN)'));
 		this.value('system-dns', _('System DNS'));
-		uci.sections(data[0], 'dns_server', (res) => {
+		uci.sections('homeproxy', 'dns_server', (res) => {
 			if (res['.name'] !== section_id && res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -282,7 +282,7 @@ function renderDnsServers(ctx) {
 	so.validate = function(section_id, value) {
 		if (section_id && value) {
 			let conflict = false;
-			uci.sections(data[0], 'dns_server', (res) => {
+			uci.sections('homeproxy', 'dns_server', (res) => {
 				if (res['.name'] !== section_id)
 					if (res.address_resolver === section_id && res['.name'] == value)
 						conflict = true;
@@ -309,7 +309,7 @@ function renderDnsServers(ctx) {
 		delete this.vallist;
 
 		this.value('direct-out', _('Direct'));
-		uci.sections(data[0], 'routing_node', (res) => {
+		uci.sections('homeproxy', 'routing_node', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});

@@ -28,13 +28,13 @@ function render(ctx) {
 	ss.rowcolors = true;
 	ss.sortable = true;
 	ss.nodescriptions = true;
-	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Rule set'), _('Add a rule set'), data[0]);
-	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
+	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Rule set'), _('Add a rule set'), 'homeproxy');
+	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
 
 	so = ss.option(form.Value, 'label', _('Label'));
-	so.load = L.bind(hp.loadDefaultLabel, this, data[0]);
-	so.validate = L.bind(hp.validateUniqueValue, this, data[0], 'ruleset', 'label');
+	so.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
+	so.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'ruleset', 'label');
 	so.modalonly = true;
 
 	so = ss.option(form.Flag, 'enabled', _('Enable'));
@@ -94,7 +94,7 @@ function render(ctx) {
 
 		this.value('', _('Default'));
 		this.value('direct-out', _('Direct'));
-		uci.sections(data[0], 'routing_node', (res) => {
+		uci.sections('homeproxy', 'routing_node', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});

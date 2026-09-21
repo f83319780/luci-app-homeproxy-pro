@@ -32,6 +32,52 @@ const css = '				\
 
 const hp_dir = '/var/run/homeproxy';
 
+/* One view-level poll for all three log views.
+ *
+ * getRuntimeLog() is bound to an option's render() hook, and every map.reset()
+ * - any UCI write, a log level change, saving the token, updating a resource -
+ * re-renders each of those options. poll.add() in there therefore added a
+ * fresh handler per re-render, so every tick read each log file once per
+ * leftover handler, and the stale handlers painted the detached textarea of a
+ * previous render.
+ *
+ * This reuses hp.statusPoller() (see client.js), the same once-per-view
+ * registrar that fixes the status bar leak: its flag lives inside the returned
+ * registrar, so one handler is added no matter how often render() runs. It is
+ * called with all three files at once because a single tick reads them
+ * together.
+ *
+ * `log_targets` always holds the textarea installed by the *current* render,
+ * so the poll paints into the live DOM without an id lookup - the three
+ * textareas share the `#log_textarea` id and cannot be told apart by id. */
+const log_targets = {};
+
+function readRuntimeLog(filename) {
+	return fs.read_direct(String.format('%s/%s.log', hp_dir, filename), 'text')
+		.then((res) => E('pre', { 'wrap': 'pre' }, [
+			res.trim() || _('Log is empty.')
+		]))
+		.catch((err) => {
+			if (err.toString().includes('NotFoundError'))
+				return E('pre', { 'wrap': 'pre' }, [ _('Log file does not exist.') ]);
+
+			return E('pre', { 'wrap': 'pre' }, [ _('Unknown error: %s').format(err) ]);
+		});
+}
+
+const ensureLogPoll = hp.statusPoller({
+	poll: poll,
+	read: () => Promise.all(Object.keys(log_targets).map((filename) =>
+		readRuntimeLog(filename).then((node) => ({ filename: filename, node: node })))),
+	paint: (entries) => {
+		for (const entry of entries) {
+			const target = log_targets[entry.filename];
+			if (target)
+				dom.content(target, entry.node);
+		}
+	}
+});
+
 function getConnStat(o, site) {
 	o.default = E('div', { 'style': 'cbi-value-field' }, [
 		E('button', {
@@ -162,28 +208,8 @@ function getRuntimeLog(o, name, _option_index, section_id, _in_table) {
 		}, _('Collecting data...'))
 	);
 
-	let log;
-	poll.add(L.bind(() => {
-		return fs.read_direct(String.format('%s/%s.log', hp_dir, filename), 'text')
-		.then((res) => {
-			log = E('pre', { 'wrap': 'pre' }, [
-				res.trim() || _('Log is empty.')
-			]);
-
-			dom.content(log_textarea, log);
-		}).catch((err) => {
-			if (err.toString().includes('NotFoundError'))
-				log = E('pre', { 'wrap': 'pre' }, [
-					_('Log file does not exist.')
-				]);
-			else
-				log = E('pre', { 'wrap': 'pre' }, [
-					_('Unknown error: %s').format(err)
-				]);
-
-			dom.content(log_textarea, log);
-		});
-	}));
+	log_targets[filename] = log_textarea;
+	ensureLogPoll();
 
 	return E([
 		E('style', [ css ]),

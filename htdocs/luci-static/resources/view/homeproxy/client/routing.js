@@ -193,7 +193,7 @@ function render(ctx) {
 		this.value('nil', _('Disable (the service)'));
 		this.value('direct-out', _('Direct'));
 		this.value('block-out', _('Block'));
-		uci.sections(data[0], 'routing_node', (res) => {
+		uci.sections('homeproxy', 'routing_node', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -211,7 +211,7 @@ function render(ctx) {
 
 		this.value('default-dns', _('Default DNS (issued by WAN)'));
 		this.value('system-dns', _('System DNS'));
-		uci.sections(data[0], 'dns_server', (res) => {
+		uci.sections('homeproxy', 'dns_server', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
