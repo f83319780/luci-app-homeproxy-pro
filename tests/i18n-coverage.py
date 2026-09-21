@@ -8,6 +8,11 @@
 # count as untranslated. The check only warns by default so it does not block
 # a build; pass --fail-below to turn the warning into a failure.
 #
+# A template that parses to fewer than MIN_TOTAL non-ignored entries is a hard
+# failure regardless of flags: an empty or truncated .pot makes every
+# percentage meaningless, and a coverage number must not be allowed to report
+# 100% for a translation set that covers nothing.
+#
 # Usage:
 #   tests/i18n-coverage.py                       # warn below 95%
 #   tests/i18n-coverage.py --warn-below 90
@@ -22,6 +27,15 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE = os.path.join(ROOT, "po/templates/homeproxy.pot")
 TRANSLATION = os.path.join(ROOT, "po/zh_Hans/homeproxy.po")
 IGNORE = os.path.join(ROOT, "tests/i18n-ignore.txt")
+
+# The .pot is generated from the shipped sources and currently parses to 737
+# non-empty msgid entries, of which tests/i18n-ignore.txt exempts enough to
+# leave 729 checked.  400 is a deliberately low floor - a bit over half the
+# current corpus - chosen to catch an empty or truncated template without
+# failing on a legitimate future removal of some strings.  0 must never be
+# accepted: `translated / total` used to fall back to 100% when total was 0,
+# so a wiped .pot passed both --warn-below 100 and --fail-below 100.
+MIN_TOTAL = 400
 
 
 def load_ignore(path):
@@ -119,6 +133,16 @@ def main():
     print(f"zh_Hans translation coverage: {translated}/{total} ({coverage:.1f}%)"
           f", {len(ignored)} msgid(s) ignored by tests/i18n-ignore.txt")
 
+    # A denominator below the floor means the template is empty or truncated,
+    # not that the translation is perfect. Fail hard whatever the flags say;
+    # this is a template-integrity check, not a coverage threshold.
+    if total < MIN_TOTAL:
+        print(f"::error title=Translation coverage::the gettext template parsed"
+              f" to only {total} non-ignored msgid(s), below the {MIN_TOTAL}"
+              f" floor - the .pot is empty or truncated, so {coverage:.1f}%"
+              f" coverage is meaningless")
+        return 1
+
     if untranslated and args.list:
         print(f"{len(untranslated)} untranslated entries, first {min(args.list, len(untranslated))}:")
         for msgid in untranslated[:args.list]:
@@ -142,8 +166,14 @@ def main():
         return 1
 
     if coverage < args.warn_below:
+        # --warn-below is advisory on purpose (build.yml records the number
+        # instead of gating a release on it), so the message must say out loud
+        # that this did not fail anything; otherwise a red annotation reads
+        # like a gate that the exit status contradicts.
         print(f"::warning title=Translation coverage::zh_Hans coverage {coverage:.1f}% "
-              f"is below {args.warn_below}% ({len(untranslated)} untranslated entry/entries)")
+              f"is below {args.warn_below}% ({len(untranslated)} untranslated entry/entries)"
+              f" - advisory only, this did NOT fail the build; use --fail-below"
+              f" {args.warn_below:g} to make it a gate")
 
     return 0
 

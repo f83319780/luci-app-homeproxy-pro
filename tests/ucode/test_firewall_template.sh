@@ -28,11 +28,10 @@
 #      tests/toolchain/build-ucode-linux.sh builds. The missing piece is
 #      firewall4's /usr/share/ucode/fw4.uc.
 #
-# Usage: sh tests/ucode/test_firewall_template.sh <repo-root>
+# Usage: sh tests/ucode/test_firewall_template.sh <repo-root> [work-dir]
 
 ROOT="${1:-.}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$(mktemp)"
 FAILED=0
 
 TEMPLATE_SRC="$ROOT/root/etc/homeproxy/scripts/firewall_post.ut"
@@ -58,12 +57,26 @@ else
 fi
 
 # --- layer 2: the render -------------------------------------------------
-# mktemp -d, and removed on every exit path: this used to leak a directory per
-# run (50 of them had accumulated on the test device), which is both untidy and
-# a determinism problem - nothing else may depend on how many runs came before.
-STAGE="$(mktemp -d "${TMPDIR:-/tmp}/hp-fwtpl.XXXXXX")"
+# The render output and its stderr live beside the staged template, never at a
+# fixed /tmp path.  A caller that passes a work dir (tests/ucode/run.sh hands
+# every sub-suite a directory under its own $WORK) gets the pieces under it;
+# with no argument each run gets its own mktemp -d instead.  Either way no two
+# runs share a path, and the whole stage goes away on every exit path - this
+# used to leak a directory per run (50 of them had accumulated on the test
+# device), which is both untidy and a determinism problem.
+if [ -n "${2:-}" ]; then
+	STAGE="$2/firewall_template"
+	rm -rf "$STAGE"
+	mkdir -p "$STAGE"
+	OWN_STAGE=0
+else
+	STAGE="$(mktemp -d "${TMPDIR:-/tmp}/hp-fwtpl.XXXXXX")"
+	OWN_STAGE=1
+fi
 STAGED="$STAGE/firewall_post.ut"
-trap 'rm -rf "$STAGE"' EXIT INT TERM
+OUT="$STAGE/rendered.nft"
+ERR="$STAGE/render.err"
+trap '[ "$OWN_STAGE" = 1 ] && rm -rf "$STAGE"' EXIT INT TERM
 
 # Probe with ucode, not utpl: `utpl -e` is not an eval flag, it renders the
 # argument as template text and always succeeds.
@@ -81,12 +94,10 @@ if ! ucode -e 'require("fw4");' > "/dev/null" 2>&1; then
 	if [ "${HP_REQUIRE_FW4:-0}" = "1" ]; then
 		echo "FAIL: HP_REQUIRE_FW4=1 but 'fw4' is not resolvable, so the render"
 		echo "      layer cannot run here and the template is unverified"
-		rm -f "$OUT"
 		exit 1
 	fi
 
 	[ "$FAILED" -eq 0 ] && echo "PASS: firewall_post.ut keeps '{%-' directly after the shebang"
-	rm -f "$OUT"
 	exit $FAILED
 fi
 
@@ -103,14 +114,12 @@ sed -e "s#'/etc/homeproxy/#'$ROOT/root/etc/homeproxy/#g" "$TEMPLATE_SRC" > "$STA
 if grep -q "'/etc/homeproxy/" "$STAGED"; then
 	echo "FAIL: firewall_post.ut: could not rewrite the device paths"
 	echo "      (the '/etc/homeproxy/' prefix anchor no longer matches)"
-	rm -f "$OUT"
 	exit 1
 fi
 
-if ! utpl -S "$STAGED" > "$OUT" 2>"/tmp/hp-fw4tpl.err"; then
+if ! utpl -S "$STAGED" > "$OUT" 2> "$ERR"; then
 	echo "FAIL: could not render firewall_post.ut"
-	head -5 "/tmp/hp-fw4tpl.err"
-	rm -f "$OUT"
+	head -5 "$ERR"
 	exit 1
 fi
 
@@ -134,5 +143,4 @@ fi
 
 [ "$FAILED" -eq 0 ] && echo "PASS: firewall_post.ut renders homeproxy objects as standalone nft statements"
 
-rm -f "$OUT"
 exit $FAILED

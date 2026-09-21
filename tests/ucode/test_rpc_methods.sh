@@ -32,6 +32,10 @@ cp -R "$ROOT/root/etc/homeproxy/scripts/." "$WORK/scripts/"
 # stage_rewrite <src> <dst>: point a file's absolute /etc/homeproxy paths at the
 # sandbox, and nothing else.  Both the imports and the runtime directories have
 # to move, or the test would write real certificates into /etc/homeproxy/certs.
+# The certificate staging prefix is moved too (it is a literal /tmp path inside
+# luci.homeproxy): the driver then writes and checks the staged upload under
+# $WORK/tmp, so the test never touches a fixed global path and two concurrent
+# runs cannot delete each other's upload between the stage and the call.
 stage_rewrite() {
 	sed -e "s#/etc/homeproxy/scripts/#$WORK/scripts/#g" \
 	    -e "s#^const HP_DIR = '/etc/homeproxy';#const HP_DIR = '$WORK';#" \
@@ -39,6 +43,7 @@ stage_rewrite() {
 	    -e "s#^const RUN_DIR = '/var/run/homeproxy';#const RUN_DIR = '$WORK/run';#" \
 	    -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$WORK/run';#" \
 	    -e "s#^export const UCICONFIG_DIR = '/etc/config';#export const UCICONFIG_DIR = '$WORK/cfg';#" \
+	    -e "s#/tmp/homeproxy_cert_#$WORK/tmp/homeproxy_cert_#g" \
 	    "$1" > "$2"
 }
 
@@ -75,14 +80,16 @@ const ECH = '-----BEGIN ECH CONFIGS-----\n' +
 	'-----END ECH CONFIGS-----\n';
 
 /* The upload path is what the frontend's ui.uploadFile writes and what the
- * module reads; it is a literal /tmp path inside the module, so the driver
- * stages the real one and cleans up afterwards. */
+ * module reads.  The staged module's /tmp/homeproxy_cert_ prefix is rewritten
+ * to this run's work dir, so stage() and the module agree without either
+ * touching a fixed /tmp path. */
+const STAGE_DIR = '@@STAGE@@';
 function stage(filename, content) {
-	writefile(sprintf('/tmp/homeproxy_cert_%s.tmp', filename), content);
+	writefile(sprintf('%s/homeproxy_cert_%s.tmp', STAGE_DIR, filename), content);
 }
 
 function tmp_exists(filename) {
-	return access(sprintf('/tmp/homeproxy_cert_%s.tmp', filename));
+	return access(sprintf('%s/homeproxy_cert_%s.tmp', STAGE_DIR, filename));
 }
 
 function call(filename) {
@@ -134,10 +141,10 @@ check('an unknown filename is refused', bogus.result === false);
 check('an unknown filename says why', bogus.error === 'illegal cerificate filename',
 	bogus.error);
 
-writefile('/tmp/homeproxy_cert_client_ca.tmp', '');
+writefile(sprintf('%s/homeproxy_cert_client_ca.tmp', STAGE_DIR), '');
 check('an empty upload is refused', call('client_ca').error === 'empty certificate file');
 
-system('rm -f /tmp/homeproxy_cert_client_ca.tmp');
+system(sprintf('rm -f %s/homeproxy_cert_client_ca.tmp', STAGE_DIR));
 check('a missing upload is refused', call('client_ca').result === false);
 
 /* No method may throw on a request with no arguments at all. */
@@ -177,21 +184,13 @@ printf('rpc methods: %d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);
 DRIVER
 
-# The staging path in the module is the literal /tmp; keep the test's own files
-# out of the way of anything else and clean them on exit.
-cleanup() {
-	rm -f /tmp/homeproxy_cert_client_ca.tmp /tmp/homeproxy_cert_server_publickey.tmp \
-	      /tmp/homeproxy_cert_server_privatekey.tmp /tmp/homeproxy_cert_client_ech_conf.tmp
-}
-trap cleanup EXIT INT TERM
-
 # The module ends with `return { 'luci.homeproxy': methods };`, which makes it a
 # program rather than an importable module - that is how rpcd runs it.  Drop
 # that one line and append the driver, so the module's top-level code builds
 # `methods` and the driver drives it in the same scope.  Nothing else about the
 # file changes.
 sed '$d' "$WORK/rpc.uc" > "$WORK/run.uc"
-sed "s#@@WORK@@#$WORK#" "$WORK/driver_body.uc" >> "$WORK/run.uc"
+sed -e "s#@@WORK@@#$WORK#" -e "s#@@STAGE@@#$WORK/tmp#" "$WORK/driver_body.uc" >> "$WORK/run.uc"
 
 if ucode -L "$WORK/scripts" -L "$WORK" "$WORK/run.uc"; then
 	echo "PASS: rpc method behaviour"
