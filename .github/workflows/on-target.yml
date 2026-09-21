@@ -95,8 +95,10 @@ jobs:
           printf '%s\n' "$HP_SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           # The suite connects with BatchMode, so an unverified host key would be
-          # a hard failure rather than a prompt. Pinned via the repository
-          # variable when set, skipped otherwise.
+          # a hard failure rather than a prompt.  There is no repository variable
+          # pinning it - the key is learned on the fly with ssh-keyscan
+          # (trust-on-first-use).  A scan that fails leaves the suite to fail on
+          # the host-key check rather than silently trusting something else.
           ssh-keyscan -T 10 -H "$(printf '%s' "${{ inputs.host }}" | cut -d@ -f2)" \
             >> ~/.ssh/known_hosts 2>/dev/null || true
 

@@ -25,12 +25,22 @@ PKG_NAME:=luci-app-homeproxy
 PKG_VERSION:=28.9.1.14
 PKG_RELEASE:=10
 
+# Only files the package actually ships belong here.  The previous list named
+# four paths that exist nowhere in the tree - certs/ and ruleset/ are created at
+# runtime, and the two *_list.txt files are written by the LuCI ACL editor - so
+# those declarations did nothing.  What is listed instead is the resource data
+# the router updates by itself: on a running device those files are newer than
+# the ones in the package, and without this an upgrade would overwrite them.
 define Package/luci-app-homeproxy/conffiles
 /etc/config/homeproxy
-/etc/homeproxy/certs/
-/etc/homeproxy/ruleset/
-/etc/homeproxy/resources/direct_list.txt
-/etc/homeproxy/resources/proxy_list.txt
+/etc/homeproxy/resources/china_ip4.txt
+/etc/homeproxy/resources/china_ip6.txt
+/etc/homeproxy/resources/china_list.txt
+/etc/homeproxy/resources/gfw_list.txt
+/etc/homeproxy/resources/china_ip4.ver
+/etc/homeproxy/resources/china_ip6.ver
+/etc/homeproxy/resources/china_list.ver
+/etc/homeproxy/resources/gfw_list.ver
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk
