@@ -253,6 +253,7 @@
 					"subsection": null,
 					"props": {
 						"default": "bypass_mainland_china",
+						"onchange": "fn(100:dccfb3b95340)",
 						"rmempty": false
 					}
 				},
@@ -273,7 +274,9 @@
 						]
 					],
 					"subsection": null,
-					"props": {}
+					"props": {
+						"validate": "fn(376:3a1eaf5f61c2)"
+					}
 				},
 				{
 					"kind": "ListValue",
@@ -366,6 +369,7 @@
 								"subsection": null,
 								"props": {
 									"default": "system",
+									"onchange": "fn(373:f3ab42d1ca03)",
 									"rmempty": false
 								}
 							},
@@ -481,6 +485,7 @@
 								"subsection": null,
 								"props": {
 									"default": "nil",
+									"load": "fn(347:bdff551797c2)",
 									"rmempty": false
 								}
 							},
@@ -494,6 +499,7 @@
 								"subsection": null,
 								"props": {
 									"default": "default-dns",
+									"load": "fn(326:345de0db50cf)",
 									"rmempty": false
 								}
 							}
@@ -528,7 +534,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"routing_node\",\"label\")"
 								}
 							},
 							{
@@ -558,7 +566,8 @@
 								],
 								"subsection": null,
 								"props": {
-									"editable": true
+									"editable": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"routing_node\",\"node\")"
 								}
 							},
 							{
@@ -575,6 +584,7 @@
 								"values": [],
 								"subsection": null,
 								"props": {
+									"load": "fn(356:d9c0755071ec)",
 									"modalonly": true
 								}
 							},
@@ -649,7 +659,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"editable": true
+									"editable": true,
+									"load": "fn(284:530aca6575b5)",
+									"validate": "fn(487:34bee8692641)"
 								}
 							},
 							{
@@ -666,7 +678,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(191:9e12deb88a51)"
 								}
 							},
 							{
@@ -684,7 +697,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"placeholder": "https://www.gstatic.com/generate_204"
+									"placeholder": "https://www.gstatic.com/generate_204",
+									"validate": "fn(239:6318979ec65f)"
 								}
 							},
 							{
@@ -703,7 +717,8 @@
 								"props": {
 									"datatype": "uinteger",
 									"modalonly": true,
-									"placeholder": "180"
+									"placeholder": "180",
+									"validate": "fn(276:b10cc6e36793)"
 								}
 							},
 							{
@@ -809,7 +824,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"routing_rule\",\"label\")"
 								}
 							},
 							{
@@ -998,6 +1015,7 @@
 								"values": [],
 								"subsection": null,
 								"props": {
+									"load": "fn(219:b7b6c816012f)",
 									"modalonly": true
 								}
 							},
@@ -1071,6 +1089,7 @@
 								"subsection": null,
 								"props": {
 									"editable": true,
+									"load": "fn(263:6f52e51cea77)",
 									"rmempty": false
 								}
 							},
@@ -1325,6 +1344,7 @@
 								"values": [],
 								"subsection": null,
 								"props": {
+									"load": "fn(356:d9c0755071ec)",
 									"modalonly": true
 								}
 							},
@@ -1643,7 +1663,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(390:7d62701c74bd)"
 								}
 							},
 							{
@@ -1668,7 +1689,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(390:7d62701c74bd)"
 								}
 							},
 							{
@@ -1770,6 +1792,7 @@
 								"subsection": null,
 								"props": {
 									"default": "default-dns",
+									"load": "fn(326:345de0db50cf)",
 									"rmempty": false
 								}
 							},
@@ -1901,7 +1924,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"dns_server\",\"label\")"
 								}
 							},
 							{
@@ -2062,7 +2087,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "fn(384:9fa59da460cf)",
+									"modalonly": true,
+									"validate": "fn(322:e76c15d647fc)"
 								}
 							},
 							{
@@ -2114,6 +2141,7 @@
 								"props": {
 									"default": "direct-out",
 									"editable": true,
+									"load": "fn(263:6f52e51cea77)",
 									"rmempty": false
 								}
 							}
@@ -2165,7 +2193,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"dns_rule\",\"label\")"
 								}
 							},
 							{
@@ -2325,6 +2355,7 @@
 								"values": [],
 								"subsection": null,
 								"props": {
+									"load": "fn(219:b7b6c816012f)",
 									"modalonly": true
 								}
 							},
@@ -2406,6 +2437,7 @@
 								"subsection": null,
 								"props": {
 									"editable": true,
+									"load": "fn(326:345de0db50cf)",
 									"rmempty": false
 								}
 							},
@@ -3012,7 +3044,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(390:7d62701c74bd)"
 								}
 							},
 							{
@@ -3037,7 +3070,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(390:7d62701c74bd)"
 								}
 							},
 							{
@@ -3107,7 +3141,9 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"load": "bind(206:006f14096ca5;\"homeproxy\")",
+									"modalonly": true,
+									"validate": "bind(461:3a6d28762720;\"homeproxy\",\"ruleset\",\"label\")"
 								}
 							},
 							{
@@ -3202,7 +3238,8 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"rmempty": false
+									"rmempty": false,
+									"validate": "fn(490:744c4c36ac8a)"
 								}
 							},
 							{
@@ -3218,7 +3255,9 @@
 								],
 								"values": [],
 								"subsection": null,
-								"props": {}
+								"props": {
+									"load": "fn(293:8a1c8158e8ba)"
+								}
 							},
 							{
 								"kind": "Value",
@@ -3252,7 +3291,8 @@
 								"values": [],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(481:26f8e4956cd4)"
 								}
 							},
 							{
@@ -3325,7 +3365,8 @@
 					"subsection": null,
 					"props": {
 						"default": "8.8.8.8",
-						"rmempty": false
+						"rmempty": false,
+						"validate": "fn(758:77dbe8107e5c)"
 					}
 				},
 				{
@@ -3364,7 +3405,8 @@
 					"subsection": null,
 					"props": {
 						"default": "223.5.5.5",
-						"rmempty": false
+						"rmempty": false,
+						"validate": "fn(624:299cd4e865be)"
 					}
 				},
 				{
@@ -3406,7 +3448,16 @@
 								"name": "optimistic_cache",
 								"title": "Optimistic DNS cache",
 								"description": "Return expired cache immediately and refresh in background (sing-box 1.14).",
-								"depends": [],
+								"depends": [
+									[
+										"disable_cache",
+										"0"
+									],
+									[
+										"disable_cache_expire",
+										"0"
+									]
+								],
 								"values": [],
 								"subsection": null,
 								"props": {
@@ -3439,8 +3490,13 @@
 								"kind": "Flag",
 								"name": "cache_file_store_dns",
 								"title": "Store DNS cache",
-								"description": "Persist DNS cache across restarts (replaces Store RDRC).",
-								"depends": [],
+								"description": "Persist DNS cache across restarts (sing-box 1.14, replaces Store RDRC).",
+								"depends": [
+									[
+										"disable_cache",
+										"0"
+									]
+								],
 								"values": [],
 								"subsection": null,
 								"props": {
@@ -3780,8 +3836,12 @@
 								"props": {
 									"datatype": "hostname",
 									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
+									"load": "fn(274:3a38855f08ed)",
 									"monospace": true,
-									"rows": 10
+									"remove": "fn(340:e5ff92a397f3)",
+									"rows": 10,
+									"validate": "fn(203:c60da90ca2f3)",
+									"write": "fn(247:51376a274a47)"
 								}
 							},
 							{
@@ -3799,8 +3859,12 @@
 								"props": {
 									"datatype": "hostname",
 									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
+									"load": "fn(275:0bec3bd57ebe)",
 									"monospace": true,
-									"rows": 10
+									"remove": "fn(341:288f4ec1c7ea)",
+									"rows": 10,
+									"validate": "fn(203:c60da90ca2f3)",
+									"write": "fn(248:6bd5224288bd)"
 								}
 							}
 						],

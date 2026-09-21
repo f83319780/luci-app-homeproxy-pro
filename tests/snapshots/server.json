@@ -43,8 +43,10 @@
 					"values": [],
 					"subsection": null,
 					"props": {
+						"load": "bind(206:006f14096ca5;\"homeproxy\")",
 						"modalonly": true,
-						"rmempty": false
+						"rmempty": false,
+						"validate": "bind(461:3a6d28762720;\"homeproxy\",\"server\",\"label\")"
 					}
 				},
 				{
@@ -160,7 +162,8 @@
 					"values": [],
 					"subsection": null,
 					"props": {
-						"datatype": "port"
+						"datatype": "port",
+						"validate": "bind(461:3a6d28762720;\"homeproxy\",\"server\",\"port\")"
 					}
 				},
 				{
@@ -231,7 +234,8 @@
 					"subsection": null,
 					"props": {
 						"modalonly": true,
-						"password": true
+						"password": true,
+						"validate": "fn(624:74c3361baecc)"
 					}
 				},
 				{
@@ -624,7 +628,8 @@
 					"subsection": null,
 					"props": {
 						"modalonly": true,
-						"password": true
+						"password": true,
+						"validate": "fn(299:0114ce7d7e57)"
 					}
 				},
 				{
@@ -805,7 +810,8 @@
 					],
 					"subsection": null,
 					"props": {
-						"modalonly": true
+						"modalonly": true,
+						"onchange": "fn(1218:cbfda099eee4)"
 					}
 				},
 				{
@@ -1164,7 +1170,8 @@
 					"subsection": null,
 					"props": {
 						"modalonly": true,
-						"rmempty": false
+						"rmempty": false,
+						"validate": "fn(372:8e41ef948891)"
 					}
 				},
 				{
@@ -1432,7 +1439,8 @@
 					"values": [],
 					"subsection": null,
 					"props": {
-						"modalonly": true
+						"modalonly": true,
+						"validate": "fn(239:aa9e6f5d532d)"
 					}
 				},
 				{
@@ -1954,7 +1962,8 @@
 					"subsection": null,
 					"props": {
 						"modalonly": true,
-						"rmempty": false
+						"rmempty": false,
+						"validate": "fn(258:4c200a6512f3)"
 					}
 				},
 				{
@@ -1973,7 +1982,8 @@
 					"props": {
 						"inputstyle": "action",
 						"inputtitle": "Upload...",
-						"modalonly": true
+						"modalonly": true,
+						"onclick": "bind(674:951101e37638;\"certificate\",\"server_publickey\")"
 					}
 				},
 				{
@@ -2012,7 +2022,8 @@
 					"subsection": null,
 					"props": {
 						"modalonly": true,
-						"rmempty": false
+						"rmempty": false,
+						"validate": "fn(258:4c200a6512f3)"
 					}
 				},
 				{
@@ -2031,7 +2042,8 @@
 					"props": {
 						"inputstyle": "action",
 						"inputtitle": "Upload...",
-						"modalonly": true
+						"modalonly": true,
+						"onclick": "bind(674:951101e37638;\"private key\",\"server_privatekey\")"
 					}
 				},
 				{
@@ -2056,6 +2068,7 @@
 						"modalonly": true,
 						"monospace": true,
 						"placeholder": "-----BEGIN ECH KEYS-----\nACBE2+piYBLrOywCbRYU+ZpEkk8keeBlUXbKqLRmQ/68FwBL/g0ARwAAIAAgn8HI\n93RfdV/LaDk+LC9H4h+4WhVBFmWKdhiT3vvpGi8ACAABAAEAAQADABRvdXRlci1z\nbmkuYW55LmRvbWFpbgAA\n-----END ECH KEYS-----",
+						"renderWidget": "fn(585:d508638e2d45)",
 						"rows": 3
 					}
 				},
