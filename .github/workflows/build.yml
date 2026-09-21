@@ -107,7 +107,10 @@ jobs:
           sudo -E install -m0755 -s po2lmo /usr/local/bin/po2lmo
           popd
 
-          curl -fLO "https://raw.githubusercontent.com/openwrt/openwrt/master/scripts/ipkg-build"
+          # Pinned to a commit, not to master: this runs in the release job,
+          # which has contents: write and a GH_TOKEN, so a moved master there
+          # would be arbitrary code execution.
+          curl -fLo ipkg-build "https://raw.githubusercontent.com/openwrt/openwrt/c618c6a353f2adafab4c182224739d3687896e49/scripts/ipkg-build"
           sudo install -m0755 ipkg-build /usr/local/bin/ipkg-build
 
       - name: Verify toolchain

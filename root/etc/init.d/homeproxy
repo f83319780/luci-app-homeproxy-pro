@@ -36,6 +36,14 @@
 # process and by procd's own respawn loop while the service was dead - and
 # because the generated file was recorded as known-good *before* that probe
 # ran, the rollback had nothing left to restore.
+#
+# What the rollback does NOT cover: the dnsmasq snippets, the ip rules/routes
+# and the nft rules are rebuilt from the *current* UCI on every start, so a
+# reload that fails because of a UCI-level change (a port that is now taken, a
+# proxy-mode switch) restores the sing-box configuration and leaves the network
+# layer describing the new settings.  Rolling that back as well would mean
+# snapshotting UCI at promotion time; that is deliberately not attempted here,
+# which is why this paragraph exists rather than a note in a plan document.
 
 USE_PROCD=1
 
@@ -107,6 +115,8 @@ start_service() {
 
 	mkdir -p "$RUN_DIR"
 
+	# Kernel 6.6.x has a TUN/GSO bug that needs GSO turned off for the tun
+	# inbound; other releases either carry the fix or never had the problem.
 	local disable_gso=0
 	uname -r | grep -Eq "^6\.6" && disable_gso=1
 
@@ -354,5 +364,8 @@ reload_service() {
 
 service_triggers() {
 	procd_add_reload_trigger "$CONF"
+	# `wan` is the logical name netifd and the firewall use on every target
+	# (a PPPoE uplink is `wan` at the logical layer, `pppoe-wan` only at the
+	# device layer), so this does not need a per-device lookup.
 	procd_add_interface_trigger "interface.*.up" wan /etc/init.d/$CONF reload
 }

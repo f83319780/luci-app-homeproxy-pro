@@ -54,18 +54,21 @@ fi
 
 echo "== LuCI form snapshots =="
 for target in node client server; do
-	if ! node "$ROOT/tests/luci-form-snapshot.js" "$ROOT" "$target" > "/tmp/hp-snapshot-$target.json" 2> "/tmp/hp-snapshot-$target.err"; then
+	# $WORK_ROOT, not a fixed /tmp path: two concurrent runs (a local one and a
+	# CI one over ssh, say) would otherwise overwrite each other's snapshot and
+	# each compare against the other run's output.
+	if ! node "$ROOT/tests/luci-form-snapshot.js" "$ROOT" "$target" > "$WORK_ROOT/snapshot-$target.json" 2> "$WORK_ROOT/snapshot-$target.err"; then
 		echo "FAIL: could not render the $target form"
-		cat "/tmp/hp-snapshot-$target.err"
+		cat "$WORK_ROOT/snapshot-$target.err"
 		FAILED=1
 		continue
 	fi
 
-	if diff -q "$ROOT/tests/snapshots/$target.json" "/tmp/hp-snapshot-$target.json" > "/dev/null"; then
+	if diff -q "$ROOT/tests/snapshots/$target.json" "$WORK_ROOT/snapshot-$target.json" > "/dev/null"; then
 		echo "PASS: $target form snapshot"
 	else
 		echo "FAIL: $target form snapshot changed:"
-		diff "$ROOT/tests/snapshots/$target.json" "/tmp/hp-snapshot-$target.json" | head -40
+		diff "$ROOT/tests/snapshots/$target.json" "$WORK_ROOT/snapshot-$target.json" | head -40
 		FAILED=1
 	fi
 done

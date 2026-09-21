@@ -1042,6 +1042,40 @@ else
 fi
 
 echo
+echo "== guard 25: executeCommand() arguments are quoted by the caller =="
+
+# executeCommand() joins its arguments into one shell command line, so a bare
+# variable in an argument reaches /bin/sh unquoted.  Guard 16 only walks
+# `system()` / `popen()` lines, and the busiest shell boundary in the package -
+# wGETVerbose(), which fetches subscription bodies - builds its command through
+# executeCommand() instead, so the guard could not see it.  Rule: every ${...}
+# interpolation in an executeCommand() argument is shellQuote()d, or a pure
+# numeric constant (the `head -c` limit).
+EXEC_UNQUOTED="$(python3 - "$SCRIPTS" <<'PY'
+import re, sys, pathlib
+bad = []
+for f in sorted(pathlib.Path(sys.argv[1]).rglob('*.uc')):
+    for n, line in enumerate(f.read_text(encoding='utf-8').split('\n'), 1):
+        if 'executeCommand(' not in line or line.lstrip().startswith('*'):
+            continue
+        for expr in re.findall(r'\$\{([^{}]*)\}', line):
+            e = expr.strip()
+            if e.startswith('shellQuote('):
+                continue
+            if re.fullmatch(r'[A-Za-z_]\w*\s*[-+*/]\s*\d+', e):
+                continue
+            bad.append(f'{f.name}:{n}: ${{{e}}}')
+print('\n'.join(bad))
+PY
+)"
+if [ -z "$EXEC_UNQUOTED" ]; then
+	pass "every executeCommand() interpolation is shellQuote()d or numeric"
+else
+	fail "an executeCommand() argument reaches the shell unquoted:"
+	printf '      %s\n' "$EXEC_UNQUOTED"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
