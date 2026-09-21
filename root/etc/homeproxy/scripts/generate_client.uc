@@ -60,4 +60,10 @@ if (system('mv -f ' + shellQuote(tmp) + ' ' + shellQuote(RUN_DIR) + '/sing-box-c
 	exit(1);
 }
 
+/* The generated config carries every node credential - passwords, UUIDs,
+ * private keys - and writefile() has no mode argument, so it lands with the
+ * process umask (world-readable at the usual 022).  sing-box runs as its own
+ * user and reads the file directly, so 0600 is enough. */
+system('chmod 600 ' + shellQuote(RUN_DIR) + '/sing-box-c.json');
+
 system('rm -rf ' + shellQuote(work_dir));

@@ -54,4 +54,10 @@ if (system('mv -f ' + shellQuote(tmp) + ' ' + shellQuote(RUN_DIR) + '/sing-box-s
 	exit(1);
 }
 
+/* The server config carries inbound credentials and the REALITY/ECH key
+ * material, and writefile() has no mode argument, so it lands with the
+ * process umask.  0600 matches what sing-box needs to read it as its own
+ * user. */
+system('chmod 600 ' + shellQuote(RUN_DIR) + '/sing-box-s.json');
+
 system('rm -rf ' + shellQuote(work_dir));

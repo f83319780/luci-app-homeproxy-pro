@@ -93,6 +93,11 @@ const methods = {
 				}
 			}
 
+			/* writefile() with a null body writes nothing useful; an empty
+			 * body is what clearing the field means. */
+			if (content == null)
+				content = '';
+
 			system(`mkdir -p ${shellQuote(HP_DIR)}/resources`);
 			writefile(file, content);
 
@@ -309,7 +314,12 @@ const methods = {
 			 * The two are not the same - a successful run on a stale
 			 * router still records the same upstream date, so the UI
 			 * shows both. */
-			const fields = version ? match(version, /^(\S+) (\S+)$/) : null;
+			/* The shipped .ver files hold a single timestamp (the format the
+			 * resource updater used before it started recording the upstream
+			 * commit); a runtime update writes "<date> <sha>".  Accept both and
+			 * show the date part, so a fresh install does not display a raw
+			 * digit run as if it were the version. */
+			const fields = version ? match(version, /^(\S+)(?: (\S+))?$/) : null;
 			if (fields)
 				version = fields[1];
 			/* Only a missing .ver means "not found"; that is the case the

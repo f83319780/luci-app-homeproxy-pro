@@ -76,9 +76,26 @@ hp_sync_autoupdate_cron() {
 
 	[ "$auto_update" = "1" ] || return 0
 
+	# auto_update_time comes from UCI, which anything on the LAN can write, and
+	# it used to be interpolated into a root crontab line verbatim: a value
+	# like '2 * * * * root echo pwned #' appends a second job.  Validate it
+	# before the line exists, and write it with printf rather than `echo -e`
+	# so no backslash sequence is interpreted either.
+	case "$auto_update_time" in
+	''|*[!0-9]*)
+		log "Warning: auto_update_time='$auto_update_time' is not an hour of the day, skipping the cron entry."
+		return 1
+		;;
+	esac
+	if [ "$auto_update_time" -gt 23 ]; then
+		log "Warning: auto_update_time=$auto_update_time is out of range (0-23), skipping the cron entry."
+		return 1
+	fi
+
 	hp_crontab_drop "/etc/crontabs/root" \
 		|| log "Warning: failed to drop the previous auto-update cron entry."
-	echo -e "0 $auto_update_time * * * $HP_DIR/scripts/update_crond.sh #${CONF}_autosetup" >> "/etc/crontabs/root" \
+	printf '0 %s * * * %s/scripts/update_crond.sh #%s_autosetup\n' \
+		"$auto_update_time" "$HP_DIR" "$CONF" >> "/etc/crontabs/root" \
 		|| log "Warning: failed to install the auto-update cron entry."
 	/etc/init.d/cron restart >"/dev/null" 2>&1 || log "Warning: failed to restart cron."
 }
