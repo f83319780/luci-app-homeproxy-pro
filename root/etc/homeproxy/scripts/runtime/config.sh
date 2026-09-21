@@ -32,6 +32,10 @@ hp_known_good() {
 
 	mkdir -p "$(dirname "$good")" 2>/dev/null
 	cp -f "$live" "$good" 2>/dev/null || return 1
+	# The known-good copy holds the same credentials as the live file, so the
+	# two have to stay in step: otherwise a rollback restores a copy that is
+	# world-readable whenever the source was.
+	chmod 600 "$good" 2>/dev/null
 
 	return 0
 }

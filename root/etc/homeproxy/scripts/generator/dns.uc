@@ -237,10 +237,6 @@ function append_custom_dns(config, dm, ctx) {
 
 		rule.query_client_subnet = cfg.query_client_subnet;
 		rule.query_dnssec = strToBool(cfg.query_dnssec);
-		rule.response_rcode = cfg.response_rcode;
-		rule.response_answer = cfg.response_answer;
-		rule.response_ns = cfg.response_ns;
-		rule.response_extra = cfg.response_extra;
 		rule.source_mac_address = cfg.source_mac_address;
 		rule.source_hostname = cfg.source_hostname;
 
@@ -271,10 +267,18 @@ function append_custom_dns(config, dm, ctx) {
 			rule.match_response = eval_tag;
 		}
 
-		/* ip_cidr / ip_is_private are only valid with match_response in 1.14 */
+		/* Response-match fields are only valid together with match_response in
+		 * 1.14: sing-box rejects the rule with "Response Match Fields (...)
+		 * require match_response to be enabled".  ip_cidr / ip_is_private were
+		 * already gated here; the response_* quartet was emitted
+		 * unconditionally next door. */
 		if (rule.match_response) {
 			rule.ip_cidr = cfg.ip_cidr;
 			rule.ip_is_private = strToBool(cfg.ip_is_private);
+			rule.response_rcode = cfg.response_rcode;
+			rule.response_answer = cfg.response_answer;
+			rule.response_ns = cfg.response_ns;
+			rule.response_extra = cfg.response_extra;
 		}
 
 		push(builtin_dns_rules, rule);
@@ -293,6 +297,15 @@ function append_custom_dns(config, dm, ctx) {
  * why the proxy-mode and custom-mode paths stay almost mirror images:
  * both branches see config.dns already populated. */
 function initDns(config, ctx) {
+	/* sing-box refuses the combination outright:
+	 *   FATAL initialize DNS router: `optimistic` is conflict with `disable_cache`
+	 * (reproduced against 1.14.1 on a real config).  Both are opt-in switches
+	 * in the UI, so turning both on used to produce a configuration that
+	 * cannot start - the reload fails and rolls back, and the only symptom the
+	 * user sees is "my setting did not take".  optimistic wins; the disable_*
+	 * switches are dropped rather than emitted. */
+	const optimistic = (ctx.dns_optimistic_cache === '1');
+
 	config.dns = {
 		servers: [
 			{
@@ -309,10 +322,10 @@ function initDns(config, ctx) {
 		],
 		rules: [],
 		strategy: ctx.dns_default_strategy,
-		disable_cache: strToBool(ctx.dns_disable_cache),
-		disable_expire: strToBool(ctx.dns_disable_cache_expire),
+		disable_cache: optimistic ? null : strToBool(ctx.dns_disable_cache),
+		disable_expire: optimistic ? null : strToBool(ctx.dns_disable_cache_expire),
 		client_subnet: ctx.dns_client_subnet,
-		optimistic: (ctx.dns_optimistic_cache === '1') ? {
+		optimistic: optimistic ? {
 			enabled: true,
 			timeout: !isEmpty(ctx.dns_optimistic_timeout) ? ctx.dns_optimistic_timeout : '3d'
 		} : null,

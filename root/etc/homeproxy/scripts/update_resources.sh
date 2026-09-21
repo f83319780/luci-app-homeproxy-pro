@@ -41,7 +41,7 @@ pick_mirror() {
 			# GitHub raw serves paths from the repo root, not the
 			# /gh/<repo>@<sha>/<file> shape jsdelivr uses. The caller
 			# passes the suffix already split out, so we re-stitch it.
-			local probe_url="https://$base/$listrepo@$list_sha/$listname"
+			local probe_url="https://$base/$listrepo/$list_sha/$listname"
 		else
 			local probe_url="https://$base/gh/$listrepo@$list_sha/$listname"
 		fi
@@ -117,7 +117,7 @@ check_list_update() {
 	fi
 	local mirror_url
 	if [ "$mirror" = "raw.githubusercontent.com" ]; then
-		mirror_url="https://raw.githubusercontent.com/$listrepo@$list_sha/$listname"
+		mirror_url="https://raw.githubusercontent.com/$listrepo/$list_sha/$listname"
 	else
 		mirror_url="https://$mirror/gh/$listrepo@$list_sha/$listname"
 	fi
@@ -158,8 +158,14 @@ case "$1" in
 	check_list_update "$1" "Loyalsoldier/v2ray-rules-dat" "release" "gfw.txt"
 	;;
 "china_list")
+	# Not `sed -i`: the bare -i form is a busybox/GNU extension, and the same
+	# script is exercised off-device where a non-busybox sed fails it with
+	# "invalid command code".  Edit through a temp file, the way the crontab
+	# helper in runtime/service.sh does.
 	check_list_update "$1" "Loyalsoldier/v2ray-rules-dat" "release" "direct-list.txt" && \
-		sed -i -e "s/full://g" -e "/:/d" "$RESOURCES_DIR/china_list.txt"
+		sed -e "s/full://g" -e "/:/d" "$RESOURCES_DIR/china_list.txt" > "$RESOURCES_DIR/china_list.txt.hp-new" && \
+		mv -f "$RESOURCES_DIR/china_list.txt.hp-new" "$RESOURCES_DIR/china_list.txt" || \
+		rm -f "$RESOURCES_DIR/china_list.txt.hp-new"
 	;;
 *)
 	echo -e "Usage: $0 <china_ip4 / china_ip6 / gfw_list / china_list>"

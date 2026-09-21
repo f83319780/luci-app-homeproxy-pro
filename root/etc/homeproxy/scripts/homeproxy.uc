@@ -57,6 +57,12 @@ export function validateHomeProxyPath(p) {
 	if (!p || type(p) !== 'string')
 		return false;
 
+	/* Reject traversal *before* the prefix checks below: a plain prefix
+	 * comparison accepts '/etc/homeproxy/../../etc/shadow', and sing-box reads
+	 * these paths as root. */
+	if (match(p, /(^|\/)\.\.(\/|$)/))
+		return false;
+
 	/* Reject anything that does not start with '/' - relative paths in
 	 * sing-box resolve against the process CWD, which is /tmp at boot
 	 * but is not a position we want any UCI value to land in. */
@@ -281,10 +287,6 @@ export function wGETVerbose(url, ua) {
 	return { content: trim(output.stdout), error: null };
 };
 
-export function wGET(url, ua) {
-	return wGETVerbose(url, ua).content;
-};
-
 /* Utilities end */
 
 /* String helper start */
@@ -350,12 +352,6 @@ export function removeBlankAttrs(res) {
 		return res;
 
 	return content;
-};
-
-export function validateHostname(hostname) {
-	return (match(hostname, /^[a-zA-Z0-9_]+$/) != null ||
-		(match(hostname, /^[a-zA-Z0-9_][a-zA-Z0-9_%-.]*[a-zA-Z0-9]$/) &&
-			match(hostname, /[^0-9.]/)));
 };
 
 export function validation(datatype, data) {
