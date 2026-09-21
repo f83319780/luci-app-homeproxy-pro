@@ -32,8 +32,8 @@ function renderRuleSection(s, kind, self, data) {
 	ss.sortable = true;
 	ss.nodescriptions = true;
 	ss.modaltitle = L.bind(hp.loadModalTitle, hp, is_dns ? _('DNS rule') : _('Routing rule'),
-		is_dns ? _('Add a DNS rule') : _('Add a routing rule'), data[0]);
-	ss.sectiontitle = L.bind(hp.loadDefaultLabel, self, data[0]);
+		is_dns ? _('Add a DNS rule') : _('Add a routing rule'), 'homeproxy');
+	ss.sectiontitle = L.bind(hp.loadDefaultLabel, self, 'homeproxy');
 	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, self, ss);
 
 	ss.tab('field_other', _('Other fields'));
@@ -42,8 +42,8 @@ function renderRuleSection(s, kind, self, data) {
 	ss.tab('fields_process', _('Process fields'));
 
 	so = ss.taboption('field_other', form.Value, 'label', _('Label'));
-	so.load = L.bind(hp.loadDefaultLabel, self, data[0]);
-	so.validate = L.bind(hp.validateUniqueValue, self, data[0], uci_type, 'label');
+	so.load = L.bind(hp.loadDefaultLabel, self, 'homeproxy');
+	so.validate = L.bind(hp.validateUniqueValue, self, 'homeproxy', uci_type, 'label');
 	so.modalonly = true;
 
 	so = ss.taboption('field_other', form.Flag, 'enabled', _('Enable'));
@@ -140,7 +140,7 @@ function renderRuleSection(s, kind, self, data) {
 		delete this.keylist;
 		delete this.vallist;
 
-		uci.sections(data[0], 'ruleset', (res) => {
+		uci.sections('homeproxy', 'ruleset', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -180,7 +180,7 @@ function renderRuleSection(s, kind, self, data) {
 
 				this.value('default-dns', _('Default DNS (issued by WAN)'));
 				this.value('system-dns', _('System DNS'));
-				uci.sections(data[0], 'dns_server', (res) => {
+				uci.sections('homeproxy', 'dns_server', (res) => {
 					if (res.enabled === '1')
 						this.value(res['.name'], res.label);
 				});
@@ -320,7 +320,7 @@ function renderRuleSection(s, kind, self, data) {
 				delete this.vallist;
 
 				this.value('direct-out', _('Direct'));
-				uci.sections(data[0], 'routing_node', (res) => {
+				uci.sections('homeproxy', 'routing_node', (res) => {
 					if (res.enabled === '1')
 						this.value(res['.name'], res.label);
 				});
@@ -412,7 +412,7 @@ function renderRuleSection(s, kind, self, data) {
 				this.value('', _('Default'));
 				this.value('default-dns', _('Default DNS (issued by WAN)'));
 				this.value('system-dns', _('System DNS'));
-				uci.sections(data[0], 'dns_server', (res) => {
+				uci.sections('homeproxy', 'dns_server', (res) => {
 					if (res.enabled === '1')
 						this.value(res['.name'], res.label);
 				});

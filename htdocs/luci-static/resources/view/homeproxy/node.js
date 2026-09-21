@@ -24,8 +24,8 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	s.rowcolors = true;
 	s.sortable = true;
 	s.nodescriptions = true;
-	s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Node'), _('Add a node'), data[0]);
-	s.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
+	s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Node'), _('Add a node'), 'homeproxy');
+	s.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
 
 	if (routing_mode !== 'custom') {
 		o = s.option(form.Button, '_apply', _('Apply'));
@@ -42,7 +42,7 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 			}
 		}
 		o.onclick = function(ev, section_id) {
-			uci.set(data[0], 'config', 'main_node', section_id);
+			uci.set('homeproxy', 'config', 'main_node', section_id);
 
 			return this.map.save(null, true).then(() => {
 				ui.changes.apply(true);
@@ -51,8 +51,8 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	}
 
 	o = s.option(form.Value, 'label', _('Label'));
-	o.load = L.bind(hp.loadDefaultLabel, this, data[0]);
-	o.validate = L.bind(hp.validateUniqueValue, this, data[0], 'node', 'label');
+	o.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
+	o.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'node', 'label');
 	o.modalonly = true;
 
 	o = hp.renderProtocolOptions(s, { features: features, side: 'client' });
@@ -545,8 +545,8 @@ return view.extend({
 
 	render(data) {
 		let m, s, o, ss, so;
-		let main_node = uci.get(data[0], 'config', 'main_node');
-		let routing_mode = uci.get(data[0], 'config', 'routing_mode');
+		let main_node = uci.get('homeproxy', 'config', 'main_node');
+		let routing_mode = uci.get('homeproxy', 'config', 'routing_mode');
 		let features = data[1];
 
 		/* Cache subscription information, it will be called multiple times.
@@ -556,7 +556,7 @@ return view.extend({
 		 * '#100%' and took the whole page render down with it, and the decoded
 		 * fragment went unescaped into a tab title. */
 		let subinfo = [];
-		for (let suburl of (uci.get(data[0], 'subscription', 'subscription_url') || [])) {
+		for (let suburl of (uci.get('homeproxy', 'subscription', 'subscription_url') || [])) {
 			const info = hp.subscriptionInfo(suburl);
 			if (info)
 				subinfo.push(info);
@@ -574,7 +574,7 @@ return view.extend({
 		ss.addremove = true;
 		ss.filter = function(section_id) {
 			for (let info of subinfo)
-				if (info.hash === uci.get(data[0], section_id, 'grouphash'))
+				if (info.hash === uci.get('homeproxy', section_id, 'grouphash'))
 					return false;
 
 			return true;
@@ -603,8 +603,8 @@ return view.extend({
 							input_links = input_links.reduce((pre, cur) =>
 								(!pre.includes(cur) && pre.push(cur), pre), []);
 
-							let allow_insecure = uci.get(data[0], 'subscription', 'allow_insecure');
-							let packet_encoding = uci.get(data[0], 'subscription', 'packet_encoding');
+							let allow_insecure = uci.get('homeproxy', 'subscription', 'allow_insecure');
+							let packet_encoding = uci.get('homeproxy', 'subscription', 'packet_encoding');
 
 							/* Every link is parsed - and rejected - by the
 							 * backend parser (parser/uri.uc), so importing a
@@ -623,9 +623,9 @@ return view.extend({
 											config.packet_encoding = packet_encoding;
 
 										let nameHash = hp.calcStringMD5(config.label);
-										let sid = uci.add(data[0], 'node', nameHash);
+										let sid = uci.add('homeproxy', 'node', nameHash);
 										Object.keys(config).forEach((k) => {
-											uci.set(data[0], sid, k, config[k]);
+											uci.set('homeproxy', sid, k, config[k]);
 										});
 										imported_node++;
 									});
@@ -684,7 +684,7 @@ return view.extend({
 			o = s.taboption('sub_' + info.hash, form.SectionValue, '_sub_' + info.hash, form.GridSection, 'node');
 			ss = renderNodeSettings(o.subsection, data, features, main_node, routing_mode);
 			ss.filter = function(section_id) {
-				return (uci.get(data[0], section_id, 'grouphash') === info.hash);
+				return (uci.get('homeproxy', section_id, 'grouphash') === info.hash);
 			}
 		}
 		/* Subscription nodes end */
@@ -765,7 +765,7 @@ return view.extend({
 		o = s.taboption('subscription', form.Button, '_update_subscriptions', _('Update nodes from subscriptions'));
 		o.inputstyle = 'apply';
 		o.inputtitle = function(section_id) {
-			let sublist = uci.get(data[0], section_id, 'subscription_url') || [];
+			let sublist = uci.get('homeproxy', section_id, 'subscription_url') || [];
 			if (sublist.length > 0) {
 				return _('Update %s subscriptions').format(sublist.length);
 			} else {
@@ -786,7 +786,7 @@ return view.extend({
 		o.inputstyle = 'reset';
 		o.inputtitle = function() {
 			let subnodes = [];
-			uci.sections(data[0], 'node', (res) => {
+			uci.sections('homeproxy', 'node', (res) => {
 				if (res.grouphash)
 					subnodes = subnodes.concat(res['.name'])
 			});
@@ -800,19 +800,19 @@ return view.extend({
 		}
 		o.onclick = function() {
 			let subnodes = [];
-			uci.sections(data[0], 'node', (res) => {
+			uci.sections('homeproxy', 'node', (res) => {
 				if (res.grouphash)
 					subnodes = subnodes.concat(res['.name'])
 			});
 
 			for (let i in subnodes)
-				uci.remove(data[0], subnodes[i]);
+				uci.remove('homeproxy', subnodes[i]);
 
-			if (subnodes.includes(uci.get(data[0], 'config', 'main_node')))
-				uci.set(data[0], 'config', 'main_node', 'nil');
+			if (subnodes.includes(uci.get('homeproxy', 'config', 'main_node')))
+				uci.set('homeproxy', 'config', 'main_node', 'nil');
 
-			if (subnodes.includes(uci.get(data[0], 'config', 'main_udp_node')))
-				uci.set(data[0], 'config', 'main_udp_node', 'nil');
+			if (subnodes.includes(uci.get('homeproxy', 'config', 'main_udp_node')))
+				uci.set('homeproxy', 'config', 'main_udp_node', 'nil');
 
 			this.inputtitle = _('%s nodes removed').format(subnodes.length);
 			this.readonly = true;

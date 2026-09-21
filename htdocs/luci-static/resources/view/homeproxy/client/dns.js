@@ -13,6 +13,39 @@
 'require homeproxy as hp';
 'require view.homeproxy.client.common as common';
 
+/* The four cache options exist on the 'dns' NamedSection in both the custom
+ * mode tab (renderDnsSettings) and the preset mode tab (renderDnsCache).
+ * Both used to spell them out separately, which registered the same four
+ * option names twice in one map: LuCI keeps the first registration for writes
+ * and lookupOption(), so the second copy's dependencies did nothing while its
+ * description could drift.  They are declared here once and rendered from
+ * wherever the tab needs them, in the original order.
+ *
+ * The depends() are the custom-mode copy's: with the cache disabled the
+ * optimistic cache and its persisted file have no effect, so both are hidden
+ * (disable_cache_expire is itself conditional on disable_cache). */
+function renderDnsCacheOptions(ss) {
+	let so;
+
+	so = ss.option(form.Flag, 'optimistic_cache', _('Optimistic DNS cache'),
+		_('Return expired cache immediately and refresh in background (sing-box 1.14).'));
+	so.depends('disable_cache', '0');
+	so.depends('disable_cache_expire', '0');
+	so.rmempty = false;
+
+	so = ss.option(form.Value, 'optimistic_timeout', _('Optimistic cache timeout'),
+		_('Max time an expired entry may be served. Examples: 3d, 1h.'));
+
+	so = ss.option(form.Value, 'dns_timeout', _('DNS query timeout'),
+		_('Default timeout per DNS query in seconds (sing-box default: 10).'));
+	so.datatype = 'uinteger';
+
+	so = ss.option(form.Flag, 'cache_file_store_dns', _('Store DNS cache'),
+		_('Persist DNS cache across restarts (sing-box 1.14, replaces Store RDRC).'));
+	so.depends('disable_cache', '0');
+	so.rmempty = false;
+}
+
 /* DNS settings tab plus the wrapping 'dns' NamedSection. Called after
  * routing.renderRoutingRules() so the NamedSection chain reads
  * config -> routing_node -> routing_rule -> dns from left to right. */
@@ -37,7 +70,7 @@ function renderDnsSettings(ctx) {
 
 		this.value('default-dns', _('Default DNS (issued by WAN)'));
 		this.value('system-dns', _('System DNS'));
-		uci.sections(data[0], 'dns_server', (res) => {
+		uci.sections('homeproxy', 'dns_server', (res) => {
 			if (res.enabled === '1')
 				this.value(res['.name'], res.label);
 		});
@@ -57,23 +90,7 @@ function renderDnsSettings(ctx) {
 		'If value is an IP address instead of prefix, <code>/32</code> or <code>/128</code> will be appended automatically.'));
 	so.datatype = 'or(cidr, ipaddr)';
 
-	so = ss.option(form.Flag, 'optimistic_cache', _('Optimistic DNS cache'),
-		_('Return expired cache immediately and refresh in background (sing-box 1.14).'));
-	so.depends('disable_cache', '0');
-	so.depends('disable_cache_expire', '0');
-	so.rmempty = false;
-
-	so = ss.option(form.Value, 'optimistic_timeout', _('Optimistic cache timeout'),
-		_('Max time an expired entry may be served. Examples: 3d, 1h.'));
-
-	so = ss.option(form.Value, 'dns_timeout', _('DNS query timeout'),
-		_('Default timeout per DNS query in seconds (sing-box default: 10).'));
-	so.datatype = 'uinteger';
-
-	so = ss.option(form.Flag, 'cache_file_store_dns', _('Store DNS cache'),
-		_('Persist DNS cache across restarts (sing-box 1.14, replaces Store RDRC).'));
-	so.depends('disable_cache', '0');
-	so.rmempty = false;
+	renderDnsCacheOptions(ss);
 	/* DNS settings end */
 }
 
@@ -100,7 +117,7 @@ function renderDnsRules(ctx) {
  * only the tab they render under changed. */
 function renderDnsCache(ctx) {
 	const { s, data, stubValidator } = ctx;
-	let o, ss, so;
+	let o, ss;
 
 	s.tab('dns_cache', _('DNS Settings'));
 
@@ -185,20 +202,7 @@ function renderDnsCache(ctx) {
 	o.depends({'routing_mode': 'custom', '!reverse': true});
 	ss = o.subsection;
 
-	so = ss.option(form.Flag, 'optimistic_cache', _('Optimistic DNS cache'),
-		_('Return expired cache immediately and refresh in background (sing-box 1.14).'));
-	so.rmempty = false;
-
-	so = ss.option(form.Value, 'optimistic_timeout', _('Optimistic cache timeout'),
-		_('Max time an expired entry may be served. Examples: 3d, 1h.'));
-
-	so = ss.option(form.Value, 'dns_timeout', _('DNS query timeout'),
-		_('Default timeout per DNS query in seconds (sing-box default: 10).'));
-	so.datatype = 'uinteger';
-
-	so = ss.option(form.Flag, 'cache_file_store_dns', _('Store DNS cache'),
-		_('Persist DNS cache across restarts (replaces Store RDRC).'));
-	so.rmempty = false;
+	renderDnsCacheOptions(ss);
 }
 
 return baseclass.extend({ renderDnsSettings, renderDnsRules, renderDnsCache });

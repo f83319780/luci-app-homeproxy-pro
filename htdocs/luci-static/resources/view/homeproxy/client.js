@@ -100,7 +100,7 @@ return view.extend({
 
 		/* Cache all configured proxy nodes, they will be called multiple times */
 		let proxy_nodes = {};
-		uci.sections(data[0], 'node', (res) => {
+		uci.sections('homeproxy', 'node', (res) => {
 			let nodeaddr = ((res.type === 'direct') ? res.override_address : res.address) || '',
 			    nodeport = ((res.type === 'direct') ? res.override_port : res.port) || '';
 

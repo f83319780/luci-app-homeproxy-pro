@@ -173,13 +173,13 @@ return view.extend({
 		s.rowcolors = true;
 		s.sortable = true;
 		s.nodescriptions = true;
-		s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Server'), _('Add a server'), data[0]);
-		s.sectiontitle = L.bind(hp.loadDefaultLabel, this, data[0]);
+		s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Server'), _('Add a server'), 'homeproxy');
+		s.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
 		s.renderSectionAdd = L.bind(hp.renderSectionAdd, this, s);
 
 		o = s.option(form.Value, 'label', _('Label'));
-		o.load = L.bind(hp.loadDefaultLabel, this, data[0]);
-		o.validate = L.bind(hp.validateUniqueValue, this, data[0], 'server', 'label');
+		o.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
+		o.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'server', 'label');
 		o.rmempty = false;
 		o.modalonly = true;
 
@@ -202,7 +202,7 @@ return view.extend({
 		o = s.option(form.Value, 'port', _('Listen port'),
 			_('The port must be unique.'));
 		o.datatype = 'port';
-		o.validate = L.bind(hp.validateUniqueValue, this, data[0], 'server', 'port');
+		o.validate = L.bind(hp.validateUniqueValue, this, 'homeproxy', 'server', 'port');
 
 		o = s.option(form.Value, 'username', _('Username'));
 		o.depends('type', 'http');
