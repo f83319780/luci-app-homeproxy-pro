@@ -16,7 +16,8 @@
 ## 运行要求
 
 - ImmortalWrt / OpenWrt ≥ 24.10（`apk` 或 `opkg` 均可安装）
-- sing-box ≥ 1.14.0（ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1）
+- **sing-box ≥ 1.14.0 是硬要求**：ImmortalWrt 25.12 源对应 sing-box 1.14.0-r1，
+  而 OpenWrt 24.10 官方源没有这个版本——包能装上，服务起不来，需要换源或自建 feed
 - 低于 1.14 时服务拒绝启动并记录明确日志
 
 ## 按功能性对比
@@ -32,7 +33,7 @@
 | 资源更新策略 | jsdelivr 单一镜像 | 多镜像 fallback（`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `cdn.jsdelivr.net` / `raw.githubusercontent.com`）+ UI「上次成功时间」（review M7） |
 | 订阅 token 脱敏 | 调用点记得才脱敏 | `wGETVerbose()` 内部下沉到源头（review H3） |
 | 架构守卫 | 无 | `tests/arch-guard.sh` 23 个 guard / 113 个 check（PR-07 起；guard 编号 1-19, 21-24） |
-| 测试规模 | 7 个脚本 / 约 27 个 check | 34 个文件：ucode 套件 + 5 个 frontend 验证器 + golden snapshot + mocks；总计 113+ 个 check |
+| 测试规模 | 7 个脚本 / 约 27 个 check | 52 个测试脚本（`tests/` 下共 69 个文件）：ucode 套件 + 5 个 frontend 验证器 + golden snapshot + mocks；arch-guard 单跑 113 个 check |
 | CI | `build` + `i18n` 两条平行 workflow | `build` 依赖 `arch-test`；`arch-test` 7 步：翻译 fast gate → toolchain cache/构建 → `tests/run.sh`（唯一套件入口，含 arch-guard）→ 模板检查 |
 | ECH 上传 | 仅后端 case 缺失 | 补齐 `client_ech_conf`（P0-4） |
 | capabilities | 含 `CAP_SYS_PTRACE` + `CAP_NET_RAW` | 仅 `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`；`inheritable` 保留 ambient 子集以支撑跨 fork 传承（review H2） |
