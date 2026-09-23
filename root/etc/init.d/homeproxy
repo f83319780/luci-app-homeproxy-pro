@@ -31,6 +31,13 @@
 #                    start -> if start could not prove the new configuration,
 #                    roll back to the known-good copy and restart
 #
+# A3: on the reload path the generation happens exactly once. reload_service
+# generates each enabled side and hands start_service the per-side
+# HP_CANDIDATE_* flags; hp_start_generated_config() then activates that exact
+# file instead of generating a second one. The generator's env (WAN resolver,
+# domain-resource lists) can change between two invocations, so "validate A,
+# discard A, generate B, run B" is no longer possible.
+#
 # "Prove it runs" is the health gate in runtime/health.sh.  It used to be a
 # single "is a matching process alive?" probe, which was satisfied by a stale
 # process and by procd's own respawn loop while the service was dead - and
@@ -290,11 +297,27 @@ reload_service() {
 	# the generator leaves the running one in place, so the reload is
 	# aborted *before* stop_service() - the old configuration keeps running
 	# instead of the router ending up with no service at all.
+	#
+	# A3: whichever sides are generated here are the candidates start_service
+	# must activate - it must not generate them a second time. Two invocations
+	# of the generator are not guaranteed to write the same bytes (its env
+	# carries the WAN resolver and the domain-resource lists), so regenerating
+	# in start_service would run a file that was never `sing-box check`ed:
+	# validate A -> discard A -> generate B -> run B.
+	#
+	# The flags are per side on purpose: reload_service and start_service each
+	# do their own config_load, and if the two disagree (a concurrent UCI
+	# change) the side this preflight did not generate must still be generated
+	# rather than activated from a stale file.
+	HP_CANDIDATE_CLIENT=0
+	HP_CANDIDATE_SERVER=0
+
 	if [ "$outbound_node" != "nil" ]; then
 		if ! ucode -S "$HP_DIR/scripts/generate_client.uc" 2>>"$LOG_PATH"; then
 			log "Error: new client configuration is invalid, reload aborted; the running configuration is kept."
 			return 1
 		fi
+		HP_CANDIDATE_CLIENT=1
 	fi
 
 	local server_enabled
@@ -304,7 +327,31 @@ reload_service() {
 			log "Error: new server configuration is invalid, reload aborted; the running configuration is kept."
 			return 1
 		fi
+		HP_CANDIDATE_SERVER=1
 	fi
+
+	# stop_service() deletes $RUN_DIR/sing-box-*.json (runtime state), so the
+	# file that was just validated would not survive to start_service. Stage a
+	# copy of each validated side first; the stop that follows cannot reach it,
+	# and start_service activates those exact bytes. A staging failure aborts
+	# the reload while the running configuration is still untouched.
+	if [ "$HP_CANDIDATE_CLIENT" = "1" ]; then
+		if ! hp_capture_candidate "$RUN_DIR" c; then
+			log "Error: could not stage the validated client configuration; reload aborted; the running configuration is kept."
+			return 1
+		fi
+	fi
+	if [ "$HP_CANDIDATE_SERVER" = "1" ]; then
+		if ! hp_capture_candidate "$RUN_DIR" s; then
+			log "Error: could not stage the validated server configuration; reload aborted; the running configuration is kept."
+			return 1
+		fi
+	fi
+
+	# `start` runs start_service in this same shell, but export them anyway so
+	# the contract does not depend on that: HP_USE_KNOWN_GOOD is exported the
+	# same way in the rollback path below.
+	export HP_CANDIDATE_CLIENT HP_CANDIDATE_SERVER
 
 	# Both configurations passed `sing-box check`; now it is safe to restart.
 	# start_service owns the rest of the transaction: it proves the instances

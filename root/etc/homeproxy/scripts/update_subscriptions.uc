@@ -29,6 +29,14 @@
  * Every UCI write the run performs is therefore in
  * subscription/repository.uc. The orchestrator's only UCI side
  * effect is passing its cursor to the Repository methods.
+ *
+ * A2 (single commit): the Repository commits nothing; this script owns the
+ * one uci.commit() the run performs, after every mutation is staged and
+ * before the reload. Read the comment above that commit for what the
+ * multi-commit order used to allow.
+ *
+ * A4 (lock before snapshot): the cursor, the domain model and the recovery
+ * snapshot are all read inside the lock. See load_locked_state().
  */
 
 'use strict';
@@ -39,7 +47,8 @@ import { connect } from 'ubus';
 import { cursor } from 'uci';
 
 import {
-	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl, shellQuote
+	executeCommand, getTime, isEmpty, HP_DIR, RUN_DIR, redactUrl, shellQuote,
+	UCICONFIG_DIR
 } from './homeproxy.uc';
 
 import { parse_uri } from './parser/uri.uc';
@@ -52,54 +61,78 @@ import { Repository } from './subscription/repository.uc';
 
 import { Loader } from './config/loader.uc';
 
-/* UCI config start: a single cursor that every Repository method
- * shares. Loader uses its own cursor for the read at the top of
- * main(); both cursors target /etc/config/homeproxy so writes go
- * through the same on-disk file. The snapshot below is taken
- * BEFORE any commit, so a failure part-way through this run can
- * restore the previous file and leave the running service on its
- * current config. */
-const CONFIG_FILE = '/etc/config/homeproxy';
+/* UCI cursor, configuration and recovery snapshot the run works on.
+ *
+ * A4: none of this is read at module scope any more. The lock used to guard
+ * only the write phase - the subscription list, the domain model and the
+ * backup were all read first - so a run that read while another one held the
+ * lock and then acquired it after that one finished would commit against the
+ * base it had read before, and, on failure, restore a snapshot older than the
+ * run that had just committed. Everything below is now filled by
+ * load_locked_state(), which is called only after acquire_lock() returns true.
+ *
+ * A2: the run performs exactly one uci.commit(). The Repository modules stage
+ * mutations only.
+ *
+ * UCICONFIG_DIR (homeproxy.uc) is the config *directory* Loader.load() takes,
+ * and the sandboxed test points it at its own config instead of /etc/config
+ * (tests/ucode/test_subscription_updater_runs.sh rewrites that line in
+ * homeproxy.uc and fails loudly if the rewrite did not apply). */
+const CONFIG_FILE = UCICONFIG_DIR + '/homeproxy';
 const uciconfig = 'homeproxy';
 
-const uci = cursor();
-uci.load(uciconfig);
-
 const ucimain = 'config',
-      ucinode = 'node',
-      ucisubscription = 'subscription';
+      ucinode = 'node';
 
-/* PR-03 §2.5 #3: the orchestrator used to hold its own
- * uci.cursor() and re-read subscription.* / config.* one field at
- * a time. Now it goes through Loader.load(), which is read-only
- * and exposes the canonical sub-objects
- * (`config.access_control.subscription`). The Repository methods
- * continue to take the raw cursor for the writes because the
- * cursor is the UCI writer contract. */
-const loaded = Loader.load();
-const sub = loaded.access_control.subscription;
-const routing_mode = loaded.general.routing_mode;
+/* Filled by load_locked_state(). `let`, so the reads could move into the lock
+ * without threading a state object through every use site. */
+let uci, loaded, sub, routing_mode,
+    allow_insecure, filter_mode, filter_keywords, packet_encoding,
+    subscription_urls, user_agent, main_node, main_udp_node,
+    config_backup = null;
 
-const allow_insecure = sub.allow_insecure || '0';
-const filter_mode = sub.filter_nodes || 'disabled';
-/* subscription_urls and filter_keywords are siblings of `subscription`,
- * not members of it: load_access_control() puts them straight on
- * access_control (loader.uc:303-304), and test_domain_model_skeleton.uc
- * asserts that shape.  Reading them through `sub.` yielded [] forever, so
- * the guard below never called main() and the updater exited 0 having done
- * nothing - the LuCI button and the cron entry were both silent no-ops. */
-const filter_keywords = loaded.access_control.filter_keywords || [];
-const packet_encoding = sub.packet_encoding || 'xudp';
-const subscription_urls = loaded.access_control.subscription_urls || [];
-const user_agent = sub.user_agent;
+/* Read everything the run needs, under the lock. Read-only: nothing here
+ * mutates, so a failure cannot leave a partial state behind. */
+function load_locked_state() {
+	uci = cursor();
+	uci.load(uciconfig);
 
-let main_node, main_udp_node;
-if (routing_mode !== 'custom') {
-	main_node = loaded.general.main_node;
-	main_udp_node = loaded.general.main_udp_node;
+	/* PR-03 §2.5 #3: the orchestrator used to hold its own
+	 * uci.cursor() and re-read subscription.* / config.* one field at
+	 * a time. Now it goes through Loader.load(), which is read-only
+	 * and exposes the canonical sub-objects
+	 * (`config.access_control.subscription`). The Repository methods
+	 * continue to take the raw cursor for the writes because the
+	 * cursor is the UCI writer contract. */
+	loaded = Loader.load(UCICONFIG_DIR);
+	sub = loaded.access_control.subscription;
+	routing_mode = loaded.general.routing_mode;
+
+	allow_insecure = sub.allow_insecure || '0';
+	filter_mode = sub.filter_nodes || 'disabled';
+	/* subscription_urls and filter_keywords are siblings of `subscription`,
+	 * not members of it: load_access_control() puts them straight on
+	 * access_control (loader.uc:303-304), and test_domain_model_skeleton.uc
+	 * asserts that shape.  Reading them through `sub.` yielded [] forever, so
+	 * the guard below never called main() and the updater exited 0 having done
+	 * nothing - the LuCI button and the cron entry were both silent no-ops. */
+	filter_keywords = loaded.access_control.filter_keywords || [];
+	packet_encoding = sub.packet_encoding || 'xudp';
+	subscription_urls = loaded.access_control.subscription_urls || [];
+	user_agent = sub.user_agent;
+
+	main_node = null;
+	main_udp_node = null;
+	if (routing_mode !== 'custom') {
+		main_node = loaded.general.main_node;
+		main_udp_node = loaded.general.main_udp_node;
+	}
+
+	/* The snapshot the failure path restores. It is read here, under the
+	 * lock, so it is the state this run actually started from - not whatever
+	 * was on disk while the process was still waiting for the lock. */
+	config_backup = readfile(CONFIG_FILE);
 }
-
-const config_backup = readfile(CONFIG_FILE);
 
 
 function log(...args) {
@@ -284,6 +317,24 @@ function main() {
 
 	Repository.scrub_stale_urltest_refs(uci, uciconfig, log);
 
+	/* A2: the run's single transaction boundary.
+	 *
+	 * apply_nodes(), apply_main_node_refs() and scrub_stale_urltest_refs()
+	 * stage every mutation on this one cursor and commit nothing. Before
+	 * this, each of them committed for itself - eight sites inside the
+	 * repository - so a crash (or a kill) between two of them could leave
+	 * the subscription's nodes written while main_node still pointed at a
+	 * section that had just been deleted. The commit below is the only
+	 * point at which the run becomes visible, and the reload only ever sees
+	 * a fully applied state.
+	 *
+	 * commit() returns true on success, so a failure is detected here rather
+	 * than by generating a configuration from a half-written file. */
+	if (uci.commit(uciconfig) !== true) {
+		log('FAILED to commit the new configuration; the previous configuration is kept.');
+		return false;
+	}
+
 	/* Reload once, after the whole candidate set is committed
 	 * and stale references are scrubbed. The old code stopped
 	 * the service before fetching and then did stop+start; the
@@ -312,17 +363,31 @@ function main() {
 	log('Successfully updated subscriptions.');
 }
 
-if (isEmpty(subscription_urls)) {
-	/* Nothing to do; do not take the lock at all. */
-}
-else if (!acquire_lock()) {
+/* A4: the lock comes first, and every read happens inside it.
+ *
+ * This block used to test the subscription list before taking the lock, so
+ * the read of the configuration happened outside the critical section. The
+ * order is now: acquire -> read -> mutate -> commit -> reload -> release.
+ * The pre-lock "nothing configured" shortcut is preserved in meaning (no
+ * fetch, no write, no log) but it is decided after the lock is held; taking
+ * and releasing an uncontended mkdir lock costs nothing measurable next to
+ * the fetch that would follow. */
+if (!acquire_lock()) {
 	log('Another subscription update is already running; skipping this one.');
 }
 else {
 	/* ucode has no `finally`, so the release is written out on both paths by
 	 * the explicit call after the try/catch. */
 	try {
-		call(main);
+		load_locked_state();
+
+		if (isEmpty(subscription_urls)) {
+			/* Nothing configured: no fetch, no write, no log line - the same
+			 * silent no-op the pre-lock check performed. */
+		}
+		else {
+			call(main);
+		}
 	} catch(e) {
 		log('[FATAL ERROR] An error occurred during updating subscriptions:');
 		log(sprintf('%s: %s', e.type, e.message));

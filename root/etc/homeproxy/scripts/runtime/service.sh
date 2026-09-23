@@ -244,13 +244,44 @@ hp_procd_log_cleaner() {
 	procd_close_instance
 }
 
+# hp_capture_candidate <run-dir> <side>
+# Stage the configuration the reload preflight just generated and validated.
+#
+# The copy is necessary because stop_service() removes $RUN_DIR/sing-box-*.json
+# on its way to start_service (they are runtime state, not configuration), so
+# the file the preflight validated is gone by the time the new instance would
+# use it - which is exactly why the old reload regenerated it. The staged copy
+# lives in $RUN_DIR/candidate/, which stop_service() does not touch, and it is
+# what hp_start_generated_config() activates. Non-zero when there is nothing
+# staged, and the caller aborts the reload rather than continuing without a
+# validated candidate.
+hp_capture_candidate() {
+	local run_dir="$1"
+	local side="$2"
+	local live="$run_dir/sing-box-${side}.json"
+	local cand_dir="$run_dir/candidate"
+	local staged="$cand_dir/sing-box-${side}.json"
+
+	[ -s "$live" ] || return 1
+
+	mkdir -p "$cand_dir" 2>/dev/null || return 1
+	cp -f "$live" "$staged" 2>/dev/null || return 1
+	# The staged file carries the same credentials as the live one; the
+	# generator already wrote it 0600 and this copy has to stay that way.
+	chmod 600 "$staged" 2>/dev/null
+
+	return 0
+}
+
 # hp_start_generated_config <side> <hp-dir> <run-dir> <good-dir>
 # The start-path transaction for one side ("c" or "s"):
 #
 #   HP_USE_KNOWN_GOOD=1 -> copy the recorded configuration over the live one
-#                          instead of regenerating (the generator is a pure
-#                          function of UCI, so it would rebuild the very file
-#                          that just failed)
+#                          instead of regenerating (a rollback: regenerating
+#                          would rebuild the very file that just failed)
+#   HP_CANDIDATE_<SIDE>=1 -> the reload preflight generated and `sing-box
+#                          check`ed this side; activate the copy
+#                          hp_capture_candidate() staged, do not generate again
 #   otherwise           -> generate, then make sure a live file exists,
 #                          falling back to the known-good copy when it does not
 #
@@ -263,16 +294,34 @@ hp_procd_log_cleaner() {
 # already been overwritten by the candidate - so a failed reload had nothing to
 # roll back to.  Promotion is now a separate step, taken only after the gate
 # has passed (hp_promote_known_good, called from start_service).
+#
+# A3: the candidate flag exists because the generator is no longer guaranteed to
+# produce the same bytes twice - its env carries the WAN resolver and the two
+# domain-resource lists, either of which can change between two invocations. A
+# reload that generated the config, validated it, and then let start_service
+# generate it *again* would run an artifact that had never been checked:
+# validate A -> discard A -> generate B -> run B. The flag makes the validated
+# bytes the ones that run. It is per side, so a config_load disagreement between
+# reload_service and start_service (a concurrent UCI change) generates the side
+# the preflight did not cover instead of activating a stale file.
 hp_start_generated_config() {
 	local side="$1"
 	local hp_dir="$2"
 	local run_dir="$3"
 	local good_dir="$4"
-	local label generator live good
+	local label generator live good candidate staged
 
 	case "$side" in
-	c) label="client"; generator="$hp_dir/scripts/generate_client.uc" ;;
-	s) label="server"; generator="$hp_dir/scripts/generate_server.uc" ;;
+	c)
+		label="client"
+		generator="$hp_dir/scripts/generate_client.uc"
+		candidate="${HP_CANDIDATE_CLIENT:-0}"
+		;;
+	s)
+		label="server"
+		generator="$hp_dir/scripts/generate_server.uc"
+		candidate="${HP_CANDIDATE_SERVER:-0}"
+		;;
 	*) log "Error: unknown configuration side '${side}'."; return 1 ;;
 	esac
 
@@ -287,6 +336,26 @@ hp_start_generated_config() {
 		log "Starting with the last known-good ${label} configuration."
 		cp -f "$good" "$live"
 		return 0
+	fi
+
+	if [ "$candidate" = "1" ]; then
+		# The reload preflight's artifact is the one that passed `sing-box
+		# check`. stop_service() removed the live copy on the way here, so the
+		# staged copy is what gets activated - the same bytes that were
+		# validated, not a second generation.
+		staged="$run_dir/candidate/sing-box-${side}.json"
+
+		if [ -s "$staged" ] && cp -f "$staged" "$live" 2>/dev/null; then
+			# One shot: the staged copy must not survive to be activated by a
+			# later start that never validated it.
+			rm -f "$staged"
+			log "Activating the ${label} configuration validated by the reload preflight."
+			return 0
+		fi
+
+		# Defensive: the flag was set but nothing was staged. Generate rather
+		# than activate an unvalidated or stale file.
+		log "Warning: no validated ${label} candidate is staged; generating the configuration again."
 	fi
 
 	ucode -S "$generator" 2>>"$LOG_PATH"

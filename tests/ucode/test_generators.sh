@@ -175,6 +175,50 @@ if ! grep -q '"detour": "main-out"' "$WORK/client/run/sing-box-c.json"; then
 	FAILED=1
 fi
 
+# --- A1: the generator is a pure function of its arguments ----------------
+#
+# generator/client.uc used to resolve its own runtime environment - ubus for
+# the WAN resolver, readfile() for the two domain-resource lists - while being
+# documented as a pure function. "Generate the same config twice" was therefore
+# not guaranteed, and reload's preflight generation was not provably the
+# artifact start_service regenerated. The impure step now lives in the CLI
+# shell, which hands the values to generate(dm, env).
+#
+# Both halves of that contract are pinned here, through the production entry
+# point (not a test-only driver): the same inputs must produce byte-identical
+# output, and a changed GenerationContext input must reach the generator. The
+# comparison is exact string equality rather than a hash, because busybox has
+# no cksum and macOS has no md5sum by default.
+det_dir="$WORK/client"
+det_gen="generate_client.uc"
+det_out="$det_dir/run/sing-box-c.json"
+det_first="$det_dir/determinism-first.json"
+
+cp "$det_out" "$det_first"
+( cd "$det_dir/scripts" && ucode -L "$det_dir/scripts" "$det_gen" ) >"/dev/null" 2>&1
+if [ "$(cat "$det_out")" = "$(cat "$det_first")" ]; then
+	echo "PASS: the same generation inputs produce byte-identical output"
+else
+	echo "FAIL: two identical generation runs produced different output"
+	FAILED=1
+fi
+
+# direct_list.txt is read by the CLI and passed in as env.direct_domain_list.
+# If that plumbing were lost - the exact shape of the old hidden read - the file
+# would be ignored and the output would not move.
+printf 'determinism.example.com\n' > "$det_dir/resources/direct_list.txt"
+( cd "$det_dir/scripts" && ucode -L "$det_dir/scripts" "$det_gen" ) >"/dev/null" 2>&1
+if [ "$(cat "$det_out")" != "$(cat "$det_first")" ]; then
+	echo "PASS: a changed GenerationContext input changes the generated output"
+else
+	echo "FAIL: the domain-resource list did not reach the generator"
+	FAILED=1
+fi
+if ! grep -qF 'determinism.example.com' "$det_out"; then
+	echo "FAIL: the domain from direct_list.txt is absent from the generated config"
+	FAILED=1
+fi
+
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 

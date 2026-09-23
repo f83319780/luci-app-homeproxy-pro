@@ -25,6 +25,16 @@
  * orchestrator (update_subscriptions.uc) never writes UCI directly
  * anymore; it only orchestrates fetch + parse + filter + apply +
  * reload.
+ *
+ * A2 (single commit): this module mutates the caller's cursor and never
+ * commits. It used to commit at nine sites - once at the end of
+ * apply_nodes, seven inside apply_main_node_refs, and once per scrubbed
+ * routing_node - while update_subscriptions.uc's own comments called
+ * that "the repository's single commit". A crash between two of them
+ * left the nodes written but main_node still pointing at a deleted
+ * section, and there was no single point at which the run became
+ * visible. The transaction boundary is now the caller's one commit,
+ * after every mutation is staged.
  */
 
 'use strict';
@@ -63,8 +73,8 @@ import { flatten } from '../parser/flatten.uc';
  *     same hash the cache uses, so a subsequent re-fetch recognises
  *     them as existing
  *
- * Returns the { added, removed } counts. The single uci.commit()
- * is the boundary of "this run wrote something". */
+ * Returns the { added, removed } counts. No commit here: the caller's
+ * single commit is the boundary of "this run wrote something". */
 function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 	let added = 0, removed = 0;
 
@@ -144,8 +154,6 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 			log(sprintf('Adding node: %s.', label));
 		});
 
-	uci.commit(uciconfig);
-
 	return { added, removed };
 }
 
@@ -168,6 +176,10 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
  * `ctx` carries the inputs the orchestrator used to read from UCI:
  *   { main_node, main_udp_node, has_nodes }
  *
+ * Mutates only, no commit. The orchestrator commits once after
+ * apply_nodes, this method and scrub_stale_urltest_refs have all
+ * staged their changes, so a run is either fully visible or not at all.
+ *
  * Returns { main_node: <new>, main_udp_node: <new>, log: [..] } so
  * the orchestrator can log "Main node is gone, switching to ..." /
  * "No available node, disable tproxy." exactly as before. */
@@ -188,7 +200,6 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 		/* No nodes left at all: reset both to 'nil'. */
 		uci.set(uciconfig, ucimain, 'main_node', 'nil');
 		uci.set(uciconfig, ucimain, 'main_udp_node', 'nil');
-		uci.commit(uciconfig);
 		result.main_node = 'nil';
 		result.main_udp_node = 'nil';
 		push(result.log, 'No available node, disable tproxy.');
@@ -206,18 +217,15 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 		});
 		if (length(main_urltest_nodes) !== length(old_main_urltest_nodes)) {
 			uci.set(uciconfig, ucimain, 'main_urltest_nodes', main_urltest_nodes);
-			uci.commit(uciconfig);
 		}
 
 		if (!length(main_urltest_nodes)) {
 			uci.set(uciconfig, ucimain, 'main_node', first_server);
-			uci.commit(uciconfig);
 			result.main_node = first_server;
 			push(result.log, 'Main node is gone, switching to the first node.');
 		}
 	} else if (!uci.get(uciconfig, main_node)) {
 		uci.set(uciconfig, ucimain, 'main_node', first_server);
-		uci.commit(uciconfig);
 		result.main_node = first_server;
 		push(result.log, 'Main node is gone, switching to the first node.');
 	}
@@ -234,18 +242,15 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 			});
 			if (length(main_udp_urltest_nodes) !== length(old_main_udp_urltest_nodes)) {
 				uci.set(uciconfig, ucimain, 'main_udp_urltest_nodes', main_udp_urltest_nodes);
-				uci.commit(uciconfig);
 			}
 
 			if (!length(main_udp_urltest_nodes)) {
 				uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
-				uci.commit(uciconfig);
 				result.main_udp_node = first_server;
 				push(result.log, 'Main UDP node is gone, switching to the first node.');
 			}
 		} else if (!uci.get(uciconfig, main_udp_node)) {
 			uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
-			uci.commit(uciconfig);
 			result.main_udp_node = first_server;
 			push(result.log, 'Main UDP node is gone, switching to the first node.');
 		}
@@ -257,12 +262,13 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 /* --- scrub_stale_urltest_refs ----------------------------------------- */
 
 /* Walk every routing_node and prune the urltest_nodes list to drop
- * entries that no longer point at a live node. One uci.commit()
- * at the end, only if something actually changed (a single commit
- * per affected section, not per node). The pre-PR-03 code committed
- * inside the foreach loop, once per scrubbed routing_node. */
+ * entries that no longer point at a live node. Mutates only: the caller
+ * commits once after this returns. Returns { changed } - the number of
+ * routing_nodes it rewrote - which is what the old `commits` counter
+ * measured (it counted its own commits; the pre-PR-03 code committed
+ * inside the foreach loop, once per scrubbed routing_node). */
 function scrub_stale_urltest_refs(uci, uciconfig, log) {
-	let commits = 0;
+	let changed = 0;
 
 	uci.foreach(uciconfig, 'routing_node', (cfg) => {
 		if (cfg.node !== 'urltest' || isEmpty(cfg.urltest_nodes))
@@ -273,12 +279,11 @@ function scrub_stale_urltest_refs(uci, uciconfig, log) {
 			return null;
 
 		uci.set(uciconfig, cfg['.name'], 'urltest_nodes', cleaned_nodes);
-		uci.commit(uciconfig);
-		commits++;
+		changed++;
 		log(sprintf('Routing node %s: removed gone nodes from urltest list.', cfg['.name']));
 	});
 
-	return { commits };
+	return { changed };
 }
 
 export const Repository = {
