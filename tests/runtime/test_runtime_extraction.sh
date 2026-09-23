@@ -177,7 +177,14 @@ EOF
 	chmod +x "$BIN/$1"
 }
 
-for cmd in nft fw4 utpl pgrep chown; do
+# C2: the functional health probes run `nslookup` and `nc` after the
+# process/listener gate, so both have to exist in the sandbox PATH - otherwise
+# the host's own binaries would answer and the trace would depend on the host
+# (which is the one thing this test exists to prevent).  The generic stub
+# reports success, so a healthy scenario stays quiet: the probes only log when
+# they fail or cannot run.
+
+for cmd in nft fw4 utpl pgrep chown nslookup nc; do
 	stub "$cmd"
 done
 
@@ -249,11 +256,14 @@ printf 'ucode %s\n' "$*" >> "$TRACE"
 for arg in "$@"; do
 	case "$arg" in
 	*generate_client.uc)
-		printf '{"log":{},"inbounds":[{"tag":"dns-in","listen_port":%s},{"tag":"mixed-in","listen_port":%s}],"outbounds":[]}\n' \
+		# One field per line, like the generator's own `%.J` output: the
+		# runtime reads this file (hp_config_ports, hp_config_port_for_tag), so
+		# a compact fixture would test a shape production never writes.
+		printf '{\n\t"log": {},\n\t"inbounds": [\n\t\t{\n\t\t\t"tag": "dns-in",\n\t\t\t"listen_port": %s\n\t\t},\n\t\t{\n\t\t\t"tag": "mixed-in",\n\t\t\t"listen_port": %s\n\t\t}\n\t],\n\t"outbounds": []\n}\n' \
 			"${HP_CFG_dns_port:-5333}" "${HP_CFG_mixed_port:-5330}" > "$HP_TEST_RUN_DIR/sing-box-c.json"
 		;;
 	*generate_server.uc)
-		printf '{"log":{},"inbounds":[],"outbounds":[]}\n' > "$HP_TEST_RUN_DIR/sing-box-s.json"
+		printf '{\n\t"log": {},\n\t"inbounds": [],\n\t"outbounds": []\n}\n' > "$HP_TEST_RUN_DIR/sing-box-s.json"
 		;;
 	esac
 done
@@ -269,7 +279,13 @@ cat > "$BIN/hp_test_broken" <<'EOF'
 side="$1"
 [ -n "${HP_TEST_OCCUPIED_PORT:-}" ] || exit 1
 [ -f "$HP_TEST_RUN_DIR/sing-box-$side.json" ] || exit 1
-grep -q "\"listen_port\":$HP_TEST_OCCUPIED_PORT" "$HP_TEST_RUN_DIR/sing-box-$side.json" || exit 1
+# The pattern has to accept the generator's own `%.J` shape, which is
+# `"listen_port": 5399` - with a space. The first version hardcoded the compact
+# form, so it only injected the fault because the fixture happened to be
+# compact; the moment the fixture was made faithful, the gate stopped seeing a
+# broken configuration. The trailing (`[^0-9]`|end) keeps 5399 from matching
+# 53990.
+grep -qE "\"listen_port\"[[:space:]]*:[[:space:]]*$HP_TEST_OCCUPIED_PORT([^0-9]|$)" "$HP_TEST_RUN_DIR/sing-box-$side.json" || exit 1
 exit 0
 EOF
 chmod +x "$BIN/hp_test_broken"

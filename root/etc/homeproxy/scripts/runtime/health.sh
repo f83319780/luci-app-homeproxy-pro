@@ -176,6 +176,39 @@ hp_config_ports() {
 		| grep -o '[0-9]\+$'
 }
 
+# hp_config_port_for_tag <config-file> <tag>
+# Print the listen_port of the inbound whose "tag" is <tag>, or nothing.
+#
+# The functional probes need to know which listener is the DNS inbound and
+# which is the mixed one, and they have to read that from the same place the
+# gate does - the running configuration. Using the UCI values instead would
+# point the probes at the candidate's ports after a rollback restored the older
+# known-good file: a warning in the log at best, and a rollback of a healthy
+# service when health_probe_strict is on.
+#
+# The generated JSON is pretty-printed with one field per line and `tag`
+# precedes `listen_port` inside each inbound object (generator/inbound.uc), so
+# a two-state walk is enough. The sed first splits any compact JSON onto the
+# same one-field-per-line shape, so the helper does not silently depend on the
+# generator's formatting: with both keys on one line the greedy tag match would
+# keep the LAST tag and find no port at all.
+hp_config_port_for_tag() {
+	sed -e 's/[{},]/\n/g' "$1" 2>"/dev/null" | awk -v tag="$2" '
+		/"tag"[[:space:]]*:/ {
+			t = $0
+			sub(/.*"tag"[[:space:]]*:[[:space:]]*"/, "", t)
+			sub(/".*/, "", t)
+		}
+		/"listen_port"[[:space:]]*:/ && t == tag {
+			p = $0
+			sub(/.*"listen_port"[[:space:]]*:[[:space:]]*/, "", p)
+			sub(/[^0-9].*/, "", p)
+			print p
+			exit
+		}
+	'
+}
+
 # hp_service_healthy <instance-name> <config-path> [port...]
 # One sample of the gate.  Ports are optional (the server side has no fixed
 # listening port worth checking).
@@ -250,4 +283,95 @@ hp_wait_instance() {
 	done
 
 	return 1
+}
+
+# --- functional probes -----------------------------------------------------
+#
+# Everything above answers "is the instance up, and does it own the ports it
+# declared?".  None of it answers "does it actually serve?".  A configuration
+# can pass `sing-box check`, bind every listener, hold them for the whole
+# observation window - and still not resolve a name, because the DNS router
+# failed to initialize or a jail mount is missing.
+#
+# The probes below add that layer, deliberately as *evidence* first and as a
+# gate only when asked for:
+#
+#   * "cannot probe" is reported separately from "the probe failed", so a
+#     target without nslookup/nc does not look like a broken service;
+#   * a failure only fails the gate when health_probe_strict is on. A probe
+#     can fail for reasons that have nothing to do with sing-box - no uplink,
+#     a captive portal, an upstream resolver outage - and rolling a perfectly
+#     good configuration back because of that is worse than the condition
+#     being probed for. A rollback loop is the failure mode to avoid here.
+#
+# The client side is the side with a fixed capability worth probing (its DNS
+# inbound and the mixed inbound). The server side's inbounds are
+# protocol-specific: a bare TCP connect to a REALITY/trojan port proves
+# nothing, so it is not probed.
+: "${HP_PROBE_STRICT:=0}"
+: "${HP_PROBE_NAME:=example.com}"
+
+# hp_probe_dns <port> [name]
+# 0 the DNS inbound answered, 1 it did not, 2 cannot probe here.
+hp_probe_dns() {
+	local port="$1"
+	local name="${2:-$HP_PROBE_NAME}"
+
+	command -v nslookup > "/dev/null" 2>&1 || return 2
+	[ -n "$port" ] || return 2
+
+	nslookup -port="$port" "$name" 127.0.0.1 > "/dev/null" 2>&1 && return 0
+
+	return 1
+}
+
+# hp_probe_tcp <port>
+# 0 something accepted a connection on loopback:<port>, 1 nothing did,
+# 2 cannot probe here.
+hp_probe_tcp() {
+	local port="$1"
+
+	[ -n "$port" ] || return 2
+	command -v nc > "/dev/null" 2>&1 || return 2
+
+	nc 127.0.0.1 "$port" < "/dev/null" > "/dev/null" 2>&1 && return 0
+
+	return 1
+}
+
+# hp_run_probes <label> <dns-port> <mixed-port>
+# Report the probe results for one side. Returns 1 only when a probe failed
+# AND HP_PROBE_STRICT=1; a probe that could not be performed never fails it.
+hp_run_probes() {
+	local label="$1"
+	local dns_port="$2"
+	local mixed_port="$3"
+	local failed=0 rc
+
+	hp_probe_dns "$dns_port" "$HP_PROBE_NAME"
+	case "$?" in
+	0) ;;
+	1)
+		failed=1
+		log "Warning: the ${label} DNS inbound (127.0.0.1:${dns_port}) did not answer a query for ${HP_PROBE_NAME}." ;;
+	2)
+		log "Warning: cannot probe the ${label} DNS inbound (no nslookup, or no dns-in listener in the running configuration)." ;;
+	esac
+
+	hp_probe_tcp "$mixed_port"
+	case "$?" in
+	0) ;;
+	1)
+		failed=1
+		log "Warning: nothing accepted a connection on the ${label} mixed inbound (127.0.0.1:${mixed_port})." ;;
+	2)
+		log "Warning: cannot probe the ${label} mixed inbound (no nc, or no mixed-in listener in the running configuration)." ;;
+	esac
+
+	if [ "$failed" = "1" ] && [ "${HP_PROBE_STRICT:-0}" = "1" ]; then
+		log "Error: the ${label} functional probes failed and health_probe_strict is on."
+		return 1
+	fi
+
+	return 0
 }

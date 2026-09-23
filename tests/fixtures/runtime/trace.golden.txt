@@ -62,6 +62,8 @@ jsonfilter -e @['homeproxy'].instances['sing-box-c']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 netstat -ltnup
+nslookup -port=5333 example.com 127.0.0.1
+nc 127.0.0.1 5330
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -137,7 +139,7 @@ file var/run/homeproxy/fw4_forward.nft:
 file var/run/homeproxy/fw4_input.nft: 
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
-file var/run/homeproxy/known-good/sing-box-c.json: {"log":{},"inbounds":[{"tag":"dns-in","listen_port":5333},{"tag":"mixed-in","listen_port":5330}],"outbounds":[]}|
+file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: B-tproxy-gfwlist-ipv6-with-server (start) =====
@@ -201,6 +203,8 @@ jsonfilter -e @['homeproxy'].instances['sing-box-c']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 netstat -ltnup
+nslookup -port=5333 example.com 127.0.0.1
+nc 127.0.0.1 5330
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -276,7 +280,7 @@ file var/run/homeproxy/fw4_forward.nft:
 file var/run/homeproxy/fw4_input.nft: 
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
-file var/run/homeproxy/known-good/sing-box-c.json: {"log":{},"inbounds":[{"tag":"dns-in","listen_port":5333},{"tag":"mixed-in","listen_port":5330}],"outbounds":[]}|
+file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 
 ===== scenario: C-nothing-configured (start) =====
 uci -q show dhcp.@dnsmasq[0]
@@ -419,6 +423,8 @@ jsonfilter -e @['homeproxy'].instances['sing-box-c']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 netstat -ltnup
+nslookup -port=5333 example.com 127.0.0.1
+nc 127.0.0.1 5330
 sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
@@ -758,6 +764,8 @@ jsonfilter -e @['homeproxy'].instances['sing-box-c']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 netstat -ltnup
+nslookup -port=5333 example.com 127.0.0.1
+nc 127.0.0.1 5330
 sing-box version -n
 log sing-box 1.14.0 started.
 log Rollback completed; the previous configuration is running.
@@ -834,7 +842,7 @@ file var/run/homeproxy/fw4_forward.nft:
 file var/run/homeproxy/fw4_input.nft: 
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
-file var/run/homeproxy/known-good/sing-box-c.json: {"log":{},"inbounds":[{"tag":"dns-in","listen_port":5333},{"tag":"mixed-in","listen_port":5330}],"outbounds":[]}|
+file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: E-custom-routing-no-cache-db (start) =====
@@ -887,6 +895,8 @@ jsonfilter -e @['homeproxy'].instances['sing-box-c']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 netstat -ltnup
+nslookup -port=5333 example.com 127.0.0.1
+nc 127.0.0.1 5330
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -962,4 +972,4 @@ file var/run/homeproxy/fw4_forward.nft:
 file var/run/homeproxy/fw4_input.nft: 
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
-file var/run/homeproxy/known-good/sing-box-c.json: {"log":{},"inbounds":[{"tag":"dns-in","listen_port":5333},{"tag":"mixed-in","listen_port":5330}],"outbounds":[]}|
+file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|

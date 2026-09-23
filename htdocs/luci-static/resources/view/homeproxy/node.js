@@ -6,7 +6,6 @@
 
 'use strict';
 'require form';
-'require fs';
 'require uci';
 'require ui';
 'require view';
@@ -779,11 +778,15 @@ return view.extend({
 			}
 		}
 		o.onclick = function() {
-			return fs.exec_direct('/etc/homeproxy/scripts/update_subscriptions.uc').then((res) => {
+			/* Through the ubus method, not fs.exec_direct() on the script: the
+			   file-exec form is what forced the ACL to grant `exec` on a
+			   root-owned entry point. The method returns the updater's exit
+			   status and captured stderr, so a failure is shown instead of the
+			   page reloading as if it had worked. */
+			return hp.rpcCall('update_subscriptions').then((res) => {
+				if (res && res.result === false)
+					ui.addNotification(null, E('p', _('An error occurred during updating subscriptions: %s').format(res.stderr || res.error || '')));
 				return location.reload();
-			}).catch((err) => {
-				ui.addNotification(null, E('p', _('An error occurred during updating subscriptions: %s').format(err)));
-				return this.map.reset();
 			});
 		}
 

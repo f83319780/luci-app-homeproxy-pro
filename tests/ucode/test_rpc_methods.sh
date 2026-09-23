@@ -152,12 +152,28 @@ let threw = null;
 try { rpc.certificate_write.call({}); } catch (e) { threw = sprintf('%s: %s', e.type, e.message); }
 check('certificate_write tolerates an empty request', threw == null, threw);
 
+/* update_subscriptions runs the staged updater. In this sandbox UCICONFIG_DIR
+ * points at $WORK/cfg, which is empty, so the updater takes its lock, finds no
+ * subscription URL and exits 0 without touching anything - the same early exit
+ * production takes when nothing is configured. Asserting the shape here also
+ * proves the ACL convergence works end to end: the action is reachable through
+ * one named method, and the script it runs is the staged one. */
+{
+	const ret = rpc.update_subscriptions.call({ args: {} });
+	check('update_subscriptions returns an object', type(ret) === 'object');
+	check('update_subscriptions reports the exit status as result',
+		ret.result === true && ret.exitcode === 0,
+		sprintf('result=%J exitcode=%J stderr=%J', ret.result, ret.exitcode, ret.stderr));
+	check('update_subscriptions returns captured output fields',
+		'stdout' in ret && 'stderr' in ret);
+}
+
 /* Every method rpcd exposes, so none can be shipped without ever having been
  * executed.  Four of these were referenced by no test at all. */
 const all_methods = [
 	'acllist_read', 'acllist_write', 'certificate_write', 'connection_check',
 	'log_clean', 'node_parse', 'resources_get_version', 'resources_update',
-	'singbox_generator', 'singbox_get_features'
+	'singbox_generator', 'singbox_get_features', 'update_subscriptions'
 ];
 
 for (let m in all_methods) {

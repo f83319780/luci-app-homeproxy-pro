@@ -119,6 +119,13 @@ echo "== dnsmasq snippet writer (review L6) =="
 # list, routing mode or ipv6 setting must.
 sh "$ROOT/tests/runtime/test_dns_snippets.sh" "$ROOT" "$WORK_ROOT/dns-snippets" || FAILED=1
 
+echo "== functional health probes (C2) =="
+# Also pure shell: nslookup/nc are stubbed, so the probe results are
+# deterministic. What it pins is the property a rollback depends on - the probes
+# report by default and can only fail the gate when health_probe_strict is on,
+# and "cannot probe here" never fails it.
+sh "$ROOT/tests/runtime/test_health_probe.sh" "$ROOT" || FAILED=1
+
 echo "== architecture guard =="
 # Cross-file invariants that no single-layer test can see: the generators must
 # read the production UCI directory, and the subscription updater must read the
@@ -191,11 +198,24 @@ elif [ -n "$HOST" ]; then
 		# this, a target missing it would report NOT RUN and the suite would
 		# still pass, which is how a device-only layer quietly stops being
 		# exercised at all.
+		#
+		# It defaults to 1 here and is overridable for a target that
+		# legitimately has no firewall4 (the on-target workflow's `require_fw4`
+		# input). That input used to be parsed and then ignored, because this
+		# line hardcoded 1 - a switch that could not switch. The value is
+		# restricted to 0/1 because it is interpolated into the remote command
+		# below; anything else falls back to 1 rather than reaching the shell.
+		case "${HP_REQUIRE_FW4:-1}" in
+		0) HP_REQUIRE_FW4=0 ;;
+		1|'') HP_REQUIRE_FW4=1 ;;
+		*)	echo "WARN: HP_REQUIRE_FW4='${HP_REQUIRE_FW4}' is not 0 or 1; using 1"
+			HP_REQUIRE_FW4=1 ;;
+		esac
 		# The second argument is the work dir. Without it the remote run fell
 		# back to ucode/run.sh's default /tmp/hp-ucode-tests, so two concurrent
 		# suite runs on the target shared it and deleted each other's staging -
 		# "could not sandbox ... missing anchor".
-		$SSH "$HOST" "HP_REQUIRE_FW4=1 sh '$REMOTE_DIR/tests/ucode/run.sh' '$REMOTE_DIR' '$REMOTE_DIR/work'" || FAILED=1
+		$SSH "$HOST" "HP_REQUIRE_FW4='$HP_REQUIRE_FW4' sh '$REMOTE_DIR/tests/ucode/run.sh' '$REMOTE_DIR' '$REMOTE_DIR/work'" || FAILED=1
 	else
 		echo "FAIL: could not stage the tests on $HOST"
 		FAILED=1
