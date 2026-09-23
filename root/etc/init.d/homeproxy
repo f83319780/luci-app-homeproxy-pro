@@ -89,6 +89,22 @@ log() {
 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
 }
 
+# hp_client_outbound_node <routing-mode> <dest-var>
+# Read the client's "main node" reference into <dest-var>.
+#
+# The reference is mode-dependent: the built-in routing modes keep it on
+# config.main_node, while custom routing keeps it on routing.default_outbound.
+# start_service, service_started and reload_service all need this value to
+# decide whether a client instance exists at all, and each of them used to
+# spell the branch out itself.
+hp_client_outbound_node() {
+	if [ "$1" != "custom" ]; then
+		config_get "$2" "config" "main_node" "nil"
+	else
+		config_get "$2" "routing" "default_outbound" "nil"
+	fi
+}
+
 # Resolve the dnsmasq snippet directory once, at load time.  stop_service
 # reuses the stored value rather than recomputing it, so a dnsmasq
 # reconfiguration between start and stop cannot make it delete the wrong
@@ -103,12 +119,7 @@ start_service() {
 	local routing_mode proxy_mode outbound_node server_enabled
 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
 	config_get proxy_mode "config" "proxy_mode" "redirect_tproxy"
-
-	if [ "$routing_mode" != "custom" ]; then
-		config_get outbound_node "config" "main_node" "nil"
-	else
-		config_get outbound_node "config" "routing" "default_outbound" "nil"
-	fi
+	hp_client_outbound_node "$routing_mode" outbound_node
 
 	config_get_bool server_enabled "server" "enabled" "0"
 
@@ -190,11 +201,7 @@ service_started() {
 
 	local routing_mode outbound_node server_enabled
 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
-	if [ "$routing_mode" != "custom" ]; then
-		config_get outbound_node "config" "main_node" "nil"
-	else
-		config_get outbound_node "config" "routing" "default_outbound" "nil"
-	fi
+	hp_client_outbound_node "$routing_mode" outbound_node
 	config_get_bool server_enabled "server" "enabled" "0"
 
 	local client_enabled=0
@@ -307,11 +314,7 @@ reload_service() {
 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
 
 	local outbound_node
-	if [ "$routing_mode" != "custom" ]; then
-		config_get outbound_node "config" "main_node" "nil"
-	else
-		config_get outbound_node "config" "routing" "default_outbound" "nil"
-	fi
+	hp_client_outbound_node "$routing_mode" outbound_node
 
 	# Generate first, tear down later.  If the new configuration is invalid
 	# the generator leaves the running one in place, so the reload is
