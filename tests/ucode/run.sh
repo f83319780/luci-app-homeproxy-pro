@@ -231,6 +231,14 @@ mkdir -p "$WORK/subscription"
 cp "$ROOT/tests/ucode/mocks/homeproxy.uc" "$WORK/homeproxy.uc"
 cp "$ROOT/root/etc/homeproxy/scripts/subscription/filter.uc" "$WORK/subscription/filter.uc"
 cp "$ROOT/root/etc/homeproxy/scripts/subscription/decoder.uc" "$WORK/subscription/decoder.uc"
+# The filter test also asserts that applying the policy to the canonical Node
+# writes the same UCI keys the old flat order did, so it drives the real
+# normalize()/flatten() pair. Those live in parser/ and import ./mapping.uc
+# relatively, so all three are staged together next to the test.
+mkdir -p "$WORK/parser"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/normalize.uc" \
+   "$ROOT/root/etc/homeproxy/scripts/parser/flatten.uc" \
+   "$ROOT/root/etc/homeproxy/scripts/parser/mapping.uc" "$WORK/parser/"
 cp "$ROOT/tests/ucode/test_subscription_filter.uc" "$WORK/"
 cp "$ROOT/tests/ucode/test_subscription_decoder.uc" "$WORK/"
 

@@ -5,7 +5,12 @@
  * parser/normalize.uc. Where normalize() turns the parser's flat
  * UCI-key output into the canonical Node shape the Adapter reads,
  * flatten() turns a canonical Node back into the flat UCI-key dict
- * the Repository (which still writes UCI keys verbatim) needs.
+ * UCI needs.
+ *
+ * The Repository's apply_nodes() is the only production caller: it is
+ * the one boundary where a canonical Node becomes UCI keys, which is
+ * what lets the orchestrator, the filter and the policy step work on
+ * canonical Nodes alone.
  *
  * Same single-source-of-truth discipline: every canonical -> UCI
  * mapping comes from parser/mapping.uc's PROTOCOL_TO_UCI. Adding a

@@ -1,13 +1,13 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * B1.1: pure subscription filter. The orchestrator
+ * Pure subscription filter. The orchestrator
  * (update_subscriptions.uc) used to inline both the keyword
  * whitelist/blacklist check and the post-parse policy application
- * (tls_insecure override, packet_encoding for vless/vmess). Moving
- * them here keeps the orchestrator focused on the fetch/cache/
- * repository flow and lets the pure logic be unit-tested without
- * UCI access.
+ * (tls.insecure override, protocol_options.packet_encoding for
+ * vless/vmess). They live here so the orchestrator stays focused on
+ * the fetch/cache/repository flow and the pure logic is unit-testable
+ * without UCI access.
  *
  * Neither function touches module state: mode / keywords / opts
  * come in as arguments, and a logger is passed in for the
@@ -54,23 +54,42 @@ export function check(name, mode, keywords, log) {
 	return matched;
 };
 
-/* Apply the two policy tweaks the orchestrator used to do inline:
- *   - tls_insecure is set on a config that has tls='1' when the
- *     user opted in via subscription.allow_insecure='1'
- *   - packet_encoding is set on vless/vmess configs to the
+/* Apply the two policy tweaks the orchestrator used to do inline. The subject
+ * is a canonical Node - the same shape parser/normalize.uc produces and
+ * parser/flatten.uc turns back into UCI keys - not the parser's flat
+ * UCI-key dict:
+ *
+ *   - tls.insecure is set when the node has TLS enabled and the user opted in
+ *     via subscription.allow_insecure='1'
+ *   - protocol_options.packet_encoding is set on vless/vmess nodes to the
  *     subscription's default
  *
- * Mutates and returns the config; the return value is the same
- * object as the input, so callers can chain. */
-export function apply_policy(config, opts) {
-	if (!config)
-		return config;
+ * This used to run on the flat dict, which is why the orchestrator applied
+ * policy on one representation and handed a different one to the Repository.
+ * The canonical Node is now the only business object between the parser and
+ * the Repository, and this was the last step still forcing the flat shape.
+ * The tweaks are a property of the subscription, not of the parsed link, so
+ * they deliberately do not take part in the duplicate fingerprint - which is
+ * computed from the parser output before this runs.
+ *
+ * Mutates and returns the node; the return value is the same object as the
+ * input, so callers can chain. */
+export function apply_policy(node, opts) {
+	if (!node)
+		return node;
 
-	if (config.tls === '1' && opts.allow_insecure === '1')
-		config.tls_insecure = '1';
+	if (node.tls && node.tls.enabled === '1' && opts.allow_insecure === '1')
+		node.tls.insecure = '1';
 
-	if (config.type in ['vless', 'vmess'])
-		config.packet_encoding = opts.packet_encoding;
+	if (node.type in ['vless', 'vmess']) {
+		/* normalize() always builds protocol_options; a hand-made node
+		 * (a test fixture, a future caller) may not have it, and the flat
+		 * version simply created the key. */
+		if (!node.protocol_options)
+			node.protocol_options = {};
 
-	return config;
+		node.protocol_options.packet_encoding = opts.packet_encoding;
+	}
+
+	return node;
 };

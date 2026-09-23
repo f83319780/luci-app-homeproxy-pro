@@ -9,11 +9,10 @@
  *   - config/loader.uc PROTOCOL_OPTIONS (canonical -> UCI)
  *   - config/adapter.uc OPTION_FIELDS (canonical -> adapter code)
  *
- * The Loader's PROTOCOL_OPTIONS is now derived from the table in this
- * file. The parser still writes UCI keys directly (changing
- * that would also change the Repository's UCI write contract), but the
- * mapping lives here so the next step (canonical Node output) has one
- * place to flip.
+ * The Loader's PROTOCOL_OPTIONS is derived from the table in this file,
+ * and both directions of the pipeline read it: normalize.uc renames UCI
+ * keys to canonical names, flatten.uc renames them back on the way to
+ * UCI. Adding a protocol option is one edit here, not one per layer.
  *
  * `keys()` direction: every row's left side is the canonical name the
  * Loader hands the Adapter; the right side is the UCI option name the
