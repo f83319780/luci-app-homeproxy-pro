@@ -51,6 +51,33 @@ stage_rewrite "$WORK/scripts/homeproxy.uc" "$WORK/scripts/homeproxy.uc.new"
 mv -f "$WORK/scripts/homeproxy.uc.new" "$WORK/scripts/homeproxy.uc"
 stage_rewrite "$ROOT/root/usr/share/rpcd/ucode/luci.homeproxy" "$WORK/rpc.uc"
 
+# update_subscriptions.call() execs the staged updater through /bin/sh, so its
+# shebang has to name the ucode that is running this test. On a target that is
+# /usr/bin/ucode and nothing needs rewriting; on the off-target testbed the
+# toolchain is built into a private prefix (tests/toolchain/build-ucode-*.sh)
+# by design, and CI has nothing at /usr/bin/ucode at all - the first version of
+# this test came back as "not found" (exit 127) there and passed on the device,
+# which is the kind of environment dependence the staging is supposed to
+# remove. The rewrite is asserted, not assumed.
+UCODE_BIN="$(command -v ucode)"
+if [ "$UCODE_BIN" != "/usr/bin/ucode" ]; then
+	# `|` as the delimiter, not `#`: the pattern and the replacement both
+	# contain `#!`, and busybox sed rejects the escaped form ("bad option in
+	# substitution expression") while GNU sed accepts it.
+	sed -e "1s|^#!/usr/bin/ucode\$|#!$UCODE_BIN|" \
+	    "$WORK/scripts/update_subscriptions.uc" > "$WORK/scripts/update_subscriptions.uc.new"
+	mv -f "$WORK/scripts/update_subscriptions.uc.new" "$WORK/scripts/update_subscriptions.uc"
+	if ! head -n 1 "$WORK/scripts/update_subscriptions.uc" | grep -qxF "#!$UCODE_BIN"; then
+		echo "FAIL: could not point the staged updater's shebang at $UCODE_BIN"
+		head -n 1 "$WORK/scripts/update_subscriptions.uc"
+		exit 1
+	fi
+fi
+# After the rewrite, not before: the sed above creates the new file with the
+# default umask, so a chmod applied to the original would be lost with the mv
+# and /bin/sh would refuse to exec it (exit 126).
+chmod +x "$WORK/scripts/update_subscriptions.uc"
+
 mkdir -p "$WORK/certs" "$WORK/run" "$WORK/cfg" "$WORK/tmp"
 
 cat > "$WORK/driver_body.uc" <<'DRIVER'
