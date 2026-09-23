@@ -1293,6 +1293,44 @@ else
 fi
 
 echo
+echo "== guard 30: the ACL grants no file execution =="
+
+# The subscription button used fs.exec_direct() on
+# /etc/homeproxy/scripts/update_subscriptions.uc, and that is the only reason
+# the ACL carried `"exec"` for a root-owned path: a browser session authorised
+# to execute a file, rather than to call one named method. The updater is a ubus
+# method now (update_subscriptions), so no path in this ACL may be executable -
+# and no view may try, because the exec would be denied at run time.
+ACL_EXEC="$(grep -n '"exec"' "$ACL" 2>"/dev/null" || true)"
+if [ -z "$ACL_EXEC" ]; then
+	pass "the ACL grants no executable file path"
+else
+	fail "the ACL still grants file execution:"
+	printf '      %s\n' "$ACL_EXEC"
+fi
+
+# Block comments are stripped first: the call site's own explanatory comment
+# names fs.exec_direct(), and a naive grep matched that prose - the same trap
+# the frontend RPC boundary test documents.
+EXEC_DIRECT="$(python3 - "$VIEWS" <<'PY'
+import pathlib, re, sys
+bad = []
+for f in sorted(pathlib.Path(sys.argv[1]).rglob('*.js')):
+    src = re.sub(r'/\*[\s\S]*?\*/', '', f.read_text(encoding='utf-8'))
+    for n, line in enumerate(src.split('\n'), 1):
+        if 'exec_direct' in line:
+            bad.append('%s:%d: %s' % (f.relative_to(sys.argv[1]), n, line.strip()))
+print('\n'.join(bad))
+PY
+)"
+if [ -z "$EXEC_DIRECT" ]; then
+	pass "no view runs a file directly (the ACL grants no exec right)"
+else
+	fail "a view still calls fs.exec_direct, which needs the exec grant this ACL no longer has:"
+	printf '      %s\n' "$EXEC_DIRECT"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

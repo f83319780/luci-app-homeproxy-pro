@@ -9,7 +9,7 @@
 
 import { access, error, lstat, popen, readfile, writefile } from 'fs';
 
-import { isBinary, isValidECHConfig, isValidPEM, shellQuote } from '/etc/homeproxy/scripts/homeproxy.uc';
+import { isBinary, isValidECHConfig, isValidPEM, shellQuote, executeCommand } from '/etc/homeproxy/scripts/homeproxy.uc';
 import { parse_uri } from '/etc/homeproxy/scripts/parser/uri.uc';
 
 /* Kanged from ucode/luci - replaced by the imported shellQuote() so every shell
@@ -349,6 +349,34 @@ const methods = {
 				return { status: exit_code };
 			} else
 				return { status: 255, error: 'illegal type' };
+		}
+	},
+	update_subscriptions: {
+		/* Run the subscription updater once and report how it went.
+		 *
+		 * The LuCI button used fs.exec_direct() on
+		 * /etc/homeproxy/scripts/update_subscriptions.uc, which is the only
+		 * reason the package ACL had to grant `file exec` on a root-owned
+		 * entry point: the browser session was authorised to execute that
+		 * path. Through one named ubus method the session is granted the
+		 * action instead, and the ACL lists no executable path at all
+		 * (arch-guard 30).
+		 *
+		 * executeCommand() (homeproxy.uc) returns the exit status and the
+		 * captured stdout/stderr, so a failing update reaches the UI as a
+		 * message rather than as a silent no-op. Its argument is
+		 * shellQuote()d: the helper joins what it is given into one shell
+		 * line, so an unquoted path would be re-split by /bin/sh. */
+		call: function() {
+			const script = shellQuote(`${HP_DIR}/scripts/update_subscriptions.uc`);
+			const result = executeCommand(script);
+
+			return {
+				result: result.exitcode === 0,
+				exitcode: result.exitcode,
+				stdout: result.stdout,
+				stderr: result.stderr
+			};
 		}
 	}
 };

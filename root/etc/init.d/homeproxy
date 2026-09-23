@@ -219,6 +219,26 @@ service_started() {
 		hp_wait_service "sing-box-c" "$RUN_DIR/sing-box-c.json" \
 			"$HP_HEALTH_BUDGET" "$HP_HEALTH_STABLE" $client_ports \
 			|| failed="sing-box-c"
+
+		# The probes read their ports from the running configuration, not from
+		# UCI: after a rollback the live file is the older known-good copy and
+		# may bind different ports, and probing the candidate's ports would
+		# warn about a healthy service (or, with health_probe_strict on, roll
+		# it back again).
+		if [ -z "$failed" ]; then
+			local probe_dns_port probe_mixed_port probe_strict probe_name
+			probe_dns_port="$(hp_config_port_for_tag "$RUN_DIR/sing-box-c.json" 'dns-in')"
+			probe_mixed_port="$(hp_config_port_for_tag "$RUN_DIR/sing-box-c.json" 'mixed-in')"
+			config_get_bool probe_strict "config" "health_probe_strict" "0"
+			config_get probe_name "config" "health_probe_name" "example.com"
+
+			HP_PROBE_STRICT="$probe_strict"
+			HP_PROBE_NAME="$probe_name"
+			export HP_PROBE_STRICT HP_PROBE_NAME
+
+			hp_run_probes "client" "$probe_dns_port" "$probe_mixed_port" \
+				|| failed="sing-box-c"
+		fi
 	fi
 	if [ "$server_enabled" = "1" ] && [ -z "$failed" ]; then
 		server_ports="$(hp_config_ports "$RUN_DIR/sing-box-s.json")"

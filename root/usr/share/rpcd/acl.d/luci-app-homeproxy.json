@@ -3,7 +3,6 @@
 		"description": "Grant access to homeproxy configuration",
 		"read": {
 			"file": {
-				"/etc/homeproxy/scripts/update_subscriptions.uc": [ "exec" ],
 				"/var/run/homeproxy/homeproxy.log": [ "read" ],
 				"/var/run/homeproxy/sing-box-c.log": [ "read" ],
 				"/var/run/homeproxy/sing-box-s.log": [ "read" ]
@@ -33,7 +32,8 @@
 					"certificate_write",
 					"log_clean",
 					"resources_update",
-					"singbox_generator"
+					"singbox_generator",
+					"update_subscriptions"
 				]
 			},
 			"uci": [ "homeproxy" ]

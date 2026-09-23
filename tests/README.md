@@ -79,6 +79,28 @@ on its own on a target:
 sh tests/ucode/run.sh "$PWD"
 ```
 
+### The standard device regression
+
+One command, no install, safe to run against a target that is also in use:
+
+```sh
+HP_TEST_HOST=root@<test-machine> sh tests/run.sh          # stage + run everywhere
+HP_TEST_HOST=root@<test-machine> HP_REQUIRE_FW4=0 sh tests/run.sh   # target without firewall4
+```
+
+`HP_REQUIRE_FW4` defaults to `1` on this branch and is validated as `0`/`1`;
+the on-target workflow's `require_fw4` input maps onto it. Both the script and
+the workflow print which value was used, so a fw4 layer that reported `NOT RUN`
+is visible rather than inferred.
+
+Installing the package and reloading the router is **not** part of this command.
+If a change needs that (anything in `/etc/init.d/homeproxy`,
+`scripts/runtime/*.sh`, or the generation path), do it as a separate, deliberate
+step — and take `/etc/config/homeproxy` plus `/etc/homeproxy` aside first, with
+the previous release's package kept for re-install. `apk` keeps a modified
+conffile and drops a `<file>.apk-new` next to it; check `md5sum` on the config
+before and after and delete the `.apk-new` files only once that matches.
+
 ## Local macOS testbed
 
 The ucode part normally needs an OpenWrt device because ucode has no Homebrew
@@ -170,9 +192,11 @@ but the assertions would then be about a ruleset the real `fw4` never
 produced — see that script's header for the reasoning.
 
 It is not left as a bare skip, though: `HP_REQUIRE_FW4=1` turns the skip into a
-failure, and `tests/run.sh` sets it in the ssh branch. A target always has
-firewall4, so the one environment able to run the render must run it — and a
-target that somehow cannot now fails instead of quietly reporting `NOT RUN`.
+failure, and `tests/run.sh` defaults it to 1 in the ssh branch. A target always
+has firewall4, so the one environment able to run the render must run it — and a
+target that somehow cannot now fails instead of quietly reporting `NOT RUN`. The
+default can be turned off for a target that legitimately lacks fw4
+(`HP_REQUIRE_FW4=0`, or `require_fw4: false` on the on-target workflow).
 
 Two further host differences are bridged so the remaining checks still run:
 
@@ -221,7 +245,8 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/lib/luci-module.js` | The off-target LuCI module loader (`'require x as y';` rewritten into a dependency lookup), shared by the snapshot renderer and the frontend invariant tests. Its default `_()` returns a LuCI String object with `.format`, because the form code calls both halves. |
 | `tests/runtime/test_config_transaction.sh` | The `runtime/` helpers `init.d/homeproxy` leans on: the known-good copy, the fallback when generation produced nothing, the rollback, and the health probe. Pure shell, runs anywhere. |
 | `tests/runtime/test_dns_snippets.sh` | The dnsmasq snippet writer's incremental behaviour (review L6). Counts `init.d/dnsmasq restart` calls through a stub and asserts that an identical second write does *not* restart (a restart flushes every client's DNS cache), while a changed resource list, routing mode, DNS port or `ipv6_support` setting does. Also pins that a mode change drops the snippet the previous mode produced, and that removing a resource list removes its snippet so the next call is stable again. Pure shell, runs anywhere. |
-| `tests/runtime/test_runtime_extraction.sh` | Drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci` / `netstat`, fake procd and jsonfilter state, fixture UCI) across four scenarios and diffs the resulting command + file trace against a baseline. Two baselines exist and are captured with the SAME harness, so the diff between them is exactly the intentional change: `tests/fixtures/runtime/trace.pre-pr05.txt` (the 517-line init script before PHASE 7 moved the plumbing out — the record that the extraction was behaviour-preserving) and `tests/fixtures/runtime/trace.golden.txt` (after the health-gate fix). Scenario D is the P0 regression: a candidate whose `mixed_port` is already taken must be rejected by the health gate, the previous known-good must survive, and the reload must roll back onto it. Pure shell, no ucode needed. Regenerate with `HP_UPDATE_GOLDEN=1` (optionally `HP_GOLDEN=` / `HP_INITD=` to target another baseline or revision). |
+| `tests/runtime/test_health_probe.sh` | The functional health probes (`runtime/health.sh`): `hp_probe_dns` / `hp_probe_tcp` answer 0 / 1 / 2 and keep "cannot probe here" (no tool, no port) distinct from "the probe failed"; `hp_run_probes` *reports* by default and only fails the gate when `health_probe_strict` is on, and never fails it for a probe that could not run; `hp_config_port_for_tag` reads the probe ports out of the running configuration in both the generator's pretty shape and the compact one. `nslookup` and `nc` are stubbed, so it is pure shell and runs anywhere. |
+| `tests/runtime/test_runtime_extraction.sh` | Drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci` / `netstat` / `nslookup` / `nc`, fake procd and jsonfilter state, fixture UCI) across five scenarios and diffs the resulting command + file trace against a baseline. Two baselines exist and are captured with the SAME harness, so the diff between them is exactly the intentional change: `tests/fixtures/runtime/trace.pre-pr05.txt` (the 517-line init script before PHASE 7 moved the plumbing out — the record that the extraction was behaviour-preserving) and `tests/fixtures/runtime/trace.golden.txt` (after the health-gate fix). Scenario D is the P0 regression: a candidate whose `mixed_port` is already taken must be rejected by the health gate, the previous known-good must survive, and the reload must roll back onto it. The generated fixture configuration is pretty-printed like the generator's own `%.J` output, because the runtime reads that file (`hp_config_ports`, `hp_config_port_for_tag`) and a compact fixture would test a shape production never writes. Pure shell, no ucode needed. Regenerate with `HP_UPDATE_GOLDEN=1` (optionally `HP_GOLDEN=` / `HP_INITD=` to target another baseline or revision). |
 
 ### What the LuCI form snapshots cover
 
