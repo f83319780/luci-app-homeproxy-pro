@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/outbound.uc: build the sing-box `outbounds` and `endpoints`
  *                            blocks, plus the urltest pruning the route
  *                            builder depends on.
@@ -54,7 +52,7 @@ import { get_outbound, get_resolver } from './common.uc';
  * urltest node emitted an endpoint with no private key and a peer with
  * no public key.  tests/fixtures/generators/wireguard.uci guards it.
  *
- * PR-04: the endpoint *shaping* moved to EndpointFactory in
+ * The endpoint *shaping* lives in EndpointFactory in
  * config/adapter.uc, so the generator no longer holds protocol business
  * logic for WireGuard. This stays as the call sites' entry point, which
  * keeps the module's endpoint vocabulary without making every caller

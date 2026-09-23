@@ -1331,6 +1331,58 @@ else
 fi
 
 echo
+echo "== guard 31: the sing-box floor is identical in the gate, the testbed and the docs =="
+
+# The package cannot express "sing-box >= 1.14" as an OpenWrt dependency: the
+# build system has no version-constrained depends for a package the feed
+# builds independently, so an install on a 1.13 source succeeds and the service
+# only refuses at start time (hp_require_singbox). That makes the floor a
+# number stated in four places, any of which a later edit can desync:
+#
+#   runtime/service.sh    hp_require_singbox()   the enforcement
+#   tests/toolchain/*     SINGBOX_VERSION        what the suite tests against
+#   Makefile              +sing-box              the dependency itself
+#   README.md             the stated requirement
+#
+# The testbed pin matters most: if it moved below the gate, the generator cases
+# would feed configs to a binary the package rejects and the suite would pass
+# on a version users cannot run.
+GATE_MAJOR="$(grep -oE 'sb_major" -lt [0-9]+' "$RUNTIME/service.sh" 2>"/dev/null" | grep -oE '[0-9]+$' | head -1)"
+GATE_MINOR="$(grep -oE 'sb_minor" -lt [0-9]+' "$RUNTIME/service.sh" 2>"/dev/null" | grep -oE '[0-9]+$' | head -1)"
+TESTBED_VERSION="$(sed -n 's/^SINGBOX_VERSION="\([0-9][0-9.]*\)"$/\1/p' \
+	"$ROOT/tests/toolchain/build-ucode-linux.sh" 2>"/dev/null" | head -1)"
+TESTBED_FLOOR="${TESTBED_VERSION%.*}"
+
+FLOOR_PROBLEMS=""
+[ -n "$GATE_MAJOR" ] && [ -n "$GATE_MINOR" ] || FLOOR_PROBLEMS="$FLOOR_PROBLEMS no floor in runtime/service.sh"
+[ -n "$TESTBED_VERSION" ] || FLOOR_PROBLEMS="$FLOOR_PROBLEMS no SINGBOX_VERSION in the testbed script"
+if [ -n "$GATE_MAJOR" ] && [ -n "$TESTBED_VERSION" ] && [ -n "$GATE_MINOR" ]; then
+	[ "$GATE_MAJOR.$GATE_MINOR" = "$TESTBED_FLOOR" ] \
+		|| FLOOR_PROBLEMS="$FLOOR_PROBLEMS the gate refuses below $GATE_MAJOR.$GATE_MINOR but the testbed pins $TESTBED_VERSION"
+fi
+grep -q '+sing-box' "$ROOT/Makefile" 2>"/dev/null" \
+	|| FLOOR_PROBLEMS="$FLOOR_PROBLEMS the Makefile does not depend on +sing-box"
+if [ -n "$GATE_MAJOR" ] && [ -n "$GATE_MINOR" ]; then
+	# The requirement section specifically, not "1.14 appears somewhere in the
+	# README": the title and the comparison table mention 1.14 too, and a guard
+	# that any of those can satisfy would pass on a README whose requirements
+	# no longer state the floor at all - which is exactly how the earlier
+	# version of this check behaved.
+	README_REQ="$(awk '/^## 运行要求/{f=1;next} /^## /{f=0} f' "$ROOT/README.md" 2>"/dev/null")"
+	if [ -z "$README_REQ" ]; then
+		FLOOR_PROBLEMS="$FLOOR_PROBLEMS README.md has no '## 运行要求' section"
+	elif ! printf '%s\n' "$README_REQ" | grep -qE "sing-box[^0-9]{0,6}$GATE_MAJOR\\.$GATE_MINOR"; then
+		FLOOR_PROBLEMS="$FLOOR_PROBLEMS the README requirements do not state the $GATE_MAJOR.$GATE_MINOR floor"
+	fi
+fi
+
+if [ -z "$FLOOR_PROBLEMS" ]; then
+	pass "gate, testbed pin, dependency and README all say sing-box $GATE_MAJOR.$GATE_MINOR"
+else
+	fail "the sing-box floor is inconsistent:$FLOOR_PROBLEMS"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

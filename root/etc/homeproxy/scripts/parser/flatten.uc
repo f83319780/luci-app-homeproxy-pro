@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-03 (Subscription Transaction Boundary): the inverse of
+ * The inverse of
  * parser/normalize.uc. Where normalize() turns the parser's flat
  * UCI-key output into the canonical Node shape the Adapter reads,
  * flatten() turns a canonical Node back into the flat UCI-key dict

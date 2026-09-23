@@ -244,7 +244,7 @@ export function redactUrl(url) {
  * returned `error` is safe no matter where the caller ships it - the
  * fetcher logs it, the orchestrator returns it, anything that prints it
  * afterwards has already lost the token.  Centralising the redaction at
- * the source is the review H3's point: every call site used to have to
+ * the source is the point: every call site used to have to
  * remember to redact, and the one that forgot was the original bug.
  *
  * A non-string input is returned unchanged so this is safe to apply to

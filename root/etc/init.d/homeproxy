@@ -3,7 +3,7 @@
 #
 # Copyright (C) 2022-2023 ImmortalWrt.org
 #
-# PR-05 (PHASE 7): this file is the lifecycle orchestrator only.  Everything
+# This file is the lifecycle orchestrator only.  Everything
 # that is not "read the configuration, decide, and drive procd" now lives in
 # /etc/homeproxy/scripts/runtime/:
 #
@@ -79,7 +79,7 @@ GOOD_DIR="$RUN_DIR/known-good"
 [ -f "$HP_DIR/scripts/runtime/config.sh" ] && . "$HP_DIR/scripts/runtime/config.sh"
 [ -f "$HP_DIR/scripts/runtime/health.sh" ] && . "$HP_DIR/scripts/runtime/health.sh"
 
-# Device-side orchestration extracted by PR-05.
+# Device-side orchestration extracted from the init script.
 [ -f "$HP_DIR/scripts/runtime/service.sh" ] && . "$HP_DIR/scripts/runtime/service.sh"
 [ -f "$HP_DIR/scripts/runtime/dns.sh" ] && . "$HP_DIR/scripts/runtime/dns.sh"
 [ -f "$HP_DIR/scripts/runtime/firewall.sh" ] && . "$HP_DIR/scripts/runtime/firewall.sh"

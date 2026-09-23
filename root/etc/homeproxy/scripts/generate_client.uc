@@ -2,9 +2,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
- *     scripts/generate_client.uc: 10-line CLI shell.
+ *     scripts/generate_client.uc: process-level entry point.
  *
  * The actual client generator is generator/client.uc; this script is the
  * thin entry point that init.d/homeproxy execve's. Responsibilities:
@@ -83,7 +81,7 @@ system('mkdir -p ' + shellQuote(RUN_DIR));
  * mkdtemp() is this package's existing primitive for that (executeCommand()
  * uses it) and gives a 0700 directory under /tmp.  The path here comes from
  * mkdtemp() so it is safe today, but it goes through shellQuote() anyway:
- * review M6's "all shell args quoted" rule is the machine-checkable
+ * the "all shell args quoted" rule is the machine-checkable
  * invariant, not a comment about today's safety. */
 const work_dir = mkdtemp();
 const tmp = work_dir + '/sing-box-c.json';

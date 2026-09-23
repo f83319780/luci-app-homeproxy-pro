@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/dns.uc: build the sing-box `dns` block.
  *
  * Two routing-mode families exist:

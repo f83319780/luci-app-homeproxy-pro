@@ -13,7 +13,7 @@ import { isBinary, isValidECHConfig, isValidPEM, shellQuote, executeCommand } fr
 import { parse_uri } from '/etc/homeproxy/scripts/parser/uri.uc';
 
 /* Kanged from ucode/luci - replaced by the imported shellQuote() so every shell
- * argument in this file goes through one helper (review M6). */
+ * argument in this file goes through one helper. */
 function hasKernelModule(kmod) {
 	return (system(sprintf('[ -e "/lib/modules/$(uname -r)"/%s ]', shellQuote(kmod))) === 0);
 }

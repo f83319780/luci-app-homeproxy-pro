@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/route.uc: build the sing-box `route` block.
  *
  * The route block has the same routing-mode split as the DNS block:
