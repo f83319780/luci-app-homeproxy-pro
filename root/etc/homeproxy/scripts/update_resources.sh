@@ -78,8 +78,13 @@ check_list_update() {
 	local github_token="$(uci -q get homeproxy.config.github_token)"
 	local wget="wget --timeout=10 -q"
 
-	exec 200>"$lock"
-	if ! flock -n 200 &> "/dev/null"; then
+	# fd 9, not 200: POSIX only guarantees 0-9, and dash fails the whole
+	# `exec 200>"$lock"` with "exec: 200: not found". busybox ash and bash
+	# accept multi-digit descriptors, so this only ever showed up off-target -
+	# but the shebang says /bin/sh, and the off-target driver runs it there.
+	# `&>` is a bashism for the same reason; `> file 2>&1` is the POSIX form.
+	exec 9>"$lock"
+	if ! flock -n 9 >"/dev/null" 2>&1; then
 		log "[$(to_upper "$listtype")] A task is already running."
 		return 2
 	fi

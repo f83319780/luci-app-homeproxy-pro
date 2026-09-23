@@ -133,6 +133,16 @@ chmod +x "$WORK/bin/"*
 PATH="$WORK/bin:$PATH"
 export PATH
 
+# The script's shebang is /bin/sh, so run it under the strictest /bin/sh this
+# host has: dash rejects the multi-digit file descriptor and the `&>` that
+# busybox ash and bash accept greedily, and "exec: 200: not found" was how that
+# reached CI. On a target there is no dash and busybox ash is the real thing.
+RUN_SH="sh"
+if command -v dash > "/dev/null" 2>&1; then
+	RUN_SH="dash"
+fi
+echo "running update_resources.sh under: $RUN_SH"
+
 # --- fixtures ---------------------------------------------------------------
 API_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 LOCAL_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -164,7 +174,7 @@ run_case() {
 	printf '%s' "$1" > "$WORK/local-blob"
 	write_contents_json "$2"
 	export HP_T_LOCAL_BLOB="$WORK/local-blob"
-	sh "$WORK/scripts/update_resources.sh" china_ip4 > "$WORK/stdout" 2>&1
+	"$RUN_SH" "$WORK/scripts/update_resources.sh" china_ip4 > "$WORK/stdout" 2>&1
 	echo $?
 }
 
