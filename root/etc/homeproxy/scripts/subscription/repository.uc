@@ -20,11 +20,14 @@
  *                                 urltest_nodes entries left behind by
  *                                 nodes that have since been removed.
  *
- * apply_nodes takes canonical Node objects (post- parser/normalize)
- * and flattens them via parser/flatten before talking to UCI. The
- * orchestrator (update_subscriptions.uc) never writes UCI directly
- * anymore; it only orchestrates fetch + parse + filter + apply +
- * reload.
+ * Writes are driven by canonical Node objects (post- parser/normalize).
+ * UCI is flat, so apply_nodes expands each node with parser/flatten.uc -
+ * and that call is the module's only canonical -> UCI boundary: callers
+ * hand this module canonical Nodes, never flat dicts, and every UCI key
+ * name comes from parser/mapping.uc. The orchestrator
+ * (update_subscriptions.uc) never writes UCI directly; it orchestrates
+ * fetch + parse + normalize + filter + policy + reload and owns the one
+ * commit.
  *
  * A2 (single commit): this module mutates the caller's cursor and never
  * commits. It used to commit at nine sites - once at the end of
@@ -144,6 +147,16 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 			 * several protocols' options. Accept either. */
 			const label = node.label || node.name;
 			const nameHash = md5(node.grouphash + label);
+
+			/* The one boundary where a canonical Node becomes UCI keys.
+			 *
+			 * UCI is a flat key/value store, so this expansion has to
+			 * happen somewhere; keeping it inside the Repository's write
+			 * path is what lets every other layer - the orchestrator, the
+			 * filter, the policy step - speak canonical only. If a field
+			 * must not reach UCI, or its UCI name must change, this call
+			 * and parser/mapping.uc are the places to look; no caller
+			 * hands this function a flat dict. */
 			const flat = flatten(node);
 
 			uci.set(uciconfig, nameHash, 'node');

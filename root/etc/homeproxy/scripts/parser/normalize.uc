@@ -2,16 +2,16 @@
  * SPDX-License-Identifier: GPL-2.0-only
  *
  * The per-scheme parsers in
- * parser/protocols.uc still produce a FLAT UCI-key dict (because the
- * Repository writes UCI keys verbatim today). The Adapter, the Loader
- * and REQUIRED_CREDENTIALS, however, all think in the canonical Node
- * shape: nested tls / transport / multiplex / credentials /
- * protocol_options sub-objects.
+ * parser/protocols.uc produce a FLAT UCI-key dict; that is their output
+ * shape. The Adapter, the Loader, the policy step and the Repository's
+ * write path all think in the canonical Node shape instead: nested tls /
+ * transport / multiplex / credentials / protocol_options sub-objects.
  *
- * normalize() bridges those two: any caller that wants a canonical
- * Node (RPC for share-link import, tests, future callers) can run
- * the parsed config through it. The Repository keeps its flat shape
- * for now (changing the Repository contract is a separate step).
+ * normalize() is the crossing point: every caller that needs the
+ * canonical Node - the subscription orchestrator, the RPC that imports a
+ * share link, tests - runs the parsed config through it. parser/flatten.uc
+ * is the inverse and is used only where UCI has to be written, which is
+ * the Repository's apply_nodes().
  *
  * The mapping is sourced from parser/mapping.uc (canonical -> UCI)
  * so the Loader, the Adapter and the parser cannot drift apart.

@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * B1.1: pure subscription decoder. The fetcher returns raw bytes
+ * Pure subscription decoder. The fetcher returns raw bytes
  * and the orchestrator used to inline the JSON / base64 / SIP008
  * handling. Pulling it out gives the orchestrator a single
  * `decode(content, log, url)` call and lets us unit-test each input

@@ -9,13 +9,10 @@
  * subscription/repository.uc. The pipeline is:
  *
  *   Loader.load()           -> read subscription + main_node refs
- *   parse_uri()             -> flat UCI keys (the parser's output)
- *   apply_policy()          -> flat UCI tweaks (tls_insecure,
- *                              packet_encoding). Kept on the flat
- *                              side so tests/ucode/test_subscription_filter.uc
- *                              does not have to construct canonical
- *                              fixtures.
- *   normalize()             -> canonical Node (parser/normalize.uc).
+ *   parse_uri()             -> flat UCI keys (the parser's output shape)
+ *   normalize()             -> canonical Node (parser/normalize.uc)
+ *   apply_policy()          -> policy tweaks on the canonical Node
+ *                              (tls.insecure, protocol_options.packet_encoding)
  *   Repository.apply_nodes  -> writes UCI for subscription nodes
  *                              (internally flatten()s the canonical
  *                              nodes, so the orchestrator never
@@ -25,6 +22,12 @@
  *   Repository.scrub_stale_urltest_refs -> one-shot pass over UCI
  *                              routing_nodes for stale urltest_nodes
  *                              entries.
+ *
+ * The canonical Node is the only object the orchestrator hands the
+ * Repository, and the only one policy is applied to. The parser's flat
+ * UCI-key dict survives here for one thing only: the duplicate
+ * fingerprint, which identifies the parsed link and must not move when a
+ * subscription-level policy changes.
  *
  * Every UCI write the run performs is therefore in
  * subscription/repository.uc. The orchestrator's only UCI side
@@ -240,15 +243,19 @@ function main() {
 			else if (node_cache[groupHash][confHash] || node_cache[groupHash][nameHash])
 				log(sprintf('Skipping duplicate node: %s.', flat.label));
 			else {
-				apply_policy(flat, { allow_insecure, packet_encoding });
-
-				/* parse -> apply_policy -> normalize
-				 * builds the canonical Node the Repository
-				 * takes. flat stays in scope for the
-				 * fingerprinting above; the canonical
-				 * Node carries the same data plus the
-				 * metadata the orchestrator attaches
-				 * (grouphash + label). */
+				/* normalize() first: the canonical Node is the only
+				 * business object this orchestrator hands the Repository.
+				 * The policy tweaks used to be applied to `flat` before
+				 * this, which meant the pipeline was flat -> flat(tweaked)
+				 * -> canonical, and only the Repository's internal
+				 * flatten() brought it back. Now it is
+				 * parse -> normalize -> apply_policy -> Repository.
+				 *
+				 * `flat` stays in scope for the fingerprint above only.
+				 * That fingerprint is taken from the parser's output on
+				 * purpose: it identifies the parsed link, and the policy
+				 * tweaks belong to the subscription rather than to the
+				 * node. */
 				const node_canonical = normalize(flat);
 				node_canonical.grouphash = groupHash;
 
@@ -263,6 +270,8 @@ function main() {
 				 * an unchanged node match on the next run instead of
 				 * being deleted and re-added every time. */
 				node_canonical.label = flat.label;
+
+				apply_policy(node_canonical, { allow_insecure, packet_encoding });
 
 				push(node_result, []);
 				push(node_result[length(node_result)-1], node_canonical);

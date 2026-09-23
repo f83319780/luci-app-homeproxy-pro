@@ -7,13 +7,13 @@
  * (parser/validator.uc), and the canonical normalisation
  * (parser/normalize.uc) can each be edited in isolation.
  *
- * Each parser returns a FLAT UCI-key dict - same shape the Repository
- * writes to /etc/config/homeproxy. This is deliberate: the
- * mapping table (parser/mapping.uc) is the single source of truth for
- * what the canonical name <-> UCI name mapping looks like, but the
- * parser still writes UCI directly so the Repository contract does
- * not change. A later PR will flip the parser to canonical output and
- * teach the Repository to flatten.
+ * Each parser returns a FLAT UCI-key dict - the key names UCI uses,
+ * produced through the mapping table (parser/mapping.uc) so a protocol
+ * option has one definition. That is the parser's output shape, not the
+ * pipeline's: normalize() turns it into a canonical Node, the policy step
+ * and the Repository work on that Node, and the Repository flattens it
+ * back to UCI keys on the way out. Nothing downstream of normalize() sees
+ * these flat dicts.
  *
  * `features` is the sing-box feature map (with_quic / with_utls / ...),
  * `log` a logging callback, both injected so the parsers stay free of
