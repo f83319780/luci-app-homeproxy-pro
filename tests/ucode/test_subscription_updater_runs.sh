@@ -35,15 +35,33 @@ mkdir -p "$WORK/scripts" "$WORK/cfg" "$WORK/run"
 cp -R "$ROOT/root/etc/homeproxy/scripts/." "$WORK/scripts/"
 
 # Redirect the package's runtime dir into the sandbox so the test does not
-# append to the device's live /var/run/homeproxy/homeproxy.log.
+# append to the device's live /var/run/homeproxy/homeproxy.log, and point the
+# configuration directory at the sandbox.  The updater reads the config
+# *inside* the lock now (A4), and it takes the directory from homeproxy.uc's
+# UCICONFIG_DIR, so both rewrites land in this one file.
 sed -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$WORK/run';#" \
+    -e "s#^export const UCICONFIG_DIR = '/etc/config';#export const UCICONFIG_DIR = '$WORK/cfg';#" \
     "$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/scripts/homeproxy.uc"
+
+# An unpatched copy would read - and on a real device write - the live
+# /etc/config/homeproxy.  Fail here instead of silently testing the wrong file.
+if ! grep -q "^export const UCICONFIG_DIR = '$WORK/cfg';" "$WORK/scripts/homeproxy.uc"; then
+	echo "FAIL: could not point the updater at the sandbox config (anchor moved)"
+	rm -rf "$WORK"
+	exit 1
+fi
 
 # Point the updater's Loader at the sandbox config.  Portable sed: write to a
 # temp file and rename, so this works under both busybox and BSD sed.
-sed "s#^const loaded = Loader.load();#const loaded = Loader.load('$WORK/cfg');#" \
-	"$WORK/scripts/update_subscriptions.uc" > "$WORK/scripts/update_subscriptions.uc.new"
-mv -f "$WORK/scripts/update_subscriptions.uc.new" "$WORK/scripts/update_subscriptions.uc"
+#
+# The updater resolves the directory through homeproxy.uc's UCICONFIG_DIR (see
+# the rewrite above), so this step only needs to confirm the staged copy is the
+# one that was rewritten - it no longer contains a literal config path.
+if ! grep -q "^export const UCICONFIG_DIR = '$WORK/cfg';" "$WORK/scripts/homeproxy.uc"; then
+	echo "FAIL: the staged homeproxy.uc does not point at the sandbox config"
+	rm -rf "$WORK"
+	exit 1
+fi
 
 cat > "$WORK/cfg/homeproxy" <<-EOF
 	config homeproxy 'config'
@@ -86,11 +104,17 @@ fi
 
 # --- the lock ------------------------------------------------------------
 # The cron entry and the LuCI button can both start this script, and an update
-# is a sequence of commits, so two runs interleaving them is last-writer-wins.
-# A fresh lock must make the second run stand down...
+# is a read-modify-write of the whole configuration, so two runs interleaving
+# them is last-writer-wins. A fresh lock must make the second run stand down...
 LOCKDIR="$WORK/run/update_subscriptions.lock"
 rm -f "$LOGFILE"
 mkdir -p "$LOCKDIR"
+
+# A4: the lock is now taken *before* the configuration is read, so a run that
+# stands down must not have touched the config at all - and in particular must
+# not have written the recovery snapshot the failure path would restore.
+cp "$WORK/cfg/homeproxy" "$WORK/cfg.before-standdown"
+
 if ( cd "$WORK/scripts" && ucode -L "$WORK/scripts" update_subscriptions.uc ) > "$WORK/stdout2" 2>&1; then
 	:
 else
@@ -103,6 +127,18 @@ if grep -q "already running" "$LOGFILE" 2>/dev/null; then
 else
 	echo "FAIL: the updater ignored an existing lock"
 	sed 's/^/      /' "$LOGFILE"
+	FAILED=1
+fi
+
+if cmp -s "$WORK/cfg.before-standdown" "$WORK/cfg/homeproxy"; then
+	echo "PASS: a run that lost the lock left the configuration untouched"
+else
+	echo "FAIL: a run that lost the lock still rewrote the configuration"
+	FAILED=1
+fi
+
+if [ -e "$WORK/cfg/homeproxy.hp-restore" ]; then
+	echo "FAIL: a run that lost the lock wrote a recovery snapshot"
 	FAILED=1
 fi
 

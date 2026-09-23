@@ -21,7 +21,7 @@
 
 'use strict';
 
-import { buildTLSObject, buildTransportObject, validateHomeProxyPath, HP_DIR } from 'homeproxy';
+import { buildTLSObject, buildTransportObject, validateHomeProxyPath, validateCertificatePath, HP_DIR } from 'homeproxy';
 
 let failures = 0,
     checks = 0;
@@ -73,6 +73,49 @@ const clientCert = buildTLSObject({ enabled: '1', server_name: 's', cert_path: '
 expect('client.cert_path accepted', clientCert.certificate_path, '/etc/homeproxy/certs/foo.pem');
 const clientCertBad = buildTLSObject({ enabled: '1', server_name: 's', cert_path: '/etc/passwd' }, false);
 expect('client.cert_path rejected→null', clientCertBad.certificate_path, null);
+
+/* 4b. Certificate paths are a *different* policy from rule-set paths.
+ *       A TLS certificate normally lives under /etc/ssl/ or under the ACME
+ *       state in /etc/acme/, and both sing-box jails mount those directories
+ *       (runtime/service.sh). validateHomeProxyPath() only knows
+ *       /etc/homeproxy/ and /tmp/homeproxy_, so a certificate the UI offered
+ *       from /etc/ssl/ was accepted there and then silently dropped on the
+ *       way into sing-box - certificate_path became null and the TLS listener
+ *       failed with nothing pointing at the path. CERT_PATH_ROOTS is the
+ *       backend half of the policy the frontend validator mirrors (guard 29). */
+expect('cert.paths /etc/ssl accepted', validateCertificatePath('/etc/ssl/certs/srv.pem'), true);
+expect('cert.paths /etc/acme accepted', validateCertificatePath('/etc/acme/example.com/cert.pem'), true);
+expect('cert.paths /etc/homeproxy/certs accepted', validateCertificatePath('/etc/homeproxy/certs/srv.pem'), true);
+expect('cert.paths /tmp/homeproxy_ rejected',
+	validateCertificatePath('/tmp/homeproxy_test/foo.pem'), false);
+expect('cert.paths /etc/passwd rejected', validateCertificatePath('/etc/passwd'), false);
+expect('cert.paths traversal rejected', validateCertificatePath('/etc/ssl/../shadow'), false);
+expect('cert.paths bare root rejected', validateCertificatePath('/etc/ssl/'), false);
+expect('cert.paths relative rejected', validateCertificatePath('etc/ssl/srv.pem'), false);
+expect('cert.paths null rejected', validateCertificatePath(null), false);
+expect('cert.paths empty rejected', validateCertificatePath(''), false);
+
+/* The two policies must stay disjoint in the direction that matters: a
+ * rule-set path may not reach into /etc/ssl/, and a certificate does not need
+ * /tmp/homeproxy_ (that root is for upload staging). */
+expect('rule-set path still rejects /etc/ssl', validateHomeProxyPath('/etc/ssl/certs/srv.pem'), false);
+
+const sslCert = buildTLSObject({ enabled: '1', server_name: 's', cert_path: '/etc/ssl/certs/srv.pem' }, false);
+expect('client.cert_path /etc/ssl kept', sslCert.certificate_path, '/etc/ssl/certs/srv.pem');
+const sslServerKey = buildTLSObject({ enabled: '1', server_name: 's', cert_path: '/etc/acme/c.pem' }, true,
+	{ tls_key_path: '/etc/ssl/private/k.pem' });
+expect('server.key_path /etc/ssl kept', sslServerKey.key_path, '/etc/ssl/private/k.pem');
+const traversalCert = buildTLSObject({ enabled: '1', server_name: 's', cert_path: '/etc/ssl/../shadow' }, false);
+expect('client.cert_path traversal→null', traversalCert.certificate_path, null);
+
+/* 4c. The client ECH config path is a file sing-box opens as root too, and it
+ *       used to reach the config unvalidated. */
+const echOk = buildTLSObject(
+	{ enabled: '1', server_name: 's', ech: { enabled: '1', config_path: '/etc/homeproxy/certs/ech.pem' } }, false);
+expect('client.ech.config_path accepted', echOk.ech.config_path, '/etc/homeproxy/certs/ech.pem');
+const echBad = buildTLSObject(
+	{ enabled: '1', server_name: 's', ech: { enabled: '1', config_path: '/etc/passwd' } }, false);
+expect('client.ech.config_path rejected→null', echBad.ech.config_path, null);
 
 /* 5. utls: client-only. The server builder must never emit utls.
  *      Servers using uTLS would silently break sing-box. */

@@ -28,6 +28,13 @@ const HTTP_PING_HEALTH_CHECK_HINT = _('Specifies the timeout duration (in second
 	'If a response to the PING frame is not received within the specified timeout duration, the connection will be closed.');
 const HTTP_PING_KEEPALIVE_HINT = _('The timeout (in seconds) that after performing a keepalive check, the client will wait for activity. If no activity is detected, the connection will be closed.');
 
+/* Certificates the backend lets sing-box read. This list mirrors
+   CERT_PATH_ROOTS in /etc/homeproxy/scripts/homeproxy.uc, and
+   tests/arch-guard.sh guard 29 fails when the two drift apart: a path the UI
+   accepted but the backend dropped made certificate_path null silently, so the
+   TLS listener failed with nothing pointing at the path. */
+const HP_CERT_PATH_ROOTS = [ '/etc/homeproxy/certs/', '/etc/acme/', '/etc/ssl/' ];
+
 /* Methods whose failure has already been reported, so that a polled call
    cannot repeat the same notification every few seconds. */
 const rpc_warned = new Set();
@@ -1001,7 +1008,12 @@ return baseclass.extend({
 
 	validateCertificatePath(section_id, value) {
 		if (section_id && value)
-			if (!value.match(/^(\/etc\/homeproxy\/certs\/|\/etc\/acme\/|\/etc\/ssl\/).+$/))
+			/* HP_CERT_PATH_ROOTS is the same list the backend enforces
+			   (CERT_PATH_ROOTS, guard 29). The `..` rejection has to be
+			   explicit: a prefix match alone accepts
+			   /etc/ssl/../shadow, and sing-box reads these paths as root. */
+			if (value.match(/(^|\/)\.\.(\/|$)/) ||
+			    !HP_CERT_PATH_ROOTS.some((root) => value.indexOf(root) === 0 && value.length > root.length))
 				return _('Expecting: %s').format(_('/etc/homeproxy/certs/..., /etc/acme/..., /etc/ssl/...'));
 
 		return true;

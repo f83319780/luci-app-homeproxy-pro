@@ -2276,7 +2276,7 @@
 								"props": {
 									"modalonly": true,
 									"rmempty": false,
-									"validate": "fn(258:4c200a6512f3)"
+									"validate": "fn(310:db645baabb60)"
 								}
 							},
 							{
@@ -2335,7 +2335,8 @@
 								],
 								"subsection": null,
 								"props": {
-									"modalonly": true
+									"modalonly": true,
+									"validate": "fn(310:db645baabb60)"
 								}
 							},
 							{

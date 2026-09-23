@@ -448,6 +448,11 @@ function renderNodeSettings(section, data, features, main_node, routing_mode) {
 	o = s.option(form.Value, 'tls_ech_config_path', _('ECH config path'),
 		_('The path to the ECH config, in PEM format. If empty, load from DNS will be attempted.'));
 	o.value('/etc/homeproxy/certs/client_ech_conf.pem');
+	/* Same policy as cert_path / key_path: sing-box reads this file as root and
+	   the backend drops any path outside CERT_PATH_ROOTS (validateCertificatePath
+	   in homeproxy.uc). Without it the UI accepted a path the generator then
+	   silently discarded. */
+	o.validate = hp.validateCertificatePath;
 	o.depends('tls_ech', '1');
 	o.modalonly = true;
 

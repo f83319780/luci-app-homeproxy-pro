@@ -78,6 +78,46 @@ export function validateHomeProxyPath(p) {
 	return false;
 };
 
+/* Certificates the sing-box instances are allowed to read.
+ *
+ * TLS certificate_path / key_path are not rule-set paths: a server's
+ * certificate normally lives under /etc/ssl/ or under the ACME state in
+ * /etc/acme/, and the two sing-box jails mount exactly those directories
+ * (see runtime/service.sh's procd_add_jail_mount calls). validateHomeProxyPath()
+ * only knows /etc/homeproxy/ and /tmp/homeproxy_, so a certificate the user
+ * legitimately picked from /etc/ssl/ was accepted by the LuCI validator and
+ * then silently dropped here - certificate_path became null and the TLS
+ * listener failed with no error pointing at the path.
+ *
+ * The list is mirrored by HP_CERT_PATH_ROOTS in
+ * htdocs/luci-static/resources/homeproxy.js; guard 29 in tests/arch-guard.sh
+ * keeps the two in step.
+ */
+export const CERT_PATH_ROOTS = ['/etc/homeproxy/certs/', '/etc/acme/', '/etc/ssl/'];
+
+/* validateCertificatePath(p) - the TLS certificate/key path gate.
+ *
+ * Same shape as validateHomeProxyPath(): reject traversal and relative paths,
+ * then require one of CERT_PATH_ROOTS. Kept separate rather than folded into
+ * validateHomeProxyPath() so a rule-set path cannot be pointed at /etc/ssl/
+ * and a certificate cannot be pointed at /tmp/homeproxy_*. */
+export function validateCertificatePath(p) {
+	if (!p || type(p) !== 'string')
+		return false;
+
+	if (match(p, /(^|\/)\.\.(\/|$)/))
+		return false;
+
+	if (substr(p, 0, 1) !== '/')
+		return false;
+
+	for (let root in CERT_PATH_ROOTS)
+		if (length(p) > length(root) && substr(p, 0, length(root)) === root)
+			return true;
+
+	return false;
+};
+
 /* Read at most `limit` bytes from a file, or '' when it does not exist.
  * The cap is deliberate: a command's output is not trustworthy input. */
 function read_capped(path, limit) {
@@ -578,8 +618,8 @@ export function buildTLSObject(tls, is_server, server_extras) {
 		max_version: tls.max_version,
 		handshake_timeout: is_server ? null : strToTime(tls.handshake_timeout),
 		cipher_suites: tls.cipher_suites,
-		certificate_path: tls.cert_path && validateHomeProxyPath(tls.cert_path) ? tls.cert_path : null,
-		key_path: (is_server && extras.tls_key_path && validateHomeProxyPath(extras.tls_key_path)) ? extras.tls_key_path : null,
+		certificate_path: tls.cert_path && validateCertificatePath(tls.cert_path) ? tls.cert_path : null,
+		key_path: (is_server && extras.tls_key_path && validateCertificatePath(extras.tls_key_path)) ? extras.tls_key_path : null,
 		certificate_provider: (is_server && extras.tls_acme === '1') ? {
 			type: 'acme',
 			domain: (type(extras.tls_acme_domain) === 'array') ? extras.tls_acme_domain
@@ -614,7 +654,9 @@ export function buildTLSObject(tls, is_server, server_extras) {
 		} : null) : ((tls.ech && tls.ech.enabled === '1') ? {
 			enabled: true,
 			config: tls.ech.config,
-			config_path: tls.ech.config_path
+			/* Same gate as certificate_path: this is a file sing-box opens as
+			 * root, and it used to reach the config unvalidated. */
+			config_path: tls.ech.config_path && validateCertificatePath(tls.ech.config_path) ? tls.ech.config_path : null
 		} : null),
 		utls: (is_server || isEmpty(tls.utls && tls.utls.fingerprint)) ? null : {
 			enabled: true,

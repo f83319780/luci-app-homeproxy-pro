@@ -619,6 +619,31 @@ if awk '/^===== scenario: E-custom-routing-no-cache-db/,0' "$TRACE.norm" \
 	exit 1
 fi
 
+# A3: a reload generates each enabled side exactly once, and activates that
+# artifact. Before the candidate staging this scenario ran the client generator
+# twice per reload - once as the preflight, once again from start_service after
+# stop_service() had deleted the validated file - so the bytes that ran were not
+# the bytes that were checked. Counted inside the reload rather than over the
+# whole scenario, because the priming start legitimately generates once itself.
+reload_generates=$(awk '/^log Reloading service\.\.\.$/,/^reload_service rc=/' "$TRACE.norm" \
+	| grep -c '^ucode -S etc/homeproxy/scripts/generate_client\.uc$')
+if [ "$reload_generates" = "1" ]; then
+	echo "PASS: a reload generates the client configuration exactly once"
+else
+	echo "FAIL: a reload ran the client generator $reload_generates time(s), expected 1"
+	awk '/^log Reloading service\.\.\.$/,/^reload_service rc=/' "$TRACE.norm" \
+		| grep -n 'ucode -S\|Activating the' | head -5
+	exit 1
+fi
+
+if awk '/^log Reloading service\.\.\.$/,/^reload_service rc=/' "$TRACE.norm" \
+	| grep -q '^log Activating the client configuration validated by the reload preflight\.$'; then
+	echo "PASS: the reload activates the configuration it validated"
+else
+	echo "FAIL: the reload did not activate its validated candidate"
+	exit 1
+fi
+
 if cmp -s "$GOLDEN" "$TRACE.norm"; then
 	echo "PASS: runtime orchestration matches $(basename "$GOLDEN")"
 	# Counted from the golden rather than hardcoded: a scenario added without

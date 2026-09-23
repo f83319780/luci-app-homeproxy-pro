@@ -29,9 +29,8 @@ system('mkdir -p ' + shellQuote(RUN_DIR));
 
 /* A private scratch directory rather than a fixed `<out>.tmp`.
  *
- * reload_service generates the client and then start_service generates it
- * again, so two runs can overlap (a LuCI apply while the cron entry reloads,
- * or the two ucode invocations inside one reload). With a fixed name both wrote
+ * Two generation runs can still overlap (a LuCI apply while the cron entry
+ * reloads, or a manual and a triggered reload). With a fixed name both wrote
  * the same file, and `sing-box check` could be validating a file the other run
  * was still writing - the winner then installed a half-written config.
  *

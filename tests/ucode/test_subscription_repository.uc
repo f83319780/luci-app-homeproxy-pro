@@ -31,6 +31,7 @@
 
 import { cursor } from 'uci';
 import { md5 } from 'digest';
+import { readfile } from 'fs';
 
 import { Repository } from './subscription/repository.uc';
 
@@ -62,6 +63,14 @@ function canonical_node(opts) {
 
 const CFG = 'homeproxy';
 const TYPE = 'node';
+
+/* A2 (single commit): the repository must stage mutations and commit nothing.
+ * Unlike the cursor-based checks below, "did it commit" cannot be read out of
+ * the cursor - a commit is exactly what makes the cursor and the file agree -
+ * so the assertion is behavioural: the file on disk is byte-identical before
+ * and after each repository call, and only the test's own commit (standing in
+ * for the orchestrator's) makes the change durable. */
+const CONFIG_PATH = ARGV[0] + '/' + CFG;
 
 /* apply_main_node_refs() reports the urltest prune through the log()
  * callback and the main_node switches through the returned result.log,
@@ -150,9 +159,16 @@ const node_cache = {
 
 const node_result = [[kept_updated, new_node]];
 
+const disk_before_apply = readfile(CONFIG_PATH);
 const result = Repository.apply_nodes(uci, CFG, TYPE, node_cache, node_result, LOG);
 expect('counts: added',   result.added,   1);
 expect('counts: removed', result.removed, 1);
+expect('commit ownership: apply_nodes left the file untouched',
+	readfile(CONFIG_PATH), disk_before_apply);
+
+/* The caller's single transaction boundary (A2). Everything below reads the
+ * on-disk state, so this commit is what makes it visible. */
+uci.commit(CFG);
 
 /* Reload to see the on-disk state. */
 uci.load(CFG);
@@ -230,6 +246,7 @@ uci2.set(CFG, 'config', 'main_urltest_nodes', [n_alive, n_gone]);
 uci2.commit(CFG);
 uci2.load(CFG);
 
+const disk_before_refs = readfile(CONFIG_PATH);
 const main_refs = Repository.apply_main_node_refs(
 	uci2, CFG, 'config', TYPE,
 	{ main_node: 'urltest', main_udp_node: 'nil', has_nodes: true },
@@ -237,6 +254,12 @@ const main_refs = Repository.apply_main_node_refs(
 );
 expect('main_node_refs: main_node kept as urltest',
 	main_refs.main_node, 'urltest');
+expect('commit ownership: apply_main_node_refs left the file untouched',
+	readfile(CONFIG_PATH), disk_before_refs);
+
+/* The caller's transaction boundary again (A2); the repository never commits,
+ * not even on the reconcile paths that used to commit for themselves. */
+uci2.commit(CFG);
 uci2.load(CFG);
 expect('main_node_refs: dead reference pruned',
 	sort(uci2.get(CFG, 'config', 'main_urltest_nodes') || []), [n_alive]);
@@ -250,6 +273,7 @@ uci2.set(CFG, 'config', 'main_node', 'cfgNOPEEEEEE');
 uci2.commit(CFG);
 uci2.load(CFG);
 
+const disk_before_refs2 = readfile(CONFIG_PATH);
 const main_refs2 = Repository.apply_main_node_refs(
 	uci2, CFG, 'config', TYPE,
 	{ main_node: 'cfgNOPEEEEEE', main_udp_node: 'nil', has_nodes: true },
@@ -260,6 +284,10 @@ expect('main_node_refs: missing target switched to first_server',
 expect('main_node_refs: switch logged',
 	length(filter(main_refs2.log, (l) => match(l, /switching to/))),
 	1);
+/* A2: the switch is staged, not committed. */
+expect('commit ownership: the main_node switch is not committed by the repository',
+	readfile(CONFIG_PATH), disk_before_refs2);
+uci2.commit(CFG);
 uci2.load(CFG);
 expect('main_node_refs: switch persisted to UCI',
 	uci2.get(CFG, 'config', 'main_node'), FIRST_NODE);
@@ -275,6 +303,7 @@ uci2.load(CFG);
 expect('main_node_refs: no node sections left',
 	uci2.get_first(CFG, TYPE), null);
 
+const disk_before_refs3 = readfile(CONFIG_PATH);
 const main_refs3 = Repository.apply_main_node_refs(
 	uci2, CFG, 'config', TYPE,
 	{ main_node: 'urltest', main_udp_node: 'urltest', has_nodes: false },
@@ -284,6 +313,10 @@ expect('main_node_refs: no-nodes path resets main_node to nil',
 	main_refs3.main_node, 'nil');
 expect('main_node_refs: no-nodes path resets main_udp_node to nil',
 	main_refs3.main_udp_node, 'nil');
+/* A2: the reset-to-nil path used to commit for itself; it must not any more. */
+expect('main_node_refs: no-nodes path did not commit',
+	readfile(CONFIG_PATH), disk_before_refs3);
+uci2.commit(CFG);
 uci2.load(CFG);
 expect('main_node_refs: no-nodes path wrote nil to UCI',
 	uci2.get(CFG, 'config', 'main_node'), 'nil');
@@ -309,15 +342,19 @@ uci2.set(CFG, rn_x, 'urltest_nodes', [n_other, n_gone]);
 uci2.commit(CFG);
 uci2.load(CFG);
 
+const disk_before_scrub = readfile(CONFIG_PATH);
 const scrub = Repository.scrub_stale_urltest_refs(uci2, CFG, LOG);
-expect('scrub: one commit for the scrubbed routing_node', scrub.commits, 1);
+expect('scrub: one routing_node rewritten', scrub.changed, 1);
+expect('commit ownership: scrub left the file untouched',
+	readfile(CONFIG_PATH), disk_before_scrub);
+uci2.commit(CFG);
 uci2.load(CFG);
 expect('scrub: live ref preserved',
 	sort(uci2.get(CFG, rn_x, 'urltest_nodes') || []), [n_other]);
 
-/* An already-clean routing_node must not produce a commit. */
+/* An already-clean routing_node must not be rewritten. */
 const scrub2 = Repository.scrub_stale_urltest_refs(uci2, CFG, LOG);
-expect('scrub: clean state produces no commit', scrub2.commits, 0);
+expect('scrub: clean state changes nothing', scrub2.changed, 0);
 
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);

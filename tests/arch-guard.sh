@@ -1188,6 +1188,111 @@ else
 fi
 
 echo
+echo "== guard 27: generator/ is a pure function of its arguments =="
+
+# generator/client.uc was documented as a pure function while it called ubus for
+# the WAN resolver and readfile() for the two domain-resource lists. Generation
+# was therefore not reproducible - two runs could differ if the WAN lease changed
+# - and reload's preflight config was not provably the artifact start_service
+# regenerated. The impure boundary is the CLI shells (scripts/generate_*.uc);
+# every module under generator/ takes its environment as an argument. See
+# generator/context.uc.
+GEN_IMPURE="$(grep -rnE "from '(ubus|fs)'" "$SCRIPTS/generator" --include='*.uc' 2>"/dev/null" \
+	| grep -vE ':[0-9]+:[[:space:]]*(\*|/\*|//|#)' || true)"
+if [ -z "$GEN_IMPURE" ]; then
+	pass "no generator module imports ubus or fs"
+else
+	fail "a generator module reaches for live router state instead of taking it as an argument:"
+	printf '      %s\n' "$GEN_IMPURE"
+fi
+
+echo
+echo "== guard 28: the subscription run reads its state inside the lock =="
+
+# update_subscriptions.uc used to read the domain model and the recovery
+# snapshot at module scope, and only then try to take the lock. A run that read
+# while another one held the lock and then acquired it after that one finished
+# committed against the base it had read earlier and, on failure, restored a
+# snapshot older than the run that had just committed. The reads must therefore
+# live inside load_locked_state(), and that function must only be called after
+# acquire_lock() succeeds.
+#
+# Two checks: no configuration read may appear at module scope (column 0), and
+# the load_locked_state() call must come after the acquire_lock() call.
+SNAP_ORDER="$(python3 - "$SCRIPTS/update_subscriptions.uc" <<'PY'
+import re, sys
+lines = open(sys.argv[1], encoding='utf-8').read().split('\n')
+read = re.compile(r'\b(cursor\(|Loader\.load\(|uci\.load\(|readfile\(CONFIG_FILE\))')
+problems = []
+lock = lls = None
+for n, line in enumerate(lines, 1):
+    if line.lstrip().startswith(('*', '/*', '#')):
+        continue
+    if line[:1] not in ('', ' ', '\t') and read.search(line):
+        problems.append('line %d reads configuration at module scope: %s' % (n, line.strip()))
+    if 'function acquire_lock' in line:
+        continue
+    if 'function load_locked_state' in line:
+        continue
+    if lock is None and 'acquire_lock()' in line:
+        lock = n
+    if lls is None and 'load_locked_state()' in line:
+        lls = n
+if lock is None:
+    problems.append('no acquire_lock() call site')
+if lls is None:
+    problems.append('no load_locked_state() call site')
+elif lock is not None and lls < lock:
+    problems.append('load_locked_state() at line %d runs before the lock at line %d' % (lls, lock))
+print('\n'.join(problems))
+PY
+)"
+if [ -z "$SNAP_ORDER" ]; then
+	pass "the domain model and the recovery snapshot are read after the lock"
+else
+	fail "the subscription run reads state outside the lock:"
+	printf '      %s\n' "$SNAP_ORDER"
+fi
+
+echo
+echo "== guard 29: the certificate path policy is identical in both layers =="
+
+# TLS certificate_path / key_path had two different policies: the LuCI form
+# offered /etc/homeproxy/certs/, /etc/acme/ and /etc/ssl/, while the backend
+# validator only knew /etc/homeproxy/ and /tmp/homeproxy_. A certificate the
+# user picked from /etc/ssl/ was therefore accepted by the UI, dropped by
+# buildTLSObject(), and the listener failed with nothing pointing at the path.
+# Both layers now read the same list - CERT_PATH_ROOTS in homeproxy.uc and
+# HP_CERT_PATH_ROOTS in homeproxy.js - and this guard keeps the two copies in
+# step, because nothing else can see across the JS/ucode boundary.
+CERT_ROOTS="$(python3 - "$SCRIPTS/homeproxy.uc" "$VIEWS/homeproxy.js" <<'PY'
+import re, sys
+
+def roots(path, pattern, label):
+    text = open(path, encoding='utf-8').read()
+    m = re.search(pattern, text)
+    if not m:
+        return None, '%s: could not find the root list' % label
+    return re.findall(r"'([^']+)'", m.group(1)), None
+
+problems = []
+backend, err = roots(sys.argv[1], r'\bCERT_PATH_ROOTS\s*=\s*\[([^\]]*)\]', 'homeproxy.uc')
+problems += [err] if err else []
+frontend, err = roots(sys.argv[2], r'\bHP_CERT_PATH_ROOTS\s*=\s*\[([^\]]*)\]', 'homeproxy.js')
+problems += [err] if err else []
+if not problems and backend != frontend:
+    problems.append('homeproxy.uc %s != homeproxy.js %s' % (backend, frontend))
+print('\n'.join(problems))
+PY
+)"
+if [ -z "$CERT_ROOTS" ]; then
+	pass "the frontend and backend certificate path roots agree"
+else
+	fail "the certificate path policy differs between the layers:"
+	printf '      %s\n' "$CERT_ROOTS"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

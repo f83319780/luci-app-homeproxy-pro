@@ -10,8 +10,11 @@
  * thin entry point that init.d/homeproxy execve's. Responsibilities:
  *
  *   1. Load UCI into the HomeProxyConfig domain model.
- *   2. Call generate() to get the sing-box JSON object.
- *   3. Write atomically: candidate tmp -> `sing-box check` -> mv to live.
+ *   2. Resolve the GenerationContext env: the WAN resolver (ubus) and the two
+ *      domain-resource lists (fs). This is the process-level boundary, which
+ *      is why it lives here and not under generator/.
+ *   3. Call generate(dm, env) to get the sing-box JSON object.
+ *   4. Write atomically: candidate tmp -> `sing-box check` -> mv to live.
  *
  * The check is here (and not in the runtime, and not in the generator)
  * because the architecture guide mandates the generator produce
@@ -23,21 +26,57 @@
 
 'use strict';
 
-import { mkdtemp, writefile } from 'fs';
+import { connect } from 'ubus';
+import { mkdtemp, readfile, writefile } from 'fs';
+
 import { Loader } from './config/loader.uc';
 import { generate } from './generator/client.uc';
-import { removeBlankAttrs, RUN_DIR, shellQuote, UCICONFIG_DIR } from './homeproxy.uc';
+import { removeBlankAttrs, HP_DIR, RUN_DIR, shellQuote, UCICONFIG_DIR } from './homeproxy.uc';
+
+/* Resolve the GenerationContext inputs. This is the only impure step on the
+ * client generation path, and it is deliberately here rather than under
+ * generator/:
+ *
+ *   - wan_dns is the upstream the default-dns server detours to. ubus may be
+ *     unreachable (no ubusd, a dev host, no WAN lease); build_context() then
+ *     applies the same mode-dependent public fallback the pre-split generator
+ *     used, so an unresolved value stays safe rather than fatal.
+ *   - direct_domain_list / proxy_domain_list are the two files the resource
+ *     updater maintains. Custom mode ignores both, so they are not read
+ *     there - matching the pre-split read exactly.
+ *
+ * The extra parentheses around the ubus call keep the ?. chain guarded when
+ * connect() returns null. */
+function resolve_env(dm) {
+	const routing_mode = dm.general.routing_mode || 'bypass_mainland_china';
+	const ubus = connect();
+
+	const env = {
+		wan_dns: (ubus?.call('network.interface', 'status', {'interface': 'wan'}))?.['dns-server']?.[0],
+		direct_domain_list: [],
+		proxy_domain_list: []
+	};
+
+	if (routing_mode !== 'custom') {
+		const direct_list_raw = readfile(HP_DIR + '/resources/direct_list.txt');
+		env.direct_domain_list = direct_list_raw ? split(trim(direct_list_raw), /[\r\n]/) : [];
+
+		const proxy_list_raw = readfile(HP_DIR + '/resources/proxy_list.txt');
+		env.proxy_domain_list = proxy_list_raw ? split(trim(proxy_list_raw), /[\r\n]/) : [];
+	}
+
+	return env;
+}
 
 const dm = Loader.load(UCICONFIG_DIR);
-const config = removeBlankAttrs(generate(dm));
+const config = removeBlankAttrs(generate(dm, resolve_env(dm)));
 
 system('mkdir -p ' + shellQuote(RUN_DIR));
 
 /* A private scratch directory rather than a fixed `<out>.tmp`.
  *
- * reload_service generates the client and then start_service generates it
- * again, so two runs can overlap (a LuCI apply while the cron entry reloads,
- * or the two ucode invocations inside one reload). With a fixed name both wrote
+ * Two generation runs can still overlap (a LuCI apply while the cron entry
+ * reloads, or a manual and a triggered reload). With a fixed name both wrote
  * the same file, and `sing-box check` could be validating a file the other run
  * was still writing - the winner then installed a half-written config.
  *

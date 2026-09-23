@@ -108,5 +108,30 @@ check('validateBase64Key ignores an empty value', hp.validateBase64Key(24, 'sec1
 check('validateBase64Key ignores a missing section', hp.validateBase64Key(24, null, 'x') === true);
 check('validateBase64Key rejects a value with no padding', isError(hp.validateBase64Key(24, 'sec1', 'A'.repeat(24))));
 
+/* validateCertificatePath: the certificate policy has to be the same list the
+ * backend enforces (CERT_PATH_ROOTS in homeproxy.uc; guard 29 compares them
+ * textually). A path the UI accepts and the backend drops used to make
+ * certificate_path null silently, so the TLS listener failed with nothing
+ * pointing at the path. The `..` rejection matters on its own: a prefix match
+ * alone accepts /etc/ssl/../shadow, and sing-box opens these files as root. */
+check('cert path accepts /etc/homeproxy/certs/',
+	hp.validateCertificatePath('sec1', '/etc/homeproxy/certs/srv.pem') === true);
+check('cert path accepts /etc/acme/',
+	hp.validateCertificatePath('sec1', '/etc/acme/example.com/cert.pem') === true);
+check('cert path accepts /etc/ssl/',
+	hp.validateCertificatePath('sec1', '/etc/ssl/certs/srv.pem') === true);
+check('cert path rejects /etc/passwd',
+	isError(hp.validateCertificatePath('sec1', '/etc/passwd')));
+check('cert path rejects a traversal segment',
+	isError(hp.validateCertificatePath('sec1', '/etc/ssl/../shadow')));
+check('cert path rejects a bare root',
+	isError(hp.validateCertificatePath('sec1', '/etc/ssl/')));
+check('cert path rejects a relative path',
+	isError(hp.validateCertificatePath('sec1', 'etc/ssl/srv.pem')));
+check('cert path ignores an empty value',
+	hp.validateCertificatePath('sec1', '') === true);
+check('cert path ignores a missing section',
+	hp.validateCertificatePath(null, '/etc/passwd') === true);
+
 console.log(`frontend validators: ${checks} checks, ${failures} failures`);
 process.exit(failures ? 1 : 0);
