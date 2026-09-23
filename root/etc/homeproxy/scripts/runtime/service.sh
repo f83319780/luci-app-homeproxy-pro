@@ -118,16 +118,27 @@ hp_prepare_runtime_files() {
 	local client_enabled="$4"
 	local server_enabled="$5"
 
+	# cache_file is enabled for bypass_mainland_china and custom alike
+	# (generator/common.uc:attachExperimental).  The file has to exist before
+	# the client jail binds it, or sing-box cannot create it in there.
 	case "$routing_mode" in
-	"bypass_mainland_china")
+	"bypass_mainland_china"|"custom")
 		[ -e "$hp_dir/cache.db" ] || touch "$hp_dir/cache.db" \
 			|| log "Warning: failed to create ${hp_dir}/cache.db."
 		;;
-	"custom")
+	esac
+
+	if [ "$routing_mode" = "custom" ]; then
 		[ -d "$hp_dir/ruleset" ] || mkdir -p "$hp_dir/ruleset" \
 			|| log "Warning: failed to create ${hp_dir}/ruleset."
-		;;
-	esac
+		# A local rule-set is opened by the client, which no longer runs as
+		# root now that the jail is on for this mode too, so the files have to
+		# be readable by the sing-box user.  Only the documented directory is
+		# claimed here; a rule-set placed elsewhere under HP_DIR has to be
+		# readable already.
+		chown -R sing-box:sing-box "$hp_dir/ruleset" 2>"/dev/null" \
+			|| log "Warning: failed to hand ${hp_dir}/ruleset to sing-box."
+	fi
 
 	[ "$client_enabled" = "1" ] && echo > "$run_dir/sing-box-c.log"
 	if [ "$server_enabled" = "1" ]; then
@@ -137,12 +148,12 @@ hp_prepare_runtime_files() {
 
 	# chown each path that is actually there.
 	#
-	# cache.db is only created by the bypass_mainland_china path, so on a
-	# custom-mode router the old one-shot chown listed a path that does not
-	# exist, failed, and logged "failed to change the ownership of the runtime
-	# files" on every single start - a warning that was always there and never
-	# meant anything. A missing path is not worth reporting; failing to chown a
-	# file that exists still is.
+	# The old one-shot chown listed every path unconditionally.  A mode whose
+	# start path does not create one of them (custom mode and cache.db, before
+	# that file became shared with it) then failed and logged "failed to
+	# change the ownership of the runtime files" on every single start - a
+	# warning that was always there and never meant anything. A missing path is
+	# not worth reporting; failing to chown a file that exists still is.
 	for f in "$run_dir"/sing-box-*.json "$run_dir"/sing-box-*.log "$hp_dir"/cache.db; do
 		[ -e "$f" ] || continue
 		chown sing-box:sing-box "$f" 2>"/dev/null" \
@@ -152,9 +163,11 @@ hp_prepare_runtime_files() {
 
 # hp_procd_client_instance <prog> <hp-dir> <run-dir> <routing-mode> <disable-gso>
 # Register the sing-box client instance.  The ujail gate is client-specific:
-# a custom routing table or a wireguard/tun outbound needs filesystem paths a
-# jail cannot provide.  The `procd_append_param command` text below is what
-# runtime/health.sh's pgrep pattern matches - change both together.
+# a wireguard/tun outbound cannot be jailed (it needs the host network stack),
+# and custom routing needs HP_DIR inside the jail because a local rule-set may
+# point at any path validateHomeProxyPath() accepts.  The `procd_append_param
+# command` text below is what runtime/health.sh's pgrep pattern matches -
+# change both together.
 hp_procd_client_instance() {
 	local prog="$1"
 	local hp_dir="$2"
@@ -169,13 +182,32 @@ hp_procd_client_instance() {
 
 	[ "$disable_gso" -eq "1" ] && procd_set_param env "QUIC_GO_DISABLE_GSO"="true"
 
-	if [ -x "/sbin/ujail" ] && [ "$routing_mode" != "custom" ] && ! grep -Eq '"type": "(wireguard|tun)"' "$run_dir/sing-box-c.json"; then
+	if [ -x "/sbin/ujail" ] && ! grep -Eq '"type": "(wireguard|tun)"' "$run_dir/sing-box-c.json"; then
 		procd_add_jail "sing-box-c" log procfs
 		procd_add_jail_mount "$run_dir/sing-box-c.json"
 		procd_add_jail_mount_rw "$run_dir/sing-box-c.log"
-		[ "$routing_mode" != "bypass_mainland_china" ] || procd_add_jail_mount_rw "$hp_dir/cache.db"
+		# A custom routing table may point a local rule-set anywhere under
+		# HP_DIR, so the whole directory goes in read-only rather than a
+		# guessed subset.  procd orders the mounts by path, so this parent is
+		# bound before the read-write cache.db below and cannot shadow it.
+		procd_add_jail_mount "$hp_dir/"
+		# cache_file is enabled for bypass_mainland_china and custom alike
+		# (generator/common.uc:attachExperimental), so both need the file
+		# writable inside the jail.
+		case "$routing_mode" in
+		"bypass_mainland_china"|"custom")
+			procd_add_jail_mount_rw "$hp_dir/cache.db" ;;
+		esac
 		procd_add_jail_mount "$hp_dir/certs/"
+		# The certificate path gate accepts /etc/acme as well (a client TLS
+		# certificate managed by acme.sh), so the client jail has to carry it
+		# too - it was missing here while the server jail already had it.
+		procd_add_jail_mount "/etc/acme/"
 		procd_add_jail_mount "/etc/ssl/"
+		# custom routing's find_neighbor resolves LAN hostnames out of the
+		# dnsmasq lease file; its MAC lookups go over netlink and need no file,
+		# but a `source_hostname` rule silently stops matching without this.
+		procd_add_jail_mount "/tmp/dhcp.leases"
 		procd_add_jail_mount "/etc/localtime"
 		procd_add_jail_mount "/etc/TZ"
 		procd_set_param capabilities "/etc/capabilities/homeproxy.json"

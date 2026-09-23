@@ -591,14 +591,26 @@ run_scenario "D-health-gate-rollback" reload \
 	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
 	HP_TEST_OCCUPIED_AFTER=5399
 
-# Scenario E: custom routing mode. sing-box writes cache.db only under
-# bypass_mainland_china, so in custom mode the runtime-file chown listed a path
-# that does not exist - and reported "failed to change the ownership of the
-# runtime files to sing-box" on every start. The trace records the log, so this
-# scenario fails if that warning comes back.
-run_scenario "E-custom-routing-no-cache-db" start \
+# Scenario E: custom routing mode.  It is the mode whose start path has to
+# prepare both runtime files - the ruleset directory and the shared cache.db -
+# and whose client jail has to carry HP_DIR, because a local rule-set may point
+# anywhere under it.  The trace records all three, so this scenario fails if the
+# custom client stops being jailed or stops getting its runtime files.
+run_scenario "E-custom-routing-runtime-files" start \
 	proxy_mode=tun routing_mode=custom \
-	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0
+	main_node=n1 main_udp_node=nil default_outbound=direct-out \
+	server_enabled=0 ipv6_support=0
+
+# Scenario F: custom routing with no default outbound.  The client's "main node"
+# reference is mode-dependent (config.main_node vs routing.default_outbound), and
+# a regression that reads the wrong UCI key in this mode makes an unconfigured
+# router look configured: it starts a client whose generated route block has no
+# `final`, so every intercepted connection leaves through sing-box's built-in
+# direct outbound instead of the proxy.  The service must refuse to start.
+run_scenario "F-custom-routing-nothing-configured" start \
+	proxy_mode=tun routing_mode=custom \
+	main_node=n1 main_udp_node=nil default_outbound=nil \
+	server_enabled=0 ipv6_support=0
 
 rm -f "$DNSMASQ_CONF"
 
@@ -627,11 +639,24 @@ fi
 # is the absence of a warning. It has to run after TRACE.norm is built - the
 # first version of this check read the file before it existed and therefore
 # always passed.
-if awk '/^===== scenario: E-custom-routing-no-cache-db/,0' "$TRACE.norm" \
+if awk '/^===== scenario: E-custom-routing-runtime-files/,0' "$TRACE.norm" \
 	| grep -q "failed to change the ownership of the runtime files"; then
-	echo "FAIL: custom mode still reports a chown failure for the missing cache.db"
-	awk '/^===== scenario: E-custom-routing-no-cache-db/,0' "$TRACE.norm" \
+	echo "FAIL: custom mode reports a chown failure for a runtime file it should have created"
+	awk '/^===== scenario: E-custom-routing-runtime-files/,0' "$TRACE.norm" \
 		| grep -n "failed to change the ownership" | head -2
+	exit 1
+fi
+
+# Scenario F pins the mode-dependent read itself.  It has to assert on the
+# "not configured" log rather than on the generated file, because the failure
+# mode is a client that starts and produces a config with no route.final - it
+# looks healthy from every other angle (process up, ports bound).
+if awk '/^===== scenario: F-custom-routing-nothing-configured/,0' "$TRACE.norm" \
+	| grep -q "^log Neither client nor server is configured\. Service not started\.$"; then
+	echo "PASS: custom mode with no default outbound does not start a client"
+else
+	echo "FAIL: custom mode with default_outbound=nil still started a client"
+	awk '/^===== scenario: F-custom-routing-nothing-configured/,0' "$TRACE.norm" | head -25
 	exit 1
 fi
 
