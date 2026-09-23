@@ -126,6 +126,14 @@ echo "== functional health probes (C2) =="
 # and "cannot probe here" never fails it.
 sh "$ROOT/tests/runtime/test_health_probe.sh" "$ROOT" || FAILED=1
 
+echo "== resource update verification (B2) =="
+# Pure shell: wget / jsonfilter / ucode / uci / flock are stubbed and the
+# script's absolute paths are rewritten into a sandbox, so this drives the
+# verification path - match, mismatch, no API digest, no local digest - without
+# a network or a router. What the *shipped* digest helper computes is
+# tests/ucode/test_resource_blob_sha.sh's job.
+sh "$ROOT/tests/runtime/test_resource_update.sh" "$ROOT" || FAILED=1
+
 echo "== architecture guard =="
 # Cross-file invariants that no single-layer test can see: the generators must
 # read the production UCI directory, and the subscription updater must read the

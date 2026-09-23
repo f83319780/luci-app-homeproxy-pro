@@ -327,6 +327,13 @@ else
 	echo "PASS: update_subscriptions.uc resolves its modules with no search path"
 fi
 
+echo "== resource blob digest helper (B2) =="
+# resource_blob_sha.uc is what the resource updater verifies downloads with, so
+# its digest has to be git's own: sha1("blob <len>\0" + content). The expected
+# values in the test are `git hash-object` output, and it re-checks the
+# repository's real resource files against git when the host has it.
+sh "$ROOT/tests/ucode/test_resource_blob_sha.sh" "$ROOT" "$WORK/resource_blob_sha" || FAILED=1
+
 echo "== test doubles still match production =="
 # The mocks copy isEmpty/decodeBase64Str/parseURL/redactUrl from production and
 # their headers say to keep them in sync; nothing enforced it, and the fetcher's

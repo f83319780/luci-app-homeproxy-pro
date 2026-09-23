@@ -2,8 +2,24 @@
 # SPDX-License-Identifier: GPL-2.0-only
 #
 # Copyright (C) 2022-2025 ImmortalWrt.org
+#
+# Fetch and install one resource list (china_ip4 / china_ip6 / gfw_list /
+# china_list). Each list comes from a fixed upstream repository; the current
+# commit is resolved through the GitHub API, the file is downloaded from the
+# first reachable mirror at that exact commit, and the result is installed only
+# after its git blob id has been checked against the one the API reports for
+# that path and commit (resource_blob_sha.uc). A list that fails the check is
+# discarded and the installed copy is left in place.
+#
+# Driven by the rpcd method `resources_update` and by the auto-update cron
+# entry; tests/runtime/test_resource_update.sh exercises the verification path
+# off-target with stubbed wget/jsonfilter/ucode.
 
 NAME="homeproxy"
+
+# The blob-digest helper sits next to this script and is invoked through it, so
+# its location follows however the script was started (rpcd, cron, a shell).
+SCRIPT_DIR="$(cd "$(dirname "$0")" 2>"/dev/null" && pwd)"
 
 RESOURCES_DIR="/etc/$NAME/resources"
 mkdir -p "$RESOURCES_DIR"
@@ -13,11 +29,11 @@ LOG_PATH="$RUN_DIR/$NAME.log"
 mkdir -p "$RUN_DIR"
 
 log() {
-	echo -e "$(date "+%Y-%m-%d %H:%M:%S") $*" >> "$LOG_PATH"
+	printf '%s %s\n' "$(date "+%Y-%m-%d %H:%M:%S")" "$*" >> "$LOG_PATH"
 }
 
 to_upper() {
-	echo -e "$1" | tr "[a-z]" "[A-Z]"
+	printf '%s' "$1" | tr "[a-z]" "[A-Z]"
 }
 
 # Review M7: each entry is tried in order, success stops the loop.  Order
@@ -86,8 +102,8 @@ check_list_update() {
 		log "[$(to_upper "$listtype")] Failed to fetch version info (wget exit $wget_exit)."
 		return 1
 	fi
-	local list_sha="$(echo -e "$list_info" | jsonfilter -qe "@[0].sha")"
-	local list_date="$(echo -e "$list_info" | jsonfilter -qe "@[0].commit.committer.date" | cut -d 'T' -f1)"
+	local list_sha="$(printf '%s' "$list_info" | jsonfilter -qe "@[0].sha")"
+	local list_date="$(printf '%s' "$list_info" | jsonfilter -qe "@[0].commit.committer.date" | cut -d 'T' -f1)"
 	if [ -z "$list_sha" ]; then
 		log "[$(to_upper "$listtype")] Failed to get the latest version, please retry later."
 		return 1
@@ -99,7 +115,7 @@ check_list_update() {
 	local local_list_disp="${local_list_ver%% *}"
 	if [ "$local_list_sha" = "$list_sha" ]; then
 		[ "$local_list_ver" = "$local_list_sha" ] && [ -n "$list_date" ] && \
-			echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
+			printf '%s\n' "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
 		log "[$(to_upper "$listtype")] Current version: ${list_ver%% *}."
 		log "[$(to_upper "$listtype")] You're already at the latest version."
 		return 3
@@ -129,15 +145,49 @@ check_list_update() {
 		return 1
 	fi
 
+	# Integrity: the URL is pinned to $list_sha, so the mirror is *supposed* to
+	# serve the bytes that commit contains. That is a statement about the URL,
+	# not about the response - a mirror, a CDN edge or anything else in the
+	# path can answer with different content, and the resource lists drive
+	# nft sets and DNS snippets. Compare the file's git blob id against the one
+	# GitHub reports for the same path and commit.
+	#
+	# This fails closed. The version query above already requires
+	# api.github.com, so a router that cannot reach the API could not update
+	# resources before this check either; the alternative - installing bytes
+	# nobody vouched for - is the thing being fixed.
+	local api_blob local_blob
+	api_blob="$($wget ${github_header:+--header "$github_header"} -O- \
+		"https://api.github.com/repos/$listrepo/contents/$listname?ref=$list_sha" \
+		| jsonfilter -qe '@.sha')"
+	if [ -z "$api_blob" ]; then
+		rm -f "$RUN_DIR/$listname"
+		log "[$(to_upper "$listtype")] Refusing to install: GitHub reports no blob id for $listname at $list_sha."
+		return 1
+	fi
+
+	local_blob="$(ucode -S "$SCRIPT_DIR/resource_blob_sha.uc" "$RUN_DIR/$listname" 2>"/dev/null")"
+	if [ -z "$local_blob" ]; then
+		rm -f "$RUN_DIR/$listname"
+		log "[$(to_upper "$listtype")] Refusing to install: cannot compute the blob id of the downloaded $listname."
+		return 1
+	fi
+
+	if [ "$local_blob" != "$api_blob" ]; then
+		rm -f "$RUN_DIR/$listname"
+		log "[$(to_upper "$listtype")] Refusing to install: $listname from $mirror does not match the content of commit $list_sha (expected $api_blob, got $local_blob)."
+		return 1
+	fi
+
 	if mv -f "$RUN_DIR/$listname" "$RESOURCES_DIR/$listtype.${listname##*.}"; then
-		echo -e "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
+		printf '%s\n' "$list_ver" > "$RESOURCES_DIR/$listtype.ver"
 		# Review M7: persist the time *this router* last succeeded.
 		# $list_date is the upstream commit date and can be months old
 		# even on a successful run, so it is not a stand-in.  Stored in
 		# the same directory as the .ver file so resources_get_version
 		# can read it.
 		date -u +"%Y-%m-%dT%H:%M:%SZ" > "$RESOURCES_DIR/$listtype.updated_at"
-		log "[$(to_upper "$listtype")] Successfully updated via $mirror."
+		log "[$(to_upper "$listtype")] Successfully updated via $mirror (blob $local_blob)."
 	else
 		rm -f "$RUN_DIR/$listname"
 		log "[$(to_upper "$listtype")] Failed to install update (mv failed)."
@@ -168,7 +218,7 @@ case "$1" in
 		rm -f "$RESOURCES_DIR/china_list.txt.hp-new"
 	;;
 *)
-	echo -e "Usage: $0 <china_ip4 / china_ip6 / gfw_list / china_list>"
+	printf '%s\n' "Usage: $0 <china_ip4 / china_ip6 / gfw_list / china_list>"
 	exit 1
 	;;
 esac
