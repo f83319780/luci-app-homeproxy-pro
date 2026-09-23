@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-03 (Subscription Transaction Boundary): every UCI write the
+ * Every UCI write the
  * subscription pipeline performs now lives in this module. Three
  * entry points cover what used to be six uci.set+commit sites in
  * update_subscriptions.uc plus the existing node add/update/remove
@@ -60,7 +60,7 @@ import { flatten } from '../parser/flatten.uc';
  *                  The de-duplicated, policy-applied nodes in the
  *                  order they should appear in UCI.
  *
- * Behaviour parity with the pre-PR-03 code:
+ * Behaviour parity with the previous code:
  *   - user-created nodes (no grouphash) are never touched
  *   - nodes whose subscription has no cache entry (network
  *     failure for that URL) are left in place; we don't delete
@@ -265,7 +265,7 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
  * entries that no longer point at a live node. Mutates only: the caller
  * commits once after this returns. Returns { changed } - the number of
  * routing_nodes it rewrote - which is what the old `commits` counter
- * measured (it counted its own commits; the pre-PR-03 code committed
+ * measured (it counted its own commits; the previous code committed
  * inside the foreach loop, once per scrubbed routing_node). */
 function scrub_stale_urltest_refs(uci, uciconfig, log) {
 	let changed = 0;

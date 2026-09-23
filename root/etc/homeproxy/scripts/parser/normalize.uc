@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-02 (Parser Normalization): the per-scheme parsers in
+ * The per-scheme parsers in
  * parser/protocols.uc still produce a FLAT UCI-key dict (because the
  * Repository writes UCI keys verbatim today). The Adapter, the Loader
  * and REQUIRED_CREDENTIALS, however, all think in the canonical Node

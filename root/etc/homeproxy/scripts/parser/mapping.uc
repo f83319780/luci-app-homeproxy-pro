@@ -1,9 +1,8 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-02 (Parser Normalization): single source of truth for the
- * canonical-name <-> UCI-option-name mapping per protocol. Before this
- * PR the same mapping lived in three places:
+ * Single source of truth for the canonical-name <-> UCI-option-name
+ * mapping per protocol. The same mapping used to live in three places:
  *
  *   - parse_uri.uc (wrote UCI-flat keys directly: `tls`, `tls_sni`,
  *     `vless_flow`, `shadowsocks_encrypt_method`, ...)
@@ -11,7 +10,7 @@
  *   - config/adapter.uc OPTION_FIELDS (canonical -> adapter code)
  *
  * The Loader's PROTOCOL_OPTIONS is now derived from the table in this
- * file. The parser still writes UCI keys directly for PR-02 (changing
+ * file. The parser still writes UCI keys directly (changing
  * that would also change the Repository's UCI write contract), but the
  * mapping lives here so the next step (canonical Node output) has one
  * place to flip.

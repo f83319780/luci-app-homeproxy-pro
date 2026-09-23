@@ -1,14 +1,14 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-02 (Parser Normalization): every protocol's parse_<scheme>_uri()
+ * Every protocol's parse_<scheme>_uri()
  * used to live in the top-level parse_uri.uc. They are now grouped
  * here so the dispatch (parser/uri.uc), the validation
  * (parser/validator.uc), and the canonical normalisation
  * (parser/normalize.uc) can each be edited in isolation.
  *
  * Each parser returns a FLAT UCI-key dict - same shape the Repository
- * writes to /etc/config/homeproxy. This is deliberate for PR-02: the
+ * writes to /etc/config/homeproxy. This is deliberate: the
  * mapping table (parser/mapping.uc) is the single source of truth for
  * what the canonical name <-> UCI name mapping looks like, but the
  * parser still writes UCI directly so the Repository contract does

@@ -2,14 +2,14 @@
 #
 # Copyright (C) 2025 ImmortalWrt.org
 #
-# Routing/network plumbing for homeproxy (PR-05: PHASE 7 extraction).
+# Routing/network plumbing for homeproxy.
 #
 # The tproxy and TUN paths need ip rules, a routing table and (for TUN) the
 # device itself before procd starts sing-box, and they need to be torn down
 # again on stop.  All of that used to live inline in /etc/init.d/homeproxy.
 #
 # Layering note: this is a device-side module.  It calls `log` and, like the
-# other PR-05 modules, requires `config_load` to have run (it reads the
+# other runtime modules, requires `config_load` to have run (it reads the
 # infra marks and the TUN device name itself).
 #
 # Sourced by /etc/init.d/homeproxy.

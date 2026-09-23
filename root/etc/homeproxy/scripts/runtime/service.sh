@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2025 ImmortalWrt.org
 #
-# Service-side runtime helpers for homeproxy (PR-05: PHASE 7 extraction).
+# Service-side runtime helpers for homeproxy.
 #
 # These are the device-side orchestration pieces that used to be inlined in
 # /etc/init.d/homeproxy: the sing-box version gate, the auto-update cron
@@ -12,7 +12,7 @@
 #
 # Layering note: unlike
 # runtime/config.sh and runtime/health.sh - which are deliberately pure and
-# only take explicit paths - the modules extracted by PR-05 are device-side
+# only take explicit paths - the extracted modules are device-side
 # by nature.  They call `log`, `config_get` and `procd_*`, so a caller must
 # have run `config_load` and must be inside a procd init context.  That is
 # exactly why they were moved out of init.d and not turned into pure helpers.
@@ -24,7 +24,7 @@
 # uses 1.14-only fields, and an older binary would reject it at run time
 # instead of failing here.  Returns 1 (and logs) when unusable.
 #
-# `sing-box` is looked up through PATH, exactly as the pre-PR-05 init script
+# `sing-box` is looked up through PATH, exactly as the previous init script
 # did - it is deliberately not PROG, so a PATH mismatch between the two is
 # not silently introduced by this refactor.
 hp_require_singbox() {

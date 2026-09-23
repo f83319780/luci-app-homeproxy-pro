@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2025 ImmortalWrt.org
 #
-# dnsmasq integration for homeproxy (PR-05: PHASE 7 extraction).
+# dnsmasq integration for homeproxy.
 #
 # homeproxy does not run its own DNS front end: it points dnsmasq at the
 # sing-box DNS listener and, in the list-based routing modes, feeds it the

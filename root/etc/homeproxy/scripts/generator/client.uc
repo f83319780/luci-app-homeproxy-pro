@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/client.uc: client-side orchestrator.
  *
  * This file is the only place the client generator still knows the
@@ -29,7 +27,7 @@
  * single closure scope.
  *
  * The output is the final config object: no `$schema`, no atomic write,
- * no `sing-box check`. The 10-line CLI shell (`scripts/generate_client.uc`)
+ * no `sing-box check`. The CLI shell (`scripts/generate_client.uc`)
  * is responsible for those - per the architecture guide, the generator
  * must not double as the runner.
  *
@@ -115,7 +113,7 @@ export function generate(dm, env) {
 
 	/* User-defined rulesets are custom-mode only; passing an empty
 	 * dm.routing.rulesets through build_user_rulesets is a no-op
-	 * because every cfg in it is filtered by !cfg.enabled (PR-01). */
+	 * because every cfg in it is filtered by !cfg.enabled. */
 	if (ctx.routing_mode === 'custom')
 		build_user_rulesets(config.route.rule_set, dm, ctx);
 

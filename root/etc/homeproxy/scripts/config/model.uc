@@ -10,7 +10,7 @@
  * user configured*, not what sing-box wants: no `outbound`, no `type` field
  * named after a sing-box outbound kind, no `tag` arithmetic.
  *
- * PR-01 (Domain Model Completion): every field the Adapter used to read off
+ * Every field the Adapter used to read off
  * `node.raw.*` has been promoted to an explicit Node sub-object
  * (`credentials`, `tls`, `transport`, `multiplex`, `common`,
  * `protocol_options`), so the legacy `raw` opaque bag was dropped - no code
@@ -66,8 +66,7 @@ export const CREDENTIALS = {
  * side reads the psk off the same `password` UCI option the client
  * node uses for its own psk. Keeping the two tables separate means a
  * change to one side cannot silently alter the other.
- *
- * PR-04 (Protocol Adapter Completion). */
+ */
 export const INBOUND_CREDENTIALS = {
 	vless:     { uuid: 'uuid' },
 	vmess:     { uuid: 'uuid' },
@@ -195,7 +194,7 @@ export const Config = {
 		nodes: [],
 
 		/* The five domain sub-objects the Loader fills in from the
-		 * corresponding UCI sections (single + list). PR-01 §A now
+		 * corresponding UCI sections (single + list). The Loader now
 		 * normalises the list sections; downstream generators read only
 		 * these sub-objects. */
 		dns: {},
@@ -299,8 +298,7 @@ export const Node = {
  *   transport        shared transport shape (same load_transport())
  *   multiplex        shared multiplex shape
  *   protocol_options per-protocol knobs
- *
- * PR-04 (Protocol Adapter Completion). */
+ */
 export const Inbound = {
 	create: (opts) => ({
 		/* identity */
@@ -362,7 +360,7 @@ export const ConfigQuery = {
 		return null;
 	},
 
-	/* Linear search by section name. PR-01 normalises list sections so
+	/* Linear search by section name. The Loader normalises list sections so
 	 * `name` is the UCI section name; the dotted `.name` UCI uses
 	 * internally is gone from the loaded shape. */
 	find_by_name: (items, name) => {

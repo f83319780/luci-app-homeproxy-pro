@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-02 (Parser Normalization): parse_uri() used to do its host/port
+ * parse_uri() used to do its host/port
  * check inline at the end of the dispatcher, just before returning the
  * config. Per the guidance doc (section 八, Parse -> Normalize ->
  * Validate three-layer separation), the post-parse checks belong in

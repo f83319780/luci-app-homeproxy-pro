@@ -3,7 +3,7 @@
  *
  * generator/server.uc: server-side orchestrator.
  *
- * PR-04 (Protocol Adapter Completion): this module no longer shapes
+ * This module no longer shapes
  * any protocol. It used to read the flat UCI section directly
  * (`cfg.snell_version`, `cfg.shadowsocks_encrypt_method`,
  * `cfg.hysteria_obfs_min_packet_size`, ...) and spell out every
@@ -50,7 +50,7 @@ export function generate_server(dm) {
 		if (!inbound.enabled)
 			continue;
 
-		/* create() dies on a broken section, which is the pre-PR-04
+		/* create() dies on a broken section, which is the previous
 		 * behaviour too: the old code would emit a sing-box config
 		 * that `sing-box check` then rejected, and the runtime's
 		 * candidate/known-good path caught it. Failing here instead

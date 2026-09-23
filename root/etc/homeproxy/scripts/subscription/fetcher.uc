@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * B1.2: thin wrapper around homeproxy's wGETVerbose that logs
+ * Thin wrapper around homeproxy's wGETVerbose that logs
  * the failure and returns a flat { content, error } shape. The
  * orchestrator used to inline the empty-content check + log
  * message right next to the call, which made the loop body hard

@@ -149,10 +149,9 @@ function load_common(get) {
 
 /* --- protocol options --------------------------------------------------- */
 
-/* PR-02 (Parser Normalization): the canonical <-> UCI mapping table
- * moved to scripts/parser/mapping.uc and is imported as PROTOCOL_OPTIONS
- * above. The Loader no longer maintains its own copy, so the parser,
- * the Loader, the parser's normalize(), and (in a future PR) the
+/* The canonical <-> UCI mapping table lives in scripts/parser/mapping.uc and
+ * is imported as PROTOCOL_OPTIONS above. The Loader no longer maintains its
+ * own copy, so the parser, the Loader, the parser's normalize(), and the
  * Repository all read from the same source. Anything not listed in
  * parser/mapping.uc for a given protocol is not part of the domain
  * contract; a stale UCI option is now dropped at the parser side too.
@@ -200,7 +199,7 @@ function load_settings(uci, section, keys) {
 	return settings;
 }
 
-/* PR-01 (Domain Model Completion): the raw UCI section dict that
+/* The raw UCI section dict that
  * uci.foreach() yields carries internal fields prefixed with a dot
  * (`.name`, `.index`, `.type`); downstream generators had to read those
  * directly, and every consumer had to remember `cfg.enabled !== '1'`
@@ -211,7 +210,7 @@ function load_settings(uci, section, keys) {
  *
  * Fields with non-prefixed names that happen to collide with the UCI
  * metadata (e.g. an option literally called `name` or `index`) would
- * be shadowed; in this codebase that does not happen, and PR-04 keeps
+ * be shadowed; in this codebase that does not happen, and the Adapter keeps
  * it that way. */
 function normalize_section(cfg) {
 	const item = {};
@@ -309,7 +308,7 @@ function load_table(get, mapping) {
 	return out;
 }
 
-/* PR-04 (Protocol Adapter Completion): a server inbound is now a
+/* A server inbound is now a
  * domain object like a Node, built here and shaped into sing-box JSON
  * by config/adapter.uc's InboundFactory. Before this the generator read
  * the flat UCI section directly (`cfg.snell_version`,

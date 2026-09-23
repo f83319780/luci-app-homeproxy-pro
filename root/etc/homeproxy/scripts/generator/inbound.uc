@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/inbound.uc: build the sing-box `inbounds` block.
  *
  * The client always needs the dns-in and mixed-in inbounds, plus

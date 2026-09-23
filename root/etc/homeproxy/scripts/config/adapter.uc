@@ -128,8 +128,8 @@ function resolve(spec, subject) {
 /* Fields every protocol emits. Each is null when absent, and nulls are
  * stripped once, at the end, by removeBlankAttrs(). Cross-protocol common
  * fields live in node.common (Loader's load_common); protocol-specific
- * canonical names live in node.protocol_options. PR-01 dropped the
- * legacy `node.raw` opaque bag - the Adapter reads only the explicit
+ * canonical names live in node.protocol_options. The legacy
+ * `node.raw` opaque bag was dropped - the Adapter reads only the explicit
  * sub-objects, so no escape hatch exists. */
 const COMMON_FIELDS = {
 	server: (node) => node.address,
@@ -419,7 +419,7 @@ export const OutboundFactory = {
 
 /* --- WireGuard endpoint ------------------------------------------------- */
 
-/* PR-04 (Protocol Adapter Completion): WireGuard is emitted as a
+/* WireGuard is emitted as a
  * sing-box *endpoint*, not an outbound, so it needs its own builder.
  * That builder used to live in generator/outbound.uc, which meant the
  * generator still held protocol business logic for one protocol. It
@@ -479,7 +479,7 @@ export const EndpointFactory = {
 
 /* --- server inbound ----------------------------------------------------- */
 
-/* PR-04: the server half of the Adapter. Same data-table approach as
+/* The server half of the Adapter. Same data-table approach as
  * the outbound side: the protocol differences are *fields*, not
  * behaviour, so they are expressed as tables rather than a branch per
  * protocol. generator/server.uc used to spell every one of these out
@@ -504,7 +504,7 @@ const INBOUND_COMMON_FIELDS = {
 
 /* Listener fields a protocol must NOT be given even when the UCI section
  * happens to carry the option. sing-box 1.14's snell inbound takes no
- * udp_fragment / udp_timeout / network; the pre-PR-04 generator had a
+ * udp_fragment / udp_timeout / network; the previous generator had a
  * dedicated build_snell_inbound() that omitted them, and this table
  * keeps that behaviour instead of relying on the user not setting them. */
 const INBOUND_COMMON_OMIT = {

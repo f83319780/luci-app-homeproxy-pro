@@ -1,8 +1,6 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
  *     generator/common.uc: shared helpers used by every generator module.
  *
  * Every "select a tag from a UCI-style reference" function lives in this
@@ -24,7 +22,7 @@ import { isEmpty } from '../homeproxy.uc';
 
 import { ConfigQuery } from '../config/model.uc';
 
-/* PR-04: parse_port() moved to homeproxy.uc. The Adapter layer needs it
+/* parse_port() lives in homeproxy.uc. The Adapter layer needs it
  * too (EndpointFactory builds the WireGuard endpoint) and an adapter must
  * not import from generator/, so the util moved to the module both layers
  * already share. Callers import it from '../homeproxy.uc' now. */

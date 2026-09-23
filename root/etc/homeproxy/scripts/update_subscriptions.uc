@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2023 ImmortalWrt.org
  *
- * PR-03 (Subscription Transaction Boundary): the orchestrator no
+ * The orchestrator no
  * longer touches UCI directly. All UCI writes live in
  * subscription/repository.uc. The pipeline is:
  *
@@ -97,7 +97,7 @@ function load_locked_state() {
 	uci = cursor();
 	uci.load(uciconfig);
 
-	/* PR-03 §2.5 #3: the orchestrator used to hold its own
+	/* The orchestrator used to hold its own
 	 * uci.cursor() and re-read subscription.* / config.* one field at
 	 * a time. Now it goes through Loader.load(), which is read-only
 	 * and exposes the canonical sub-objects
@@ -242,7 +242,7 @@ function main() {
 			else {
 				apply_policy(flat, { allow_insecure, packet_encoding });
 
-				/* PR-03: parse -> apply_policy -> normalize
+				/* parse -> apply_policy -> normalize
 				 * builds the canonical Node the Repository
 				 * takes. flat stays in scope for the
 				 * fingerprinting above; the canonical
@@ -287,7 +287,7 @@ function main() {
 		return false;
 	}
 
-	/* B1.2 / PR-03: the add / update / remove walk and the
+	/* The add / update / remove walk and the
 	 * final commit now live in subscription/repository.uc. The
 	 * orchestrator just hands it the canonical Node cache +
 	 * result built during the fetch phase and uses the
@@ -298,7 +298,7 @@ function main() {
 	const added = repository_result.added,
 	      removed = repository_result.removed;
 
-	/* PR-03 §2.5 #1: the 6 inline uci.set/commit sites
+	/* The 6 inline uci.set/commit sites
 	 * (main_urltest_nodes cleanup, main_node switch on missing
 	 * target, main_udp_urltest_nodes cleanup, main_udp_node
 	 * switch, reset-to-'nil', routing_node urltest scrub) moved

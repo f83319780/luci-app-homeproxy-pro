@@ -1,7 +1,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * PR-02 (Parser Normalization): parse_uri() is now a thin dispatcher.
+ * parse_uri() is a thin dispatcher.
  * The 11 per-scheme parsers moved to parser/protocols.uc; the
  * categorised post-parse checks moved to parser/validator.uc; the
  * canonical-shape conversion lives in parser/normalize.uc; and the

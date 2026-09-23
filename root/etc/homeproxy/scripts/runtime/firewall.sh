@@ -2,7 +2,7 @@
 #
 # Copyright (C) 2025 ImmortalWrt.org
 #
-# fw4 integration for homeproxy (PR-05: PHASE 7 extraction).
+# fw4 integration for homeproxy.
 #
 # homeproxy owns a fixed set of nft chains and sets inside the `fw4` table.
 # They are created by the rendered template (firewall_post.ut, applied by

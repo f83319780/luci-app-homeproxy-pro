@@ -2,9 +2,7 @@
 /*
  * SPDX-License-Identifier: GPL-2.0-only
  *
- * Stage PHASE 4 of the architecture refactor:
- *
- *     scripts/generate_server.uc: 10-line CLI shell.
+ *     scripts/generate_server.uc: process-level entry point.
  *
  * Mirror of scripts/generate_client.uc for the server instance. The
  * server generator (generator/server.uc) returns null when no inbound
@@ -37,7 +35,7 @@ system('mkdir -p ' + shellQuote(RUN_DIR));
  * mkdtemp() is this package's existing primitive for that (executeCommand()
  * uses it) and gives a 0700 directory under /tmp.  The path here comes from
  * mkdtemp() so it is safe today, but it goes through shellQuote() anyway:
- * review M6's "all shell args quoted" rule is the machine-checkable
+ * the "all shell args quoted" rule is the machine-checkable
  * invariant, not a comment about today's safety. */
 const work_dir = mkdtemp();
 const tmp = work_dir + '/sing-box-s.json';
