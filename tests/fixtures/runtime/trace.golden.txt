@@ -71,6 +71,7 @@ chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -155,6 +156,7 @@ ip route show default
 ip -6 route show default
 ifstatus wan
 ucode -S etc/homeproxy/scripts/generate_client.uc
+chmod 600 etc/crontabs/root
 init.d/cron restart
 init.d/dnsmasq restart
 ip rule add fwmark 101 table 100
@@ -255,6 +257,7 @@ chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -337,6 +340,7 @@ sing-box version -n
 log Neither client nor server is configured. Service not started.
 config_load homeproxy
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -484,6 +488,7 @@ log Reloading service...
 config_load homeproxy
 ucode -S etc/homeproxy/scripts/generate_client.uc
 chmod 600 var/run/homeproxy/candidate/sing-box-c.json
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -753,6 +758,7 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 init.d/dnsmasq restart
 log Error: sing-box-c did not come up with the new configuration, rolling back.
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -890,6 +896,7 @@ sing-box version -n
 log sing-box 1.14.0 started.
 log Rollback completed; the previous configuration is running.
 reload_service rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -1040,6 +1047,7 @@ chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -1122,6 +1130,7 @@ sing-box version -n
 log Neither client nor server is configured. Service not started.
 config_load homeproxy
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -1393,6 +1402,7 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 init.d/dnsmasq restart
 start rc=1
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -1692,6 +1702,7 @@ chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
+chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100

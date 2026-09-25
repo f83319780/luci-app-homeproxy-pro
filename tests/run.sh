@@ -129,6 +129,13 @@ echo "== functional health probes (C2) =="
 # and "cannot probe here" never fails it.
 sh "$ROOT/tests/runtime/test_health_probe.sh" "$ROOT" || FAILED=1
 
+echo "== crontab permissions =="
+# Also pure shell: hp_crontab_drop() is driven against a sandboxed crontab, so
+# the host's own is never touched. It pins the mode of /etc/crontabs/root
+# across a rewrite - the temporary file mv replaced it with was 0644 while
+# procd creates it 0600.
+sh "$ROOT/tests/runtime/test_crontab_perms.sh" "$ROOT" "$WORK_ROOT/crontab-perms" || FAILED=1
+
 echo "== resource update verification (B2) =="
 # Pure shell: wget / jsonfilter / ucode / uci / flock are stubbed and the
 # script's absolute paths are rewritten into a sandbox, so this drives the
