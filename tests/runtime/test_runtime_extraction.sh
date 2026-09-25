@@ -612,6 +612,19 @@ run_scenario "F-custom-routing-nothing-configured" start \
 	main_node=n1 main_udp_node=nil default_outbound=nil \
 	server_enabled=0 ipv6_support=0
 
+# Scenario G: a plain `start` whose configuration cannot come up.  The
+# intercept rules are installed *before* the health gate runs, and the start
+# path has no rollback (that is reload-only) - so the gate failure has to
+# release them itself.  Otherwise the router's own clients keep being
+# redirected to a listener that is not there: the LAN loses DNS and TCP, not
+# just the proxy.  HP_TEST_OCCUPIED_PORT makes the generated configuration
+# unbindable, and the env-prefix assignment is how it reaches the scenario
+# (run_scenario's key=value arguments are HP_CFG_* overrides).
+HP_TEST_OCCUPIED_PORT=5399 run_scenario "G-start-health-gate-failure" start \
+	proxy_mode=redirect_tproxy routing_mode=bypass_mainland_china \
+	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
+	mixed_port=5399
+
 rm -f "$DNSMASQ_CONF"
 
 # Strip the sandbox prefix so the trace is portable.
@@ -683,6 +696,34 @@ if awk '/^log Reloading service\.\.\.$/,/^reload_service rc=/' "$TRACE.norm" \
 else
 	echo "FAIL: the reload did not activate its validated candidate"
 	exit 1
+fi
+
+# Scenario G asserts the behaviour, not just its trace: a start whose client
+# cannot come up must release the intercept layer (otherwise the LAN keeps
+# being redirected into it), and a healthy start must not pay for that.
+if awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" \
+	| grep -q "^log Reverting the intercept layer"; then
+	echo "PASS: a failed start releases the intercept layer"
+else
+	echo "FAIL: a failed start left the redirect rules and the DNS snippets installed"
+	awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" | head -40
+	exit 1
+fi
+
+if awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" \
+	| grep -q "^file var/run/homeproxy/known-good/"; then
+	echo "FAIL: a start that failed the health gate recorded a known-good configuration"
+	exit 1
+else
+	echo "PASS: a failed start records no known-good configuration"
+fi
+
+if awk '/^===== scenario: A-tun-bypass-client-only/,/^===== scenario: B-/' "$TRACE.norm" \
+	| grep -q "^log Reverting the intercept layer"; then
+	echo "FAIL: a healthy start released the intercept layer it had just installed"
+	exit 1
+else
+	echo "PASS: a healthy start does not release the intercept layer"
 fi
 
 if cmp -s "$GOLDEN" "$TRACE.norm"; then

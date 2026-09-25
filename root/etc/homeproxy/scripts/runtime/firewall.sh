@@ -68,12 +68,19 @@ hp_firewall_apply() {
 	return "$failed"
 }
 
-# hp_firewall_teardown <run-dir>
+# hp_firewall_teardown <run-dir> [keep-pre]
 # Flush and delete every fw4 object homeproxy owns.  Deleting one at a time
 # matters: `nft -f` batches are atomic, so a single object that does not
 # exist in the current proxy mode would roll back the rest.
+#
+# "keep-pre" leaves fw4_forward.nft / fw4_input.nft alone.  Those two are the
+# firewall_pre.uc fragments - the server's inbound accepts and the TUN
+# forwards - and they are not what black-holes the LAN when the client fails.
+# A failed client has to release the redirect/tproxy layer without closing
+# the server's ports, so that path passes keep-pre; stop_service does not.
 hp_firewall_teardown() {
 	local run_dir="$1"
+	local keep_pre="${2:-}"
 	local fw4_name
 
 	for fw4_name in $HP_FW4_CHAINS; do
@@ -85,8 +92,10 @@ hp_firewall_teardown() {
 		nft delete set inet fw4 "$fw4_name" 2>"/dev/null"
 	done
 
-	: > "$run_dir/fw4_forward.nft"
-	: > "$run_dir/fw4_input.nft"
+	if [ "$keep_pre" != "keep-pre" ]; then
+		: > "$run_dir/fw4_forward.nft"
+		: > "$run_dir/fw4_input.nft"
+	fi
 	: > "$run_dir/fw4_post.nft"
 
 	fw4 reload >"/dev/null" 2>&1 || log "Warning: fw4 reload failed during stop."

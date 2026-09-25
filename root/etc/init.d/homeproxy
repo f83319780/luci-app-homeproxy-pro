@@ -111,10 +111,57 @@ hp_client_outbound_node() {
 # directory (see runtime/dns.sh).
 hp_dnsmasq_resolve_dir
 
+# hp_intercept_installed
+# True when a previous start actually installed the intercept layer: the fw4
+# post fragment holds the redirect/tproxy chains, the dnsmasq include file
+# points at the snippets.  Both live in tmpfs, so after a reboot there is
+# nothing stale to release.
+hp_intercept_installed() {
+	[ -s "$RUN_DIR/fw4_post.nft" ] || [ -e "$DNSMASQ_DIR/../dnsmasq-homeproxy.conf" ]
+}
+
+# hp_release_intercept
+# Take the intercept layer back down, without touching the service's own
+# instances (procd keeps supervising them).
+#
+# A start that cannot prove the client came up must not leave the redirect
+# rules and the DNS snippets in place: they point the LAN's TCP and DNS at
+# listeners that are not there, so the routers' clients lose both instead of
+# merely not being proxied.  The reload path gets that for free through its
+# rollback; the start path (boot, a manual start, LuCI's Start button) has no
+# rollback at all, which is the asymmetry this closes.
+#
+# The server's inbound accepts (fw4_forward/fw4_input) are left in place: a
+# failed *client* does not make the server unreachable, and the two sides are
+# independent instances.
+hp_release_intercept() {
+	log "Reverting the intercept layer; traffic will go out unproxied until the client is up."
+	hp_net_teardown
+	hp_firewall_teardown "$RUN_DIR" keep-pre
+	hp_dnsmasq_remove_snippets "$DNSMASQ_DIR"
+}
+
+# hp_release_stale_intercept
+# The same, but only when a previous start left something installed.  Without
+# the check every start of an unconfigured router would pay a full fw4 reload
+# and a dnsmasq restart to undo rules that were never installed.
+hp_release_stale_intercept() {
+	hp_intercept_installed || return 0
+	hp_release_intercept
+}
+
 start_service() {
 	config_load "$CONF"
 
-	hp_require_singbox || return 1
+	# Every refusal below happens *before* this run installs anything, so a
+	# stale intercept layer is released rather than re-applied.  Without it,
+	# a router whose node was removed (or whose sing-box just failed its
+	# version gate) keeps redirecting the LAN into a listener that no instance
+	# is serving any more.
+	if ! hp_require_singbox; then
+		hp_release_stale_intercept
+		return 1
+	fi
 
 	local routing_mode proxy_mode outbound_node server_enabled
 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
@@ -125,6 +172,7 @@ start_service() {
 
 	if [ "$outbound_node" = "nil" ] && [ "$server_enabled" = "0" ]; then
 		log "Neither client nor server is configured. Service not started."
+		hp_release_stale_intercept
 		return 1
 	fi
 
@@ -148,7 +196,10 @@ start_service() {
 	if [ "$client_enabled" = "1" ]; then
 		hp_net_wait_wan 60
 
-		hp_start_generated_config c "$HP_DIR" "$RUN_DIR" "$GOOD_DIR" || return 1
+		if ! hp_start_generated_config c "$HP_DIR" "$RUN_DIR" "$GOOD_DIR"; then
+			hp_release_stale_intercept
+			return 1
+		fi
 
 		local auto_update auto_update_time
 		config_get_bool auto_update "subscription" "auto_update" "0"
@@ -162,7 +213,10 @@ start_service() {
 	fi
 
 	if [ "$server_enabled" = "1" ]; then
-		hp_start_generated_config s "$HP_DIR" "$RUN_DIR" "$GOOD_DIR" || return 1
+		if ! hp_start_generated_config s "$HP_DIR" "$RUN_DIR" "$GOOD_DIR"; then
+			hp_release_stale_intercept
+			return 1
+		fi
 
 		hp_procd_server_instance "$PROG" "$HP_DIR" "$RUN_DIR" "$disable_gso"
 	fi
@@ -261,6 +315,15 @@ service_started() {
 		# reload_service are not the same shell invocation.
 		printf '%s\n' "$failed" > "$RUN_DIR/failed-side"
 		log "Error: $failed did not come up with the new configuration."
+		# The intercept rules were installed by start_service before this
+		# gate ran, and on the *start* path nothing else takes them back
+		# down: the LAN would keep sending TCP to the redirect port and DNS
+		# to the dnsmasq snippets while no instance is listening.  Only a
+		# failed client black-holes the LAN - the server's accepts are
+		# inbound and a failed *server* leaves the client working - so this
+		# is scoped to the client side.  On the reload path the rollback
+		# below re-applies everything on its way to the old configuration.
+		[ "$failed" = "sing-box-c" ] && hp_release_intercept
 		# The rollback is driven by reload_service, which can stop and
 		# restart the service.
 		return 1
