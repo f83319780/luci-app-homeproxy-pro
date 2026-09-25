@@ -32,8 +32,8 @@
 | 后端字段校验 | 仅前端 | 前后端两道：UI 是 UX，后端强制（review H1） |
 | 资源更新策略 | jsdelivr 单一镜像 | 多镜像 fallback（`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `cdn.jsdelivr.net` / `raw.githubusercontent.com`）+ UI「上次成功时间」（review M7） |
 | 订阅 token 脱敏 | 调用点记得才脱敏 | `wGETVerbose()` 内部下沉到源头（review H3） |
-| 架构守卫 | 无 | `tests/arch-guard.sh` 33 个 guard / 124 个 check（PR-07 起；guard 编号 1-19, 21-34） |
-| 测试规模 | 7 个脚本 / 约 27 个 check | `tests/` 下 74 个受版本控制的文件（`git ls-files tests | wc -l`）：ucode 套件 + 5 个 frontend 验证器 + golden snapshot + mocks + 离线 runtime 测试；arch-guard 单跑 124 个 check |
+| 架构守卫 | 无 | `tests/arch-guard.sh` 34 个 guard / 125 个 check（PR-07 起；guard 编号 1-19, 21-35） |
+| 测试规模 | 7 个脚本 / 约 27 个 check | `tests/` 下 74 个受版本控制的文件（`git ls-files tests | wc -l`）：ucode 套件 + 5 个 frontend 验证器 + golden snapshot + mocks + 离线 runtime 测试；arch-guard 单跑 125 个 check |
 | CI | `build` + `i18n` 两条平行 workflow | `build` 依赖 `arch-test`；`arch-test` 8 步：翻译 fast gate → toolchain cache/构建 → toolchain 可用性校验 → `tests/run.sh`（唯一套件入口，含 arch-guard）→ 模板检查 |
 | ECH 上传 | 仅后端 case 缺失 | 补齐 `client_ech_conf`（P0-4） |
 | capabilities | 含 `CAP_SYS_PTRACE` + `CAP_NET_RAW` | 仅 `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`；`inheritable` 保留 ambient 子集以支撑跨 fork 传承（review H2） |

@@ -96,6 +96,36 @@ function make_log_capture() {
 	}
 }
 
+/* Test 3: the path carries the token too. Many providers hand out
+ * https://host:port/<user>/<token> with no query string at all - that is
+ * what the device this was found on is configured with - and the redaction
+ * used to keep the path while claiming homeproxy.log is world-readable.
+ * The host and port have to survive, or the message stops being useful. */
+{
+	const cap = make_log_capture();
+	global.HP_TEST_WGET_CONTENT = '';
+	global.HP_TEST_WGET_ERROR = 'connection refused';
+	const r = fetch('https://bwg.example.net:2345/wjp/SECRETPATHTOKEN', null, cap.log);
+	expect('path.content', r.content, null);
+	if (length(cap.buf) !== 1) {
+		printf('FAIL path.log count: expected 1, got %d\n', length(cap.buf));
+		failures++;
+	} else {
+		checks++;
+		const line = cap.buf[0];
+		if (index(line, 'SECRETPATHTOKEN') !== -1 || index(line, 'wjp') !== -1) {
+			printf('FAIL path.log redaction: the path token leaked: %s\n', line);
+			failures++;
+		} else if (index(line, 'bwg.example.net:2345') === -1) {
+			printf('FAIL path.log redaction: host and port must survive: %s\n', line);
+			failures++;
+		} else {
+			checks++;
+			printf('PASS path.log redaction: %s\n', line);
+		}
+	}
+}
+
 /* --- summary ----------------------------------------------------------- */
 
 if (failures > 0)

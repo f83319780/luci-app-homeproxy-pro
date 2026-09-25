@@ -1462,6 +1462,41 @@ else
 fi
 
 echo
+echo "== guard 35: mock copies of redactUrl match the real one =="
+
+# tests/ucode/mocks/*.uc carry verbatim copies of redactUrl() so the parser and
+# fetcher tests can run without homeproxy.uc's other dependencies.  A copy is
+# only worth having while it is identical: when the real function started
+# masking the URL path (the subscription token is often the path), both mocks
+# had to be updated by hand and nothing failed when they were not - the fetcher
+# test would have kept exercising the old behaviour and passing.
+extract_fn() {
+	awk -v fn="$2" '
+		$0 ~ ("^export function " fn "\\(") { inside = 1 }
+		inside { print }
+		inside && /^};$/ { exit }
+	' "$1"
+}
+REAL_REDACT="$(extract_fn "$HOMEPROXY" redactUrl)"
+MOCK_DRIFT=""
+if [ -z "$REAL_REDACT" ]; then
+	fail "redactUrl could not be extracted from homeproxy.uc"
+else
+	for m in "$ROOT"/tests/ucode/mocks/*.uc; do
+		[ -f "$m" ] || continue
+		grep -q "^export function redactUrl(" "$m" || continue
+		if [ "$(extract_fn "$m" redactUrl)" != "$REAL_REDACT" ]; then
+			MOCK_DRIFT="$MOCK_DRIFT ${m##*/}"
+		fi
+	done
+	if [ -n "$MOCK_DRIFT" ]; then
+		fail "mock copies of redactUrl have drifted from homeproxy.uc:$MOCK_DRIFT"
+	else
+		pass "every mock's redactUrl is identical to homeproxy.uc's"
+	fi
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
