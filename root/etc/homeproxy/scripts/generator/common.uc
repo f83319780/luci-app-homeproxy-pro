@@ -61,9 +61,32 @@ export function get_outbound(cfg, dm) {
 	}
 };
 
+/* Find a loaded section by name, treating `enabled` as a gate. The Loader
+ * normalises `enabled` on every list section; a section with the field unset
+ * is enabled (boolean sections default to 0 in UCI, but a dns_server/ruleset
+ * without the option is a valid, enabled row).
+ *
+ * Declared before its callers on purpose: ucode resolves function references
+ * at call time from what has already been evaluated, so a `function` statement
+ * placed after get_resolver() fails with "access to undeclared variable". */
+function find_enabled(items, name) {
+	const item = ConfigQuery.find_by_name(items || [], name);
+	if (!item)
+		return null;
+	if (item.enabled === false || item.enabled === '0')
+		return null;
+	return item;
+};
+
 /* Resolve a UCI resolver reference (a dns_server section name or one of
- * the sentinels) into a sing-box resolver tag. */
-export function get_resolver(cfg) {
+ * the sentinels) into a sing-box resolver tag.
+ *
+ * `dm` is required for the same reason get_outbound() needs it: a reference to
+ * a section that was deleted or disabled produces `cfg-<name>-dns`, which
+ * nothing defines - sing-box then rejects the whole configuration with
+ * "dns server not found", the reload silently keeps the previous one, and the
+ * user only sees that their change did not take. Fail with the name instead. */
+export function get_resolver(cfg, dm) {
 	if (isEmpty(cfg))
 		return null;
 
@@ -72,19 +95,28 @@ export function get_resolver(cfg) {
 	case 'system-dns':
 		return cfg;
 	default:
+		if (dm && !find_enabled((dm.dns || {}).servers, cfg))
+			die(sprintf("the DNS server '%s' does not exist or is disabled; check the rule that refers to it.", cfg));
 		return 'cfg-' + cfg + '-dns';
 	}
 };
 
 /* Resolve a UCI ruleset reference list (array of ruleset section names)
- * into the corresponding sing-box rule_set tag list. */
-export function get_ruleset(cfg) {
+ * into the corresponding sing-box rule_set tag list. Same existence gate as
+ * get_resolver(): ruleset.uc skips disabled entries, so a reference to one
+ * would leave a dangling `cfg-<name>-rule` tag behind. */
+export function get_ruleset(cfg, dm) {
 	if (isEmpty(cfg))
 		return null;
 
 	let rules = [];
-	for (let i in cfg)
-		push(rules, isEmpty(i) ? null : 'cfg-' + i + '-rule');
+	for (let i in cfg) {
+		if (isEmpty(i))
+			continue;
+		if (dm && !find_enabled((dm.routing || {}).rulesets, i))
+			die(sprintf("the rule-set '%s' does not exist or is disabled; check the rule that refers to it.", i));
+		push(rules, 'cfg-' + i + '-rule');
+	}
 	return rules;
 };
 

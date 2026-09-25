@@ -40,6 +40,25 @@ tests/run.sh
   router (`192.168.1.1` or anything in `192.168.1.1:*`) is refused by the
   on-target workflow regardless.
 
+### Test statistics
+
+The guard / check / test-file counts quoted in the top-level `README.md` are
+measured, not hand-maintained: `tests/print-stats.sh` prints one `key=value`
+line each and is the number's single source.
+
+```sh
+sh tests/print-stats.sh
+# guards=<n>
+# checks=<n>
+# test_files=<n>
+```
+
+`checks` costs one `tests/arch-guard.sh` run, because that is where the total is
+counted; the script propagates the guard's exit status, so a red guard cannot be
+reported as a green statistic. `test_files` counts files under `tests/` minus the
+gitignored `.DS_Store`, which keeps the number the same before and after the
+commit that adds a test file (and equal to `git ls-files tests | wc -l`).
+
 ### The staging policy: never install
 
 The ssh path **copies the checkout and runs it in place**. It never installs the
@@ -281,6 +300,19 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/runtime/test_resource_update.sh` | The content-verification path of `scripts/update_resources.sh`: the download URL is pinned to a commit, and the file is installed only when its git blob id matches the one GitHub reports for that path and commit. Drives all four outcomes (match, mismatch, no digest from the API, no local digest) with `wget` / `jsonfilter` / `ucode` / `uci` / `flock` stubbed and the script's absolute paths rewritten into a sandbox, asserting in each failure case that the installed list and its `.ver` are left untouched - the point of the check is that it refuses, so a driver that only walked the happy path would keep passing with the check deleted. Pure shell, runs anywhere. |
 | `tests/runtime/test_runtime_extraction.sh` | Drives `init.d/homeproxy` through a stubbed environment (fake `ip` / `nft` / `fw4` / `ucode` / `sing-box` / `uci` / `netstat` / `nslookup` / `nc`, fake procd and jsonfilter state, fixture UCI) across five scenarios and diffs the resulting command + file trace against a baseline. Two baselines exist and are captured with the SAME harness, so the diff between them is exactly the intentional change: `tests/fixtures/runtime/trace.pre-pr05.txt` (the 517-line init script before PHASE 7 moved the plumbing out — the record that the extraction was behaviour-preserving) and `tests/fixtures/runtime/trace.golden.txt` (after the health-gate fix). Scenario D is the P0 regression: a candidate whose `mixed_port` is already taken must be rejected by the health gate, the previous known-good must survive, and the reload must roll back onto it. The generated fixture configuration is pretty-printed like the generator's own `%.J` output, because the runtime reads that file (`hp_config_ports`, `hp_config_port_for_tag`) and a compact fixture would test a shape production never writes. Pure shell, no ucode needed. Regenerate with `HP_UPDATE_GOLDEN=1` (optionally `HP_GOLDEN=` / `HP_INITD=` to target another baseline or revision). |
 
+**`HP_UPDATE_GOLDEN=1` is a baseline-update mode, not a test.** It copies the
+trace the run just produced over the baseline and exits 0 *before* the golden
+comparison and every behavioural assertion after it
+(`tests/runtime/test_runtime_extraction.sh:682-687`), so the exit status of a
+regenerating run says nothing about the diff it wrote. That is the "test bakes a
+wrong output into a snapshot" risk the review named: the scenarios did run, but
+only the review of the written file
+(`git diff tests/fixtures/runtime/trace.golden.txt`) can tell whether the new
+baseline is correct. `tests/ucode/test_golden_outbounds.sh` is arranged the other
+way round on purpose - it asserts on the generated JSON first and only then
+honours `HP_UPDATE_SNAPSHOTS=1` - which `test_runtime_extraction.sh` cannot do,
+because its assertions all run after the trace is built.
+
 ### What the LuCI form snapshots cover
 
 A snapshot records, for every option the form builds: kind, name, title,
@@ -363,8 +395,16 @@ relied on. Two tests replaced it:
 (generate before teardown, known-good before firewall, cron before
 `config_load`, early return before `mkdir`) against the pre-PR-05 trace.
 
-procd itself is still only exercised on a target. PR-05 was verified on the
-ImmortalWrt test machine (`root@192.168.1.102`): `start` brought up both
+procd itself is still only exercised on a target. **The paragraph below is a
+historical record, not a target you can use**: `root@192.168.1.102` is the
+author's former test machine, an address that is no longer part of the test
+setup and that nothing in this tree defaults to. `tests/run.sh` reads
+`$HP_TEST_HOST`, skips the layer when it is unset, and arch-guard 13 keeps it
+that way - so treat what follows as "what was observed on 2026-09", not as
+reproduction instructions.
+
+PR-05 was verified on the ImmortalWrt test machine (`root@192.168.1.102`):
+`start` brought up both
 `sing-box-c` and `log-cleaner` instances (proving that a procd instance
 registered from a *sourced module* works), `reload` passed the health gate and
 refreshed known-good, and `stop` removed the instances, the TUN device, the ip

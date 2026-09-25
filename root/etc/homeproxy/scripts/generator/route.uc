@@ -186,7 +186,7 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 
 function build_route_custom(config, dm, ctx, direct_overrides) {
 	config.route.default_domain_resolver = {
-		server: get_resolver(ctx.default_outbound_dns)
+		server: get_resolver(ctx.default_outbound_dns, dm)
 	};
 
 	if (ctx.find_neighbor === '1')
@@ -237,7 +237,7 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 			process_path: cfg.process_path,
 			process_path_regex: cfg.process_path_regex,
 			user: cfg.user,
-			rule_set: get_ruleset(cfg.rule_set),
+			rule_set: get_ruleset(cfg.rule_set, dm),
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
 			invert: strToBool(cfg.invert),
 			action: cfg.action,
@@ -266,7 +266,7 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 		}
 
 		if (cfg.action === 'resolve') {
-			rule.server = get_resolver(cfg.resolve_server);
+			rule.server = get_resolver(cfg.resolve_server, dm);
 			rule.strategy = cfg.resolve_strategy;
 			rule.disable_cache = strToBool(cfg.resolve_disable_cache);
 			rule.disable_optimistic_cache = strToBool(cfg.resolve_disable_optimistic_cache);

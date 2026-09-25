@@ -1566,6 +1566,112 @@ else
 fi
 
 echo
+echo "== guard 37: the Makefile's conffiles block parses as the packaging path reads it =="
+
+# guard 33 greps build-pkg.sh for the *shape* of its conffile handling; it never
+# runs the other half of that contract.  get_conffiles() is an awk state
+# machine, and one drift in the Makefile markers - a `define` line that no
+# longer matches the `^define Package/<pkg>/conffiles` anchor, an indented
+# `endef`, entries moved above their header - makes it return nothing.  Then
+# `${#CONFFILES[@]}` is 0, build-pkg.sh takes its `else` branch and writes
+# /etc/config/<app> alone, so the released apk/ipk stop protecting the eight
+# resource files while guard 33 still passes.  That is exactly the silent
+# downgrade guard 33 was written to prevent, so the parse itself gets a check.
+#
+# Two independent measures, because comparing the state machine to itself would
+# prove nothing: the same awk build-pkg.sh runs (get_conffiles), against a
+# separately written exact-match counter and against the expected count.  The
+# count is deliberately a constant - changing which files a package protects is
+# a deliberate packaging decision, and this is the line that makes it a
+# deliberate edit here too.
+MAKEFILE="$ROOT/Makefile"
+MK_PKG_NAME="$(sed -n 's/^PKG_NAME:=//p' "$MAKEFILE" 2>"/dev/null" | head -1)"
+
+# The same awk as .github/build-pkg.sh's get_conffiles(), byte for byte.
+parse_conffiles() {
+	awk -v pkg="$1" '
+		$0 ~ "^define Package/"pkg"/conffiles" { flag=1; next }
+		flag && /^endef/ { flag=0; next }
+		flag && NF { print }
+	' "$MAKEFILE"
+}
+
+# The declared lines counted without the regex anchors: exact marker match plus
+# a `/`-prefixed-line filter.  If the awk regexes drift, the two disagree.
+count_declared_conffiles() {
+	awk -v pkg="$1" '
+		$0 == "define Package/" pkg "/conffiles" { flag=1; next }
+		flag && $0 == "endef" { flag=0 }
+		flag && /^\// { n++ }
+		END { print n+0 }
+	' "$MAKEFILE"
+}
+
+EXPECTED_CONFFILES=9
+CONF_PARSED="$(parse_conffiles "$MK_PKG_NAME")"
+CONF_COUNT="$(printf '%s\n' "$CONF_PARSED" | grep -c .)"
+CONF_DECLARED="$(count_declared_conffiles "$MK_PKG_NAME")"
+
+if [ -z "$MK_PKG_NAME" ]; then
+	fail "PKG_NAME is not declared in the Makefile - the conffile block cannot be located"
+elif [ -z "$CONF_PARSED" ]; then
+	fail "the get_conffiles() parse of Package/$MK_PKG_NAME/conffiles returned nothing - build-pkg.sh would ship /etc/config/<app> alone"
+else
+	pass "parsed $CONF_COUNT conffiles out of Package/$MK_PKG_NAME/conffiles"
+fi
+
+if [ -n "$CONF_PARSED" ] && [ "$CONF_COUNT" = "$CONF_DECLARED" ]; then
+	pass "the awk parse sees every declared line ($CONF_COUNT of $CONF_DECLARED)"
+else
+	fail "the get_conffiles() parse and the declared lines disagree: parsed ${CONF_COUNT:-0}, declared ${CONF_DECLARED:-0} - the anchor no longer matches the block"
+fi
+
+if [ "$CONF_COUNT" = "$EXPECTED_CONFFILES" ]; then
+	pass "Package/$MK_PKG_NAME/conffiles declares $EXPECTED_CONFFILES conffiles, the count guard 37 pins"
+else
+	fail "Package/$MK_PKG_NAME/conffiles parses as $CONF_COUNT entries, guard 37 expects $EXPECTED_CONFFILES - if the packaging list really changed, update EXPECTED_CONFFILES in the same commit"
+fi
+
+# Each parsed path must sit between the block header and its endef.  This is the
+# part guard 33's grep cannot see: a path present elsewhere in the Makefile (a
+# comment, another define) satisfies "the text appears" while the block parses
+# empty or short.
+CONF_DEFINE_LINE="$(grep -n "^define Package/$MK_PKG_NAME/conffiles\$" "$MAKEFILE" 2>"/dev/null" | head -1 | cut -d: -f1)"
+CONF_ENDEF_LINE="$(awk -v start="${CONF_DEFINE_LINE:-0}" 'NR > start && $0 == "endef" { print NR; exit }' "$MAKEFILE")"
+CONF_OUTSIDE=""
+for f in $CONF_PARSED; do
+	# Looking for the path *inside* the range rather than taking its first
+	# occurrence: an identical line elsewhere in the Makefile would otherwise
+	# decide the answer.
+	CONF_IN_BLOCK="$(awk -v want="$f" -v lo="${CONF_DEFINE_LINE:-0}" -v hi="${CONF_ENDEF_LINE:-0}" '
+		NR > lo && NR < hi && $0 == want { found = 1 }
+		END { print found + 0 }
+	' "$MAKEFILE")"
+	[ "$CONF_IN_BLOCK" = "1" ] || CONF_OUTSIDE="$CONF_OUTSIDE $f"
+done
+if [ -n "$CONF_PARSED" ] && [ -z "$CONF_OUTSIDE" ]; then
+	pass "every parsed conffile sits inside the block (lines $CONF_DEFINE_LINE-$CONF_ENDEF_LINE)"
+else
+	fail "these parsed conffiles are not inside Package/$MK_PKG_NAME/conffiles:$CONF_OUTSIDE"
+fi
+
+# A declared conffile the package does not ship protects nothing; the Makefile's
+# own comment records that the previous list named four paths that exist
+# nowhere in the tree.
+CONF_MISSING=""
+for f in $CONF_PARSED; do
+	case "$f" in
+	/*) [ -f "$ROOT/root$f" ] || CONF_MISSING="$CONF_MISSING $f" ;;
+	*) CONF_MISSING="$CONF_MISSING $f(not absolute)" ;;
+	esac
+done
+if [ -n "$CONF_PARSED" ] && [ -z "$CONF_MISSING" ]; then
+	pass "every declared conffile exists in the package payload (root/)"
+else
+	fail "these declared conffiles are not shipped by the package, so the declaration protects nothing:$CONF_MISSING"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

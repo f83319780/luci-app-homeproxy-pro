@@ -266,7 +266,7 @@ function buildCustomOutbounds(dm, config, ctx, direct_overrides) {
 				endpoint.detour = get_outbound(cfg.outbound, dm);
 				if (cfg.domain_resolver)
 					endpoint.domain_resolver = {
-						server: get_resolver(cfg.domain_resolver),
+						server: get_resolver(cfg.domain_resolver, dm),
 						strategy: cfg.domain_strategy
 					};
 				push(endpoints, endpoint);
@@ -280,7 +280,7 @@ function buildCustomOutbounds(dm, config, ctx, direct_overrides) {
 				ob.detour = get_outbound(cfg.outbound, dm);
 				if (cfg.domain_resolver)
 					ob.domain_resolver = {
-						server: get_resolver(cfg.domain_resolver),
+						server: get_resolver(cfg.domain_resolver, dm),
 						strategy: cfg.domain_strategy
 					};
 				push(outbounds, ob);
