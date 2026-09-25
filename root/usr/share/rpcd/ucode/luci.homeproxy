@@ -154,6 +154,13 @@ const methods = {
 
 				system(`mkdir -p ${shellQuote(HP_DIR)}/certs`);
 				writefile(`${HP_DIR}/certs/${filename}.pem`, filecontent);
+				/* writefile() is fopen(path, "w"): 0666 & ~umask, i.e. 0644 at
+				 * the usual 022 - world-readable, on a file that can be a TLS
+				 * private key.  Start it at 0600; the start path
+				 * (runtime/service.sh, hp_prepare_runtime_files) hands the
+				 * directory and its files to the sing-box user so the jailed
+				 * server can read them, with the mode kept at 0600. */
+				system(`chmod 600 ${shellQuote(HP_DIR)}/certs/${shellQuote(filename + '.pem')}`);
 				system(`rm -f ${shellQuote(tmpcert)}`);
 
 				return { result: true };

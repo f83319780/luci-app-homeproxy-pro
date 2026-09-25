@@ -184,7 +184,7 @@ EOF
 # reports success, so a healthy scenario stays quiet: the probes only log when
 # they fail or cannot run.
 
-for cmd in nft fw4 utpl pgrep chown nslookup nc; do
+for cmd in nft fw4 utpl pgrep chown chmod nslookup nc; do
 	stub "$cmd"
 done
 
@@ -482,6 +482,16 @@ run_scenario() {
 			HP_CFG_table_mark HP_CFG_tproxy_mark HP_CFG_tun_mark \
 			HP_CFG_tun_name HP_CFG_dns_port HP_CFG_mixed_port \
 			HP_TEST_OCCUPIED_PORT HP_TEST_DOWN
+
+		# A certificate on disk makes the per-file chown/chmod in
+		# hp_prepare_runtime_files() visible in the trace: an uploaded key
+		# lands as root:0600 and the jailed server needs it handed to the
+		# sing-box user, or it cannot start.
+		if [ "$HP_CFG_server_enabled" = "1" ]; then
+			mkdir -p "$SANDBOX/etc/homeproxy/certs"
+			printf '%s\n' '-----BEGIN PRIVATE KEY-----' \
+				> "$SANDBOX/etc/homeproxy/certs/server_privatekey.pem"
+		fi
 
 		. "$WORK/initd.sh"
 

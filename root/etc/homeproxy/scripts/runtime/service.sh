@@ -143,7 +143,26 @@ hp_prepare_runtime_files() {
 	[ "$client_enabled" = "1" ] && echo > "$run_dir/sing-box-c.log"
 	if [ "$server_enabled" = "1" ]; then
 		echo > "$run_dir/sing-box-s.log"
-		mkdir -p "$hp_dir/certs" || log "Warning: failed to create ${hp_dir}/certs."
+		if mkdir -p "$hp_dir/certs" 2>"/dev/null"; then
+			# The server runs jailed as the sing-box user and reads its
+			# certificate, key and ECH config from this directory, while an
+			# upload lands as root:0600 (luci.homeproxy).  Hand the directory
+			# and its files to that user and keep them 0700/0600: the jailed
+			# server can read them and nobody else can reach the private key.
+			# Without this the choice was "world-readable key" or "jailed
+			# server cannot start".
+			chown sing-box:sing-box "$hp_dir/certs" 2>"/dev/null" \
+				|| log "Warning: failed to hand ${hp_dir}/certs to sing-box."
+			chmod 700 "$hp_dir/certs" 2>"/dev/null"
+			for f in "$hp_dir/certs"/*.pem "$hp_dir/certs"/*.crt "$hp_dir/certs"/*.key; do
+				[ -f "$f" ] || continue
+				chown sing-box:sing-box "$f" 2>"/dev/null" \
+					|| log "Warning: failed to hand ${f} to sing-box."
+				chmod 600 "$f" 2>"/dev/null"
+			done
+		else
+			log "Warning: failed to create ${hp_dir}/certs."
+		fi
 	fi
 
 	# chown each path that is actually there.

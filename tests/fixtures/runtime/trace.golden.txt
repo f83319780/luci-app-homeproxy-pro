@@ -67,6 +67,7 @@ jsonfilter -e @.exit_code
 netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -207,6 +208,10 @@ procd_open_instance log-cleaner
 procd_set_param command etc/homeproxy/scripts/clean_log.sh
 procd_set_param respawn
 procd_close_instance
+chown sing-box:sing-box etc/homeproxy/certs
+chmod 700 etc/homeproxy/certs
+chown sing-box:sing-box etc/homeproxy/certs/server_privatekey.pem
+chmod 600 etc/homeproxy/certs/server_privatekey.pem
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-s.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.log
@@ -245,6 +250,8 @@ sleep 1
 jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -469,12 +476,14 @@ jsonfilter -e @.exit_code
 netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
 log Reloading service...
 config_load homeproxy
 ucode -S etc/homeproxy/scripts/generate_client.uc
+chmod 600 var/run/homeproxy/candidate/sing-box-c.json
 init.d/cron restart
 config_load homeproxy
 ip rule del fwmark 101 table 100
@@ -876,6 +885,7 @@ jsonfilter -e @.exit_code
 netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 log Rollback completed; the previous configuration is running.
@@ -1026,6 +1036,7 @@ jsonfilter -e @.exit_code
 netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -1513,6 +1524,10 @@ procd_open_instance log-cleaner
 procd_set_param command etc/homeproxy/scripts/clean_log.sh
 procd_set_param respawn
 procd_close_instance
+chown sing-box:sing-box etc/homeproxy/certs
+chmod 700 etc/homeproxy/certs
+chown sing-box:sing-box etc/homeproxy/certs/server_privatekey.pem
+chmod 600 etc/homeproxy/certs/server_privatekey.pem
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-s.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.log
@@ -1552,6 +1567,8 @@ sleep 1
 jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
+chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
@@ -1645,6 +1662,10 @@ procd_open_instance log-cleaner
 procd_set_param command etc/homeproxy/scripts/clean_log.sh
 procd_set_param respawn
 procd_close_instance
+chown sing-box:sing-box etc/homeproxy/certs
+chmod 700 etc/homeproxy/certs
+chown sing-box:sing-box etc/homeproxy/certs/server_privatekey.pem
+chmod 600 etc/homeproxy/certs/server_privatekey.pem
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-s.json
 chown sing-box:sing-box var/run/homeproxy/sing-box-c.log
@@ -1667,6 +1688,7 @@ sleep 1
 jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
+chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
