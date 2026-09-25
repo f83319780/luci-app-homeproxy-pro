@@ -119,8 +119,19 @@ export function isDirectOutboundTag(tag, dm) {
 	if (tag === 'direct-out')
 		return true;
 
-	const rn = ConfigQuery.find_by_name(dm.routing.nodes, tag);
-	const node_name = (rn && rn.node) || tag;
+	/* The caller passes the tag the generator emits - get_outbound() builds
+	 * `cfg-<node>-out` - not the routing_node section name, so that wrapper has
+	 * to be undone before the lookup.  Without this the two queries below were
+	 * given a name that matches neither table, and the function returned false
+	 * for every routing_node: build_http_clients() then kept a `detour` on a
+	 * rule-set download in pure TUN mode, where sing-box refuses it ("detour to
+	 * an empty direct outbound makes no sense") and rejects the whole
+	 * configuration. */
+	const unwrapped = match(tag, /^cfg-(.+)-out$/);
+	const name = unwrapped ? unwrapped[1] : tag;
+
+	const rn = ConfigQuery.find_by_name(dm.routing.nodes, name);
+	const node_name = (rn && rn.node) || name;
 	const node = ConfigQuery.node_by_id(dm, node_name);
 	return !!(node && node.type === 'direct');
 };
