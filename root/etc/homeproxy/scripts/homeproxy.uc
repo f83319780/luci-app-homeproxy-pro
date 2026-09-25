@@ -214,12 +214,18 @@ export function getTime(epoch) {
  * subscription URL we ship into /var/run/homeproxy/homeproxy.log is
  * readable by anyone who can read /var/run/homeproxy - including UCI
  * defaults that ship on the device and anyone with shell on the LAN.
- * The plain host and path are useful for debugging ("which endpoint
- * failed?"); the query string and userinfo are not - they hold the
- * subscription token. The original URL is still passed to wGETVerbose.
+ * (Confirmed on the device: the log is 0644.)
  *
- *   https://user:token@host.example.com/path?q=abc&token=secret
- *     -> https://***@host.example.com/path?q=*** */
+ * Only the scheme, host and port are kept - enough to answer "which
+ * provider/endpoint failed?". The userinfo, the path and the query string
+ * all carry subscription tokens in practice: many providers hand out
+ * `https://host:port/<user>/<token>` with no query string at all, which is
+ * exactly what the device this was found on was configured with, and the
+ * path used to survive the redaction. The original URL is still passed to
+ * wGETVerbose.
+ *
+ *   https://user:token@host.example.com/path/sub?q=abc&token=secret
+ *     -> https://***@host.example.com/***?*** */
 export function redactUrl(url) {
 	if (!url || type(url) !== 'string')
 		return '';
@@ -232,11 +238,29 @@ export function redactUrl(url) {
 	if (scheme && at !== -1 && at > length(scheme[0]))
 		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
 
-	/* query: redact everything after the first '?'. The path itself
-	 * stays so logs still identify which endpoint failed. */
-	const q = index(u, '?');
-	if (q !== -1)
-		u = substr(u, 0, q) + '?***';
+	/* path and query: keep the authority, mark the rest.  Splitting them
+	 * rather than masking from the first '/' keeps the structural markers
+	 * (`/***?***`) so a reader can still tell a path from a query, and it is
+	 * why the authority end is the *earlier* of the two separators. */
+	const scheme_end = scheme ? length(scheme[0]) : 0;
+	const rest = substr(u, scheme_end);
+	const path_at = index(rest, '/');
+	const query_at = index(rest, '?');
+	const has_path = path_at !== -1 && (query_at === -1 || path_at < query_at);
+
+	let authority_end = length(rest);
+	if (has_path)
+		authority_end = path_at;
+	else if (query_at !== -1)
+		authority_end = query_at;
+
+	let tail = '';
+	if (has_path)
+		tail += '/***';
+	if (query_at !== -1)
+		tail += '?***';
+
+	u = substr(u, 0, scheme_end + authority_end) + tail;
 
 	return u;
 };

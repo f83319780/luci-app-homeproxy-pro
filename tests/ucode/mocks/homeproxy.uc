@@ -52,14 +52,35 @@ export function redactUrl(url) {
 
 	let u = url;
 
+	/* userinfo: scheme://user:pass@host -> scheme://***@host */
 	const at = index(u, '@');
 	const scheme = match(u, /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//);
 	if (scheme && at !== -1 && at > length(scheme[0]))
 		u = substr(u, 0, length(scheme[0])) + '***' + substr(u, at);
 
-	const q = index(u, '?');
-	if (q !== -1)
-		u = substr(u, 0, q) + '?***';
+	/* path and query: keep the authority, mark the rest.  Splitting them
+	 * rather than masking from the first '/' keeps the structural markers
+	 * (`/***?***`) so a reader can still tell a path from a query, and it is
+	 * why the authority end is the *earlier* of the two separators. */
+	const scheme_end = scheme ? length(scheme[0]) : 0;
+	const rest = substr(u, scheme_end);
+	const path_at = index(rest, '/');
+	const query_at = index(rest, '?');
+	const has_path = path_at !== -1 && (query_at === -1 || path_at < query_at);
+
+	let authority_end = length(rest);
+	if (has_path)
+		authority_end = path_at;
+	else if (query_at !== -1)
+		authority_end = query_at;
+
+	let tail = '';
+	if (has_path)
+		tail += '/***';
+	if (query_at !== -1)
+		tail += '?***';
+
+	u = substr(u, 0, scheme_end + authority_end) + tail;
 
 	return u;
 };
