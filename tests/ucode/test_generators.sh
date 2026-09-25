@@ -118,25 +118,6 @@ run_case() {
 	# test-only driver.
 	cp "$ROOT/root/etc/homeproxy/scripts/$generator" "$dir/scripts/$generator"
 
-	# On macOS, `sing-box check` rejects the SO_MARK-based routing_mark
-	# on direct outbounds (Linux-only). The test rewrites the
-	# generator copy to emit null instead, which removeBlankAttrs()
-	# drops, so the JSON is identical on every platform and the
-	# production generator is untouched.
-	#
-	# PHASE 4 split the generator across generator/*.uc modules;
-	# the `routing_mark: strToInt(self_mark)` literal now lives in
-	# generator/client.uc (orchestrator), not in the CLI shell. The
-	# patch is applied to the module, and the shell is left alone.
-	if [ "$(uname -s)" = "Darwin" ]; then
-		# The orchestrator's direct-out routing_mark literal moved to
-		# generator/client.uc after PHASE 4; the patch matches whatever
-		# receiver name the orchestrator uses (ctx.self_mark today, but
-		# matching bare `self_mark` keeps the patch forward-compatible).
-		sed -i '' "s#routing_mark: strToInt(.*self_mark)#routing_mark: null#" \
-			"$dir/scripts/generator/client.uc"
-	fi
-
 	# No platform patching here on purpose.  The suite used to rewrite
 	# generator/client.uc's `routing_mark` to null on Darwin, because the
 	# macOS sing-box rejects that Linux-only field - which meant the one
