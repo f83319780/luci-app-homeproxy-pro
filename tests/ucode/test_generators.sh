@@ -37,6 +37,11 @@ run_case() {
 	fixture="$2"
 	generator="$3"
 	outfile="$4"
+	# Optional: a sed expression applied to the staged fixture, for cases that
+	# differ from the shared fixture by one UCI option.  Cheaper and more
+	# explicit than a near-copy fixture file, and the expression is visible at
+	# the call site next to the assertion it serves.
+	variation="${5:-}"
 	dir="$WORK/$name"
 
 	rm -rf "$dir"
@@ -76,6 +81,19 @@ run_case() {
 		sed "s#__RULESET_DIR__#$HP_RULESET#" "$fixture" > "$dir/config/homeproxy"
 	else
 		cp "$fixture" "$dir/config/homeproxy"
+	fi
+
+	if [ -n "$variation" ]; then
+		sed -e "$variation" "$dir/config/homeproxy" > "$dir/config/homeproxy.sed" \
+			|| { echo "FAIL: $name: the fixture variation could not be applied"; FAILED=1; return; }
+		if cmp -s "$dir/config/homeproxy" "$dir/config/homeproxy.sed"; then
+			# A variation that matched nothing would run the same case twice
+			# and report a pass for behaviour that was never exercised.
+			echo "FAIL: $name: the fixture variation matched nothing ($variation)"
+			FAILED=1
+			return
+		fi
+		mv "$dir/config/homeproxy.sed" "$dir/config/homeproxy"
 	fi
 
 
@@ -155,6 +173,50 @@ run_case() {
 # carry as routing_mark in the redirect modes.
 fixture_self_mark() {
 	sed -n "s/^[[:space:]]*option self_mark '\([0-9]*\)'.*/\1/p" "$1" | head -1
+}
+
+# Read one field out of a generated configuration.  ucode is already required
+# by this suite, and a JSON walk is stronger than a grep: it cannot be
+# satisfied by a coincidental match elsewhere in the file.
+mkdir -p "$WORK"
+cat > "$WORK/probe.uc" <<'EOF'
+'use strict';
+
+import { readfile } from 'fs';
+
+const config = json(readfile(ARGV[0]));
+
+switch (ARGV[1]) {
+case 'main-dns-server':
+	for (let s in (config.dns?.servers || []))
+		if (s.tag === 'main-dns') {
+			printf('%s\n', s.server ?? '');
+			exit(0);
+		}
+	printf('\n');
+	break;
+case 'route-final':
+	printf('%s\n', config.route?.final ?? '');
+	break;
+case 'has-outbound-tag':
+	for (let o in (config.outbounds || []))
+		if (o.tag === ARGV[2]) {
+			printf('yes\n');
+			exit(0);
+		}
+	printf('no\n');
+	break;
+case 'rule-set-count':
+	printf('%d\n', length(config.route?.rule_set || []));
+	break;
+default:
+	printf('unknown probe\n');
+	break;
+}
+EOF
+
+config_field() {
+	ucode "$WORK/probe.uc" "$1" "$2" "${3:-}" 2>"/dev/null"
 }
 
 # Read one field out of a generated configuration.  ucode is already required
@@ -259,6 +321,38 @@ EOF
 	esac
 fi
 
+# P1-3: 'wan' is the value the UI writes for "WAN DNS (read from interface)" and
+# has to be replaced by the resolver the CLI read off the WAN interface before
+# it reaches sing-box.  Left as-is it becomes a *hostname* sing-box tries to
+# resolve, and every proxied lookup fails.  Off-target the CLI has no ubus, so
+# what the assertion sees is build_context()'s documented public fallback
+# (223.5.5.5 in these routing modes); the point is that the literal never
+# survives into the config.
+run_case wan-dns "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json \
+	"s/^\([[:space:]]*\)option dns_server '.*'/\1option dns_server 'wan'/"
+
+wan_json="$WORK/wan-dns/run/sing-box-c.json"
+if [ ! -f "$wan_json" ]; then
+	echo "FAIL: wan-dns: no config was generated"
+	FAILED=1
+else
+	wan_server="$(config_field "$wan_json" main-dns-server)"
+	case "$wan_server" in
+	'')
+		echo "FAIL: wan-dns: main-dns has no server at all (dns_server='wan' was dropped)"
+		FAILED=1
+		;;
+	wan)
+		echo "FAIL: wan-dns: the literal 'wan' was published as the main DNS hostname;"
+		echo "        sing-box would try to resolve a host by that name"
+		FAILED=1
+		;;
+	*)
+		echo "PASS: wan-dns: dns_server='wan' resolved to $wan_server"
+		;;
+	esac
+fi
+
 # --- A1: the generator is a pure function of its arguments ----------------
 #
 # generator/client.uc used to resolve its own runtime environment - ubus for
@@ -304,6 +398,39 @@ if ! grep -qF 'determinism.example.com' "$det_out"; then
 fi
 
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
+
+# P1-6: the main-node reference is mode-dependent, and LuCI hides config.main_node
+# in custom mode without clearing it (`rmempty = false`).  A router that was
+# configured in a preset mode and then switched to custom therefore keeps the
+# old value - and reading it in custom mode switched the generator back to the
+# preset path, dropping every routing_rule/rule_set the user configured.
+run_case custom-stale-main-node "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
+	"s/^\([[:space:]]*\)option log_level 'error'/\1option log_level 'error'\n\1option main_node 'n_direct'/"
+
+stale_json="$WORK/custom-stale-main-node/run/sing-box-c.json"
+if [ ! -f "$stale_json" ]; then
+	echo "FAIL: custom-stale-main-node: no config was generated"
+	FAILED=1
+else
+	stale_final="$(config_field "$stale_json" route-final)"
+	stale_rulesets="$(config_field "$stale_json" rule-set-count)"
+	stale_main_out="$(config_field "$stale_json" has-outbound-tag main-out)"
+	if [ "$stale_main_out" = "yes" ]; then
+		echo "FAIL: custom: a residual config.main_node switched the generator back to the"
+		echo "      preset path (the generated config has main-out), so every routing_rule"
+		echo "      and rule_set the user configured was dropped"
+		FAILED=1
+	elif [ "$stale_final" != "direct-out" ]; then
+		echo "FAIL: custom: route.final is '$stale_final', expected the fixture's custom"
+		echo "      default_outbound (direct-out)"
+		FAILED=1
+	elif [ "$stale_rulesets" = "0" ]; then
+		echo "FAIL: custom: the fixture's local rule_set is missing from the generated config"
+		FAILED=1
+	else
+		echo "PASS: custom: a residual main_node does not override custom routing"
+	fi
+fi
 
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 

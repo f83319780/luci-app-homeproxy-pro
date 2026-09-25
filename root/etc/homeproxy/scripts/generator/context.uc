@@ -129,22 +129,36 @@ export function build_context(dm, env) {
 		},
 
 		/* Routing-mode-specific scalars; the dns/route modules consult
-		 * only the fields their branch needs. */
-		main_node: dm.general.main_node,
-		main_udp_node: dm.general.main_udp_node,
+		 * only the fields their branch needs.
+		 *
+		 * The main-node reference is mode-dependent, and custom routing has
+		 * its own outbound/rule tables (routing.default_outbound plus the
+		 * routing_node / routing_rule / ruleset sections).  A residual
+		 * config.main_node must therefore not switch the generator back to
+		 * the preset path: LuCI hides that field in custom mode but does not
+		 * clear it (`rmempty = false`), so a router that was configured in a
+		 * preset mode and then switched to custom keeps the old value in
+		 * UCI - and the pre-refactor code read it only when the mode was not
+		 * custom.  Reading it here anyway silently dropped every custom
+		 * routing rule and made route.final 'main-out'. */
+		main_node: (routing_mode === 'custom') ? null : dm.general.main_node,
+		main_udp_node: (routing_mode === 'custom') ? null : dm.general.main_udp_node,
 		default_outbound: (dm.routing.settings || {}).default_outbound,
 		default_outbound_dns: (dm.routing.settings || {}).default_outbound_dns || 'default-dns',
 		domain_strategy: (dm.routing.settings || {}).domain_strategy,
 		find_neighbor: (dm.routing.settings || {}).find_neighbor,
 
-		/* Main-line defaults. The DNS server fallbacks mirror what the
-		 * pre-refactor generate_client.uc did inline: an empty UCI value
-		 * becomes 'wan' for the main DNS server, which is itself turned
-		 * into the WAN resolver below; the China DNS server falls back
-		 * to the Aliyun public resolver instead of leaking into the
-		 * default-dns pipeline. Both branches are exercised by the
-		 * client fixture. */
-		dns_server: dm.general.dns_server || 'wan',
+		/* Main-line defaults, mirroring what the pre-refactor
+		 * generate_client.uc did inline: an empty UCI value becomes 'wan'
+		 * for the main DNS server, and 'wan' - the value the UI writes for
+		 * "WAN DNS (read from interface)" - is replaced by the resolver the
+		 * CLI read off the WAN interface (`wan_dns`, which itself falls back
+		 * to a public resolver when ubus has no answer).  Leaving the
+		 * literal 'wan' in place makes sing-box resolve a host by that name.
+		 * The China DNS server falls back to the Aliyun public resolver
+		 * instead of leaking into the default-dns pipeline. */
+		dns_server: (isEmpty(dm.general.dns_server) || dm.general.dns_server === 'wan')
+			? wan_dns : dm.general.dns_server,
 		china_dns_server: (dm.general.china_dns_server && dm.general.china_dns_server !== 'wan')
 			? dm.general.china_dns_server : '223.5.5.5',
 		/* dns_default_strategy: in proxy mode, ipv4_only is the safe
