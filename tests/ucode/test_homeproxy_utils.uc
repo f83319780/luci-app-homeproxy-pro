@@ -54,6 +54,17 @@ const bin = executeCommand('sh', '-c', shellQuote('printf "\\001\\002\\003"'));
 expect('bin.binary', bin.binary, true);
 expect('bin.stdout', bin.stdout, null);
 
+/* executeCommand() must be able to return one byte past HP_FETCH_CAP, or
+ * wGETVerbose()'s "response exceeds the limit" branch can never fire: the
+ * reader used to stop at 512 KiB, so every subscription between 512 KiB and
+ * 5 MiB arrived at the parser as a truncated body with error: null - silently
+ * truncated, and reported as complete.  600 KiB sits between the old reader
+ * cap and HP_FETCH_CAP, so this fails on that code and passes on the fix. */
+const BIG_LEN = 600 * 1024;
+const big = executeCommand('sh', '-c', shellQuote('head -c ' + BIG_LEN + ' /dev/zero | tr "\\0" a'));
+expect('big.exitcode', big.exitcode, 0);
+expect('big.stdout.length', length(big.stdout || ''), BIG_LEN);
+
 /* isValidPEM(): certificate vs private key, boundaries and body */
 const pem_cert = '-----BEGIN CERTIFICATE-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END CERTIFICATE-----';
 const pem_key = '-----BEGIN RSA PRIVATE KEY-----\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n-----END RSA PRIVATE KEY-----';

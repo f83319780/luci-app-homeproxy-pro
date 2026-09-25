@@ -782,10 +782,22 @@ return view.extend({
 			   file-exec form is what forced the ACL to grant `exec` on a
 			   root-owned entry point. The method returns the updater's exit
 			   status and captured stderr, so a failure is shown instead of the
-			   page reloading as if it had worked. */
+			   page reloading as if it had worked.
+
+			   That only holds if the reload waits for the notification: it used
+			   to run in the same tick, so the notice was destroyed with the
+			   document and a failed update looked exactly like a successful one
+			   (the page just refreshed). Failures therefore return the
+			   notification's promise - it resolves when the user dismisses the
+			   notice - and only a success reloads. The message goes in as an
+			   array so the updater's captured stderr is rendered as text, not
+			   as markup. */
 			return hp.rpcCall('update_subscriptions').then((res) => {
 				if (res && res.result === false)
-					ui.addNotification(null, E('p', _('An error occurred during updating subscriptions: %s').format(res.stderr || res.error || '')));
+					return ui.addNotification(null, E('p', [
+						_('An error occurred during updating subscriptions: %s').format(res.stderr || res.error || '')
+					]));
+
 				return location.reload();
 			});
 		}

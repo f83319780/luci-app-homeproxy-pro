@@ -165,7 +165,14 @@ export function executeCommand(...args) {
 		 * and behaves identically under busybox ash, dash and bash. */
 		exitcode = system(sprintf('%s >%s 2>%s', command, outpath, errpath));
 
-		stdout = read_capped(outpath, 1024 * 512);
+		/* The reader has to be able to return one byte more than
+		 * HP_FETCH_CAP, or wGETVerbose()'s "response exceeds the limit"
+		 * branch below is unreachable: the reader used to stop at 512 KiB,
+		 * so every subscription between 512 KiB and 5 MiB was handed to the
+		 * parser as a truncated body with error: null - the size check
+		 * could never fire and the caller had no way to tell.  stderr keeps
+		 * the smaller cap: it is a diagnostic message, not a payload. */
+		stdout = read_capped(outpath, HP_FETCH_CAP + 1);
 		stderr = read_capped(errpath, 1024 * 512);
 	} catch (e) {
 		/* Never leave the scratch directory behind on a failing run.
