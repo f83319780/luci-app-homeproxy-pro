@@ -78,6 +78,7 @@ run_case() {
 		cp "$fixture" "$dir/config/homeproxy"
 	fi
 
+
 	# HP_VALIDATE_DATA lets a development host replace /sbin/validate_data
 	# (see tests/README.md); on a target the production path is kept.
 	#
@@ -136,6 +137,15 @@ run_case() {
 			"$dir/scripts/generator/client.uc"
 	fi
 
+	# No platform patching here on purpose.  The suite used to rewrite
+	# generator/client.uc's `routing_mark` to null on Darwin, because the
+	# macOS sing-box rejects that Linux-only field - which meant the one
+	# field the product needs on its target platform was silently deleted
+	# before every test, and a regression in it could never be seen.  The
+	# off-target layer is Linux-only now (see tests/README.md); a host that
+	# cannot validate the generated configuration says so instead of
+	# weakening it.
+
 	# stderr is kept so a test can assert on warnings (e.g. a pruned urltest
 	# candidate) as well as on the generated JSON.
 	if ! ( cd "$dir/scripts" && ucode -L "$dir/scripts" "$generator" 2> "$dir/generate.err" ); then
@@ -160,6 +170,15 @@ run_case() {
 	echo "PASS: $name ($(wc -c < "$dir/run/$outfile") bytes)"
 }
 
+# The fixture's infra.self_mark, i.e. the value every node outbound has to
+# carry as routing_mark in the redirect modes.
+fixture_self_mark() {
+	sed -n "s/^[[:space:]]*option self_mark '\([0-9]*\)'.*/\1/p" "$1" | head -1
+}
+
+# Read one field out of a generated configuration.  ucode is already required
+# by this suite, and a JSON walk is stronger than a grep: it cannot be
+# satisfied by a coincidental match elsewhere in the file.
 run_case client "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
 
 # The preset remote rule-sets must be fetched through the node. A direct
@@ -173,6 +192,90 @@ fi
 if ! grep -q '"detour": "main-out"' "$WORK/client/run/sing-box-c.json"; then
 	echo "FAIL: client: no remote rule-set is configured to download through main-out"
 	FAILED=1
+fi
+
+# --- the product default proxy mode --------------------------------------
+#
+# client.uci runs `proxy_mode 'tun'`, where self_mark is empty and no outbound
+# carries routing_mark.  That made it the only end-to-end fixture for as long
+# as the default mode (redirect_tproxy) was never generated here - and the
+# adapter's COMMON_FIELDS neutralized routing_mark (it listed the key as null
+# *after* the literal that sets it), so every node outbound lost the mark that
+# keeps sing-box's own proxy connection out of the nft redirect chain.  This
+# case covers the default mode and asserts the mark on the emitted bytes.
+run_case redirect "$ROOT/tests/fixtures/generators/redirect.uci" generate_client.uc sing-box-c.json
+
+redir_fixture="$ROOT/tests/fixtures/generators/redirect.uci"
+redir_json="$WORK/redirect/run/sing-box-c.json"
+redir_mark="$(fixture_self_mark "$redir_fixture")"
+
+if [ -z "$redir_mark" ]; then
+	echo "FAIL: redirect: $redir_fixture no longer declares infra.self_mark, so the"
+	echo "      routing_mark assertion would pass vacuously"
+	FAILED=1
+elif [ ! -f "$redir_json" ]; then
+	echo "FAIL: redirect: no config was generated"
+	FAILED=1
+else
+	for tag in redirect-in tproxy-in; do
+		if ! grep -q "\"tag\": \"$tag\"" "$redir_json"; then
+			echo "FAIL: redirect: proxy_mode=redirect_tproxy did not emit $tag"
+			FAILED=1
+		fi
+	done
+
+	# Which outbounds must carry the mark: every outbound that dials.  Group
+	# outbounds (urltest/selector) must NOT - sing-box rejects the field on
+	# them with `json: unknown field "routing_mark"` - and block-out never
+	# dials.  A structural walk is used instead of a grep count so the
+	# group/leaf distinction cannot silently rot into a vacuous assertion.
+	cat > "$WORK/markcheck.uc" <<'EOF'
+'use strict';
+
+import { readfile } from 'fs';
+
+const want = +ARGV[0];
+const config = json(readfile(ARGV[1]));
+let checked = 0, problems = 0;
+
+for (let ob in (config.outbounds || [])) {
+	if (index(['block', 'urltest', 'selector'], ob.type) !== -1)
+		continue;
+
+	checked++;
+
+	if (ob.routing_mark !== want)
+		problems++;
+}
+
+printf('%d %d\n', checked, problems);
+EOF
+
+	mark_result="$(ucode "$WORK/markcheck.uc" "$redir_mark" "$redir_json" 2>"/dev/null")"
+	mark_checked="${mark_result%% *}"
+	mark_problems="${mark_result##* }"
+
+	case "$mark_checked" in
+	''|*[!0-9]*)
+		echo "FAIL: redirect: could not check the emitted outbounds ($redir_json)"
+		FAILED=1
+		;;
+	0)
+		echo "FAIL: redirect: no dialling outbound was emitted, the assertion is vacuous"
+		FAILED=1
+		;;
+	*)
+		if [ "$mark_problems" -ne 0 ]; then
+			echo "FAIL: redirect: $mark_problems of $mark_checked dialling outbounds do not"
+			echo "      carry routing_mark=$redir_mark (see COMMON_FIELDS in config/adapter.uc);"
+			echo "      without it sing-box does not mark its own sockets and the nft OUTPUT"
+			echo "      redirect chain loops the proxy connection back into its own inbound"
+			FAILED=1
+		else
+			echo "PASS: redirect: all $mark_checked dialling outbounds carry routing_mark=$redir_mark"
+		fi
+		;;
+	esac
 fi
 
 # --- A1: the generator is a pure function of its arguments ----------------
@@ -220,6 +323,7 @@ if ! grep -qF 'determinism.example.com' "$det_out"; then
 fi
 
 run_case custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
+
 run_case server "$ROOT/tests/fixtures/generators/server.uci" generate_server.uc sing-box-s.json
 
 # WireGuard is emitted as a sing-box endpoint, not an outbound, and it has its

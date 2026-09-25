@@ -130,12 +130,19 @@ function resolve(spec, subject) {
  * fields live in node.common (Loader's load_common); protocol-specific
  * canonical names live in node.protocol_options. The legacy
  * `node.raw` opaque bag was dropped - the Adapter reads only the explicit
- * sub-objects, so no escape hatch exists. */
+ * sub-objects, so no escape hatch exists.
+ *
+ * This table is applied AFTER the literal in build_outbound(), so a key
+ * listed here wins over whatever that literal set. A field the runtime owns
+ * (routing_mark, from the `mark` argument) therefore must NOT be listed
+ * here, not even as `null`: the loop would overwrite the value with null and
+ * removeBlankAttrs() would drop the field entirely. routing_mark is what
+ * exempts sing-box's own proxy connections from the nft redirect chain, so
+ * losing it loops the traffic back into the redirect inbound. Guard 32 in
+ * tests/arch-guard.sh keeps the literal's keys and this table disjoint. */
 const COMMON_FIELDS = {
 	server: (node) => node.address,
 	server_port: (node) => strToInt(node.port),
-	// set by the runtime, not by the model
-	routing_mark: null,
 	proxy_protocol: (node) => strToInt(node.common.proxy_protocol),
 	tcp_fast_open: (node) => strToBool(node.common.tcp_fast_open),
 	tcp_multi_path: (node) => strToBool(node.common.tcp_multi_path),

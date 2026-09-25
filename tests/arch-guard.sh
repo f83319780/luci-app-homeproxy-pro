@@ -1383,6 +1383,33 @@ else
 fi
 
 echo
+echo "== guard 32: the adapter's shared field table cannot overwrite a runtime field =="
+
+# build_outbound() builds the literal `{ type, tag, routing_mark }` and then
+# applies COMMON_FIELDS over it, so a key listed in that table wins - even when
+# it is `null`, after which removeBlankAttrs() drops the field entirely.  That
+# is how routing_mark (the SO_MARK that keeps sing-box's own proxy connection
+# out of the nft redirect chain) disappeared from every outbound while
+# `sing-box check` stayed green: on macOS the field is unknown, so the suite
+# could not see it.  The two key sets have to stay disjoint; a runtime-owned
+# field belongs in build_outbound()'s literal (or in its `mark` parameter),
+# never in this table.
+ADAPTER="$SCRIPTS/config/adapter.uc"
+COMMON_KEYS="$(awk '/^const COMMON_FIELDS = \{/{f=1;next} f && /^\};/{exit} f' "$ADAPTER" 2>"/dev/null" \
+	| sed -n 's/^\t\([a-z_][a-z_0-9]*\):.*/\1/p' | sort -u)"
+LITERAL_KEYS="$(awk '/^function build_outbound\(/{f=1;next} f && /COMMON_FIELDS\)/{exit} f' "$ADAPTER" 2>"/dev/null" \
+	| sed -n 's/^\t\t\([a-z_][a-z_0-9]*\):.*/\1/p' | sort -u)"
+OVERLAP="$(printf '%s\n%s\n' "$COMMON_KEYS" "$LITERAL_KEYS" | sort | uniq -d | tr '\n' ' ')"
+if [ -z "$COMMON_KEYS" ] || [ -z "$LITERAL_KEYS" ]; then
+	fail "could not read both field sets from config/adapter.uc (COMMON_FIELDS: $([ -n "$COMMON_KEYS" ] && echo ok || echo empty), build_outbound literal: $([ -n "$LITERAL_KEYS" ] && echo ok || echo empty))"
+elif [ -n "$OVERLAP" ]; then
+	fail "COMMON_FIELDS lists a field build_outbound() already set, so it is overwritten: $OVERLAP"
+else
+	pass "no key is set by both build_outbound()'s literal and COMMON_FIELDS"
+fi
+
+echo
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
