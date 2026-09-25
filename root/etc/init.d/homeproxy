@@ -179,6 +179,17 @@ start_service() {
 	local client_enabled=0
 	[ "$outbound_node" = "nil" ] || client_enabled=1
 
+	# Client switched off (main_node cleared, or custom routing without a
+	# default outbound): the redirect rules and the DNS snippets from the
+	# previous start have to go, or the LAN keeps pointing at listeners no
+	# instance is serving.  This matters more since a reload keeps the DNS
+	# layer across its stop (see stop_service): without it, a reload that
+	# disables the client would leave the snippets installed forever.
+	# The server's accepts (fw4_forward/fw4_input) are left alone.
+	if [ "$client_enabled" != "1" ]; then
+		hp_release_stale_intercept
+	fi
+
 	mkdir -p "$RUN_DIR"
 
 	# Kernel 6.6.x has a TUN/GSO bug that needs GSO turned off for the tun
@@ -354,7 +365,17 @@ stop_service() {
 
 	hp_net_teardown
 	hp_firewall_teardown "$RUN_DIR"
-	hp_dnsmasq_remove_snippets "$DNSMASQ_DIR"
+	# A reload is a restart, not a shutdown, and it keeps the DNS layer: the
+	# snippets are re-rendered by start_service moments later, and their writer
+	# compares content before restarting dnsmasq.  Taking them down here would
+	# leak the LAN's queries to the ISP resolvers for the whole stop/start
+	# window and restart dnsmasq twice (flushing every client's cache) for a
+	# configuration that did not change.  The cost is that DNS points at
+	# sing-box's dns-in while the instances are down - a few seconds of failed
+	# lookups instead of a few seconds of plaintext queries.  A real stop (no
+	# flag) removes them, and a reload that disables the client releases them
+	# through hp_release_stale_intercept() in start_service.
+	[ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ] || hp_dnsmasq_remove_snippets "$DNSMASQ_DIR"
 
 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log" \
@@ -444,6 +465,13 @@ reload_service() {
 	# came up and only then records the new known-good, so the previous one
 	# survives until that point - which is what makes the rollback below
 	# possible.
+	#
+	# The flag tells stop_service that this stop belongs to a reload, so the
+	# DNS layer is left in place for start_service to re-render (it compares
+	# content and only restarts dnsmasq when something actually changed).  It
+	# stays set for the rollback path below, which is also a reload.
+	HP_RELOAD_IN_PROGRESS=1
+	export HP_RELOAD_IN_PROGRESS
 	stop
 	start
 

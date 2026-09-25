@@ -397,16 +397,24 @@ HP_CFG_mixed_port="5330"
 
 config_load() { printf 'config_load %s\n' "$*" >> "$TRACE"; }
 
+# The fixture is keyed by "<section>_<option>" (server_enabled, mixed_port, ...)
+# while config_get/config_get_bool receive section and option separately.  The
+# lookup has to try the section-qualified name first: reading only the bare
+# option name meant `server_enabled=1` on a scenario was silently ignored -
+# scenario B's "with server" registered no server instance at all - which is a
+# coverage hole, not a fixture convenience.
 config_get() {
-	__cg_var="$1"; __cg_opt="$3"; __cg_def="$4"
-	eval "__cg_val=\"\${HP_CFG_${__cg_opt}:-}\""
+	__cg_var="$1"; __cg_sec="$2"; __cg_opt="$3"; __cg_def="$4"
+	eval "__cg_val=\"\${HP_CFG_${__cg_sec}_${__cg_opt}:-}\""
+	[ -n "$__cg_val" ] || eval "__cg_val=\"\${HP_CFG_${__cg_opt}:-}\""
 	[ -n "$__cg_val" ] || __cg_val="$__cg_def"
 	eval "$__cg_var=\"\$__cg_val\""
 }
 
 config_get_bool() {
-	__cg_var="$1"; __cg_opt="$3"; __cg_def="$4"
-	eval "__cg_val=\"\${HP_CFG_${__cg_opt}:-}\""
+	__cg_var="$1"; __cg_sec="$2"; __cg_opt="$3"; __cg_def="$4"
+	eval "__cg_val=\"\${HP_CFG_${__cg_sec}_${__cg_opt}:-}\""
+	[ -n "$__cg_val" ] || eval "__cg_val=\"\${HP_CFG_${__cg_opt}:-}\""
 	[ -n "$__cg_val" ] || __cg_val="$__cg_def"
 	eval "$__cg_var=\"\$__cg_val\""
 }
@@ -487,11 +495,29 @@ run_scenario() {
 			unset HP_TEST_OCCUPIED_PORT
 			start
 			printf 'prime start rc=%d\n' "$?" >> "$TRACE"
-			HP_CFG_mixed_port="${HP_TEST_OCCUPIED_AFTER:-5399}"
-			HP_TEST_OCCUPIED_PORT="${HP_TEST_OCCUPIED_AFTER:-5399}"
-			export HP_CFG_mixed_port HP_TEST_OCCUPIED_PORT
+			if [ "${HP_TEST_DISABLE_CLIENT_AFTER:-0}" = "1" ]; then
+				# The second phase turns the client off instead of breaking
+				# its port (scenario H).
+				HP_CFG_main_node=nil
+				export HP_CFG_main_node
+			else
+				HP_CFG_mixed_port="${HP_TEST_OCCUPIED_AFTER:-5399}"
+				HP_TEST_OCCUPIED_PORT="${HP_TEST_OCCUPIED_AFTER:-5399}"
+				export HP_CFG_mixed_port HP_TEST_OCCUPIED_PORT
+			fi
 			reload_service
 			printf 'reload_service rc=%d\n' "$?" >> "$TRACE"
+		elif [ "$action" = "start-twice" ]; then
+			# Scenario I: two plain starts in a row, with the client switched
+			# off in between.  This is LuCI's Start button on a router whose
+			# node was just removed - a *start*, not a reload, which is the
+			# path that has no rollback.
+			start
+			printf 'prime start rc=%d\n' "$?" >> "$TRACE"
+			HP_CFG_main_node=nil
+			export HP_CFG_main_node
+			start
+			printf 'start rc=%d\n' "$?" >> "$TRACE"
 		else
 			start
 			printf 'start rc=%d\n' "$?" >> "$TRACE"
@@ -625,6 +651,19 @@ HP_TEST_OCCUPIED_PORT=5399 run_scenario "G-start-health-gate-failure" start \
 	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
 	mixed_port=5399
 
+# Scenario H: two plain starts, the second with the client switched off but the
+# server still enabled (the node was removed, the server side stayed).  LuCI's
+# Start button takes this path, not reload, and it has no rollback - so the
+# intercept layer the first start installed has to be released by the start
+# itself.  The "neither side is configured" branch does not cover this case:
+# with the server still on, the run gets past it and would leave the LAN
+# pointed at the client's dead redirect port.  This is also what makes the
+# reload path's "keep the DNS layer across the stop" safe: without it,
+# disabling the client would leave the snippets installed forever.
+run_scenario "H-start-disables-client" start-twice \
+	proxy_mode=redirect_tproxy routing_mode=bypass_mainland_china \
+	main_node=n1 main_udp_node=nil server_enabled=1 ipv6_support=0
+
 rm -f "$DNSMASQ_CONF"
 
 # Strip the sandbox prefix so the trace is portable.
@@ -701,16 +740,16 @@ fi
 # Scenario G asserts the behaviour, not just its trace: a start whose client
 # cannot come up must release the intercept layer (otherwise the LAN keeps
 # being redirected into it), and a healthy start must not pay for that.
-if awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" \
+if awk '/^===== scenario: G-start-health-gate-failure/,/^===== scenario: H-/' "$TRACE.norm" \
 	| grep -q "^log Reverting the intercept layer"; then
 	echo "PASS: a failed start releases the intercept layer"
 else
 	echo "FAIL: a failed start left the redirect rules and the DNS snippets installed"
-	awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" | head -40
+	awk '/^===== scenario: G-start-health-gate-failure/,/^===== scenario: H-/' "$TRACE.norm" | head -40
 	exit 1
 fi
 
-if awk '/^===== scenario: G-start-health-gate-failure/,0' "$TRACE.norm" \
+if awk '/^===== scenario: G-start-health-gate-failure/,/^===== scenario: H-/' "$TRACE.norm" \
 	| grep -q "^file var/run/homeproxy/known-good/"; then
 	echo "FAIL: a start that failed the health gate recorded a known-good configuration"
 	exit 1
@@ -724,6 +763,41 @@ if awk '/^===== scenario: A-tun-bypass-client-only/,/^===== scenario: B-/' "$TRA
 	exit 1
 else
 	echo "PASS: a healthy start does not release the intercept layer"
+fi
+
+# P1-8: a reload must leave the DNS layer alone.  Its stop used to remove the
+# snippets and restart dnsmasq, then start put them back and restarted it again
+# - a plaintext DNS window and a full cache flush for a configuration that did
+# not change.  The writer's content comparison is what makes keeping them safe:
+# the re-render below has to report that nothing changed.
+if awk '/^===== scenario: D-health-gate-rollback/,/^===== scenario: E-/' "$TRACE.norm" \
+	| grep -q "^log dnsmasq snippets unchanged, skipping the restart\.$"; then
+	echo "PASS: a reload keeps the DNS snippets and does not restart dnsmasq for them"
+else
+	echo "FAIL: a reload re-rendered the DNS layer instead of keeping it"
+	awk '/^===== scenario: D-health-gate-rollback/,/^===== scenario: E-/' "$TRACE.norm" \
+		| grep -n "dnsmasq" | head -8
+	exit 1
+fi
+
+# Scenario H: the client was switched off and the start has to take the
+# intercept layer down with it (LuCI's Start button, no rollback involved).
+if awk '/^===== scenario: H-start-disables-client/,0' "$TRACE.norm" \
+	| grep -q "^log Reverting the intercept layer"; then
+	echo "PASS: a start that finds the client switched off releases the intercept layer"
+else
+	echo "FAIL: switching the client off left the redirect rules and DNS snippets in place"
+	awk '/^===== scenario: H-start-disables-client/,0' "$TRACE.norm" | tail -40
+	exit 1
+fi
+
+if awk '/^===== scenario: H-start-disables-client/,0' "$TRACE.norm" \
+	| grep -q "^file dnsmasq/dnsmasq-homeproxy"; then
+	echo "FAIL: the dnsmasq snippets survived the client being switched off"
+	awk '/^===== scenario: H-start-disables-client/,0' "$TRACE.norm" | grep "^file dnsmasq"
+	exit 1
+else
+	echo "PASS: the dnsmasq snippets are gone after the client is switched off"
 fi
 
 if cmp -s "$GOLDEN" "$TRACE.norm"; then
