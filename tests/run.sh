@@ -45,6 +45,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 FAILED=0
+# Set when the ucode layer could neither run locally nor be staged on a target.
+# Distinct from FAILED on purpose: the subset did pass, and exit 3 says so.
+UCODE_SKIPPED=0
 
 echo "== zh_Hans translation coverage =="
 if ! python3 "$ROOT/tests/i18n-coverage.py" --fail-below 100; then
@@ -144,9 +147,9 @@ sh "$ROOT/tests/arch-guard.sh" "$ROOT" || FAILED=1
 echo "== ucode tests =="
 # Order matters here: local toolchain first, then the ssh fallback, then an
 # honest skip.  With `HP_TEST_HOST` tested first, a developer who had built the
-# testbed (tests/toolchain/build-ucode-macos.sh) still got this whole layer
-# skipped - and a final "ALL TESTS PASSED" - for as long as the variable was
-# unset.  That is the same shape as the skips that once let an unparseable
+# toolchain still got this whole layer skipped - and a final "ALL TESTS PASSED"
+# - for as long as the variable was unset.  That is the same shape as the skips
+# that once let an unparseable
 # update_subscriptions.uc reach a device.  The testbed is the documented way to
 # run this layer off-target, so an unset variable must not shadow it.
 if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1; then
@@ -158,11 +161,21 @@ if command -v ucode > "/dev/null" 2>&1 && command -v sing-box > "/dev/null" 2>&1
 	case "$SB_VER" in
 	1.1[4-9]*|1.[2-9][0-9]*|[2-9].*) ;;
 	*)	echo "FAIL: sing-box >= 1.14 required, found '${SB_VER:-unknown}' ($(command -v sing-box))"
-		echo "      tests/toolchain/build-ucode-macos.sh installs a matching one"
+		echo "      tests/toolchain/build-ucode-linux.sh installs a matching one"
 		FAILED=1
 		;;
 	esac
-	sh "$ROOT/tests/ucode/run.sh" "$ROOT" "$WORK_ROOT/ucode" || FAILED=1
+	# A "NOT RUN" (exit 2) from the layer is a skip, not a failure: the layer
+	# declines to run where it cannot judge the result (no ucode, or a
+	# non-Linux host, where sing-box rejects the Linux-only routing_mark).
+	# tests/run.sh still refuses to call the run a pass - it ends in the
+	# PARTIAL branch below.
+	sh "$ROOT/tests/ucode/run.sh" "$ROOT" "$WORK_ROOT/ucode"
+	case "$?" in
+	0) ;;
+	2) UCODE_SKIPPED=1 ;;
+	*) FAILED=1 ;;
+	esac
 elif [ -n "$HOST" ]; then
 	echo "(no local ucode/sing-box, executing on $HOST)"
 	# BatchMode: a host-key or password prompt would otherwise hang the suite
@@ -223,21 +236,48 @@ elif [ -n "$HOST" ]; then
 		# back to ucode/run.sh's default /tmp/hp-ucode-tests, so two concurrent
 		# suite runs on the target shared it and deleted each other's staging -
 		# "could not sandbox ... missing anchor".
-		$SSH "$HOST" "HP_REQUIRE_FW4='$HP_REQUIRE_FW4' sh '$REMOTE_DIR/tests/ucode/run.sh' '$REMOTE_DIR' '$REMOTE_DIR/work'" || FAILED=1
+		$SSH "$HOST" "HP_REQUIRE_FW4='$HP_REQUIRE_FW4' sh '$REMOTE_DIR/tests/ucode/run.sh' '$REMOTE_DIR' '$REMOTE_DIR/work'"
+		case "$?" in
+		0) ;;
+		2) UCODE_SKIPPED=1 ;;
+		*) FAILED=1 ;;
+		esac
 	else
 		echo "FAIL: could not stage the tests on $HOST"
 		FAILED=1
 	fi
 else
+	# A skipped layer is not a pass.  The ucode layer is where the generator,
+	# the parser, the subscription pipeline and every golden snapshot are
+	# validated - the layer that has twice shipped something no router could
+	# parse while the suite printed ALL TESTS PASSED.  Reporting the subset as
+	# a pass is exactly how that happened, so the run ends non-zero (3, which
+	# is distinct from a test failure) and says which layer is missing.
 	echo "SKIP: no local ucode/sing-box and HP_TEST_HOST is not set"
-	echo "      (build the toolchain with tests/toolchain/build-ucode-*.sh, or"
-	echo "       set HP_TEST_HOST=root@<test-machine> to stage the suite there)"
+	echo "      the ucode layer (generator / parser / subscription / golden"
+	echo "      snapshots) was NOT run by this invocation."
+	echo "        build it:  sh tests/toolchain/build-ucode-linux.sh   # Linux"
+	echo "        or stage:  HP_TEST_HOST=root@<test-machine> sh tests/run.sh"
+	echo "      a Linux container is the supported way to run it off-target;"
+	echo "      tests/README.md has the one-liner. HP_ALLOW_PARTIAL=1 turns"
+	echo "      this run back into 'the subset passed' (exit 0)."
+	if [ "${HP_ALLOW_PARTIAL:-0}" = "1" ]; then
+		echo "      HP_ALLOW_PARTIAL=1: reporting the subset as a pass"
+	else
+		UCODE_SKIPPED=1
+	fi
 fi
 
-if [ "$FAILED" -eq 0 ]; then
-	echo "ALL TESTS PASSED"
-else
+if [ "$FAILED" -ne 0 ]; then
 	echo "SOME TESTS FAILED"
+	exit 1
 fi
+
+if [ "$UCODE_SKIPPED" = "1" ]; then
+	echo "PARTIAL: every suite that ran passed, but the ucode layer did not run"
+	exit 3
+fi
+
+echo "ALL TESTS PASSED"
 
 exit $FAILED

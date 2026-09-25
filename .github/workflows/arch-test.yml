@@ -92,16 +92,31 @@ jobs:
         id: cache
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
-          path: ${{ env.HOME }}/.local/ucode-testbed
-          # Cache key is the script hash, prefixed by the runner OS so a
-          # future macOS-hosted runner does not pick up a Linux build.  The
-          # OS is included in the path-based fallback anyway, but the key
-          # is what GitHub uses to compare for a hit, so it has to be there.
+          # `~` explicitly, not `${{ env.HOME }}`: env.HOME is empty in GitHub
+          # Actions (the comment below the build step already says so), so the
+          # path used to expand to /.local/ucode-testbed and the action refused
+          # to save anything ("Path Validation Error") - the cache never hit,
+          # every run rebuilt the toolchain, and a restored cache would have
+          # landed somewhere the next step's PATH did not look.
+          path: ~/.local/ucode-testbed
           key: ${{ runner.os }}-ucode-testbed-${{ hashFiles('tests/toolchain/build-ucode-linux.sh') }}
 
       - name: Build ucode toolchain (cache miss only)
         if: steps.cache.outputs.cache-hit != 'true'
         run: sh tests/toolchain/build-ucode-linux.sh
+
+      - name: Verify the toolchain is usable
+        # A cache hit skips the build, so this is what proves the restored
+        # prefix actually holds a working toolchain.  Without it a stale or
+        # half-populated cache turns into a run where tests/run.sh takes its
+        # SKIP branch - which is a non-zero exit now (3), but the message here
+        # names the cause instead of leaving it to the suite.
+        run: |
+          test -x "$HOME/.local/ucode-testbed/bin/ucode" || {
+            echo "::error title=Toolchain missing::no ucode in $HOME/.local/ucode-testbed/bin (cache hit without a usable prefix?)"
+            exit 1
+          }
+          "$HOME/.local/ucode-testbed/bin/ucode" -e 'printf("ucode %s\n", ARGV[0] ?? "ok");'
 
       - name: Run the off-target test suite
         # tests/run.sh is the single list of what the suite is.  The steps that
@@ -115,8 +130,8 @@ jobs:
         # HP_TEST_HOST is unset so run.sh takes its local branch: the toolchain
         # is on PATH from the cache step above.  run.sh checks the local
         # toolchain first, then the ssh fallback, then skips - and a skip here
-        # would be a silent coverage hole, which is why the toolchain is a hard
-        # prerequisite of this job rather than an optional cache.
+        # is not a pass: it exits 3 with a PARTIAL line, so a toolchain that
+        # silently fails to build cannot report a green run.
         env:
           # PATH must put the toolchain bin first so the matching sing-box wins
           # over any /usr/local/bin stray.  $HOME is a shell variable here, not

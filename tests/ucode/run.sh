@@ -15,9 +15,29 @@ FAILED=0
 
 if ! command -v ucode > "/dev/null" 2>&1; then
 	echo "NOT RUN: ucode is not on PATH."
-	echo "         Build the testbed toolchain first, or use tests/run.sh which"
-	echo "         copies the checkout to a device when the host has no ucode:"
-	echo "           sh tests/toolchain/build-ucode-linux.sh   # or -macos.sh"
+	echo "         Build the toolchain first (Linux; the target and CI are both"
+	echo "         Linux, and sing-box only accepts routing_mark there), or use"
+	echo "         tests/run.sh, which copies the checkout to a device when the"
+	echo "         host has no ucode:"
+	echo "           sh tests/toolchain/build-ucode-linux.sh"
+	exit 2
+fi
+
+# The target is OpenWrt (Linux), and this layer validates the generated
+# configuration with sing-box.  routing_mark - the SO_MARK that keeps
+# sing-box's own proxy connection out of the nft redirect chain - is a
+# Linux-only field: `sing-box check` rejects it everywhere else, so a
+# non-Linux host cannot tell a correct configuration from one that lost the
+# field.  The suite used to paper over that by rewriting the field to null
+# before testing, which is exactly how the regression stayed invisible; saying
+# "cannot run here" is the honest version of the same fact.
+if [ "$(uname -s)" != "Linux" ] && [ "${HP_ALLOW_NONLINUX_UCODE:-0}" != "1" ]; then
+	echo "NOT RUN: the ucode layer requires Linux (this host is $(uname -s))."
+	echo "         Run it in a Linux container or with"
+	echo "         HP_TEST_HOST=root@<test-machine>; tests/README.md has both."
+	echo "         HP_ALLOW_NONLINUX_UCODE=1 forces the run anyway - expect the"
+	echo "         routing_mark assertions to fail, because the local sing-box"
+	echo "         rejects that field."
 	exit 2
 fi
 

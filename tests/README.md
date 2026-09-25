@@ -24,10 +24,11 @@ tests/run.sh
 
   The local toolchain is checked **first** on purpose: the testbed is the
   documented way to run this layer off-target, so an unset `$HP_TEST_HOST` must
-  not shadow it. A skip is reported as `SKIP`, never as a pass.
+  not shadow it. A skip is reported as `SKIP`, never as a pass: the run ends
+  with exit 3 and a `PARTIAL:` line unless `HP_ALLOW_PARTIAL=1` is set.
 
   ```sh
-  tests/toolchain/build-ucode-macos.sh        # or -linux.sh, then:
+  tests/toolchain/build-ucode-linux.sh        # Linux host, then:
   export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
   tests/run.sh                                # branch 1
 
@@ -101,18 +102,37 @@ the previous release's package kept for re-install. `apk` keeps a modified
 conffile and drops a `<file>.apk-new` next to it; check `md5sum` on the config
 before and after and delete the `.apk-new` files only once that matches.
 
-## Local macOS testbed
+## The off-target toolchain (Linux only)
 
-The ucode part normally needs an OpenWrt device because ucode has no Homebrew
-formula and its `uci`/`ubus` modules link against the OpenWrt libraries. To
-avoid depending on `$HP_TEST_HOST` (and on the LAN being reachable) for every
-refactor step, the whole toolchain can be built from source into a private
-prefix:
+The ucode layer needs a Linux host: ucode's `uci`/`ubus` modules link against
+the OpenWrt libraries, `utpl` renders the fw4 template through the `fw4` ucode
+module, and `sing-box check` rejects the Linux-only `routing_mark` field
+everywhere else. The toolchain is therefore built from source into a private
+prefix **on Linux**:
 
 ```sh
-sh tests/toolchain/build-ucode-macos.sh
+sh tests/toolchain/build-ucode-linux.sh
 export PATH="$HOME/.local/ucode-testbed/bin:$PATH"
 tests/run.sh
+```
+
+There is deliberately no macOS variant. One existed, and to make the fixtures
+pass on Darwin it rewrote `routing_mark` to `null` inside the generator copy —
+so the one field that keeps sing-box's proxy connection out of the nft redirect
+chain was deleted before every test, and the regression that deleted it in
+production (see guard 32) stayed invisible. A host that cannot validate the
+generated configuration says so instead of weakening it.
+
+On a development machine, run the whole suite in a Linux container:
+
+```sh
+docker run --rm -v "$PWD:/w" -w /w debian:stable-slim sh -c '
+  apt-get update -qq &&
+  apt-get install -y -qq --no-install-recommends build-essential ca-certificates
+    cmake curl gettext git libjson-c-dev libmd-dev libssl-dev meson ninja-build
+    pkg-config python3 zlib1g-dev &&
+  sh tests/toolchain/build-ucode-linux.sh &&
+  PATH="$HOME/.local/ucode-testbed/bin:$PATH" sh tests/run.sh'
 ```
 
 The script installs into `~/.local/ucode-testbed` and removes nothing outside
@@ -121,8 +141,8 @@ default), so dropping the prefix undoes it completely. It builds:
 
 | Component | Why |
 | --- | --- |
-| `libubox`, `libuci`, `libubus` | ucode's `uci`/`ubus`/`uloop` plugins need them; not packaged for macOS |
-| `libmd` | the `digest` module (`ucode-mod-digest` in the package Makefile); installed through Homebrew |
+| `libubox`, `libuci`, `libubus` | ucode's `uci`/`ubus`/`uloop` plugins need them |
+| `libmd` | the `digest` module (`ucode-mod-digest` in the package Makefile) |
 | `ucode` | the interpreter itself, plus `utpl`/`ucc`. Pinned to the revision ImmortalWrt/OpenWrt snapshots ship as `2026.01.16~85922056` — see "Why ucode is pinned" below |
 | `liblucihttp` | `luci.http` is a thin wrapper over this C module and `homeproxy.uc` imports it |
 | `luci` ucode sources | `http.uc`, `sys.uc`, … installed to `<prefix>/share/ucode/luci` like OpenWrt does |
@@ -136,9 +156,17 @@ ucode grammar is still the strict one the package targets, and a
 `tests/run.sh` refuses to run the fixtures against an older `sing-box`
 (`FAIL: sing-box >= 1.14 required`), so keep the prefix first in `PATH`.
 
+### What a host without the toolchain reports
+
+The pure-shell, node and python suites still run, and `tests/run.sh` ends with
+**exit 3 and `PARTIAL: … the ucode layer did not run`** rather than a pass: a
+skipped layer is not evidence. `HP_ALLOW_PARTIAL=1` turns that run back into
+"the subset passed" (exit 0) for callers that only want the fast layers; CI
+does not set it, so a toolchain that fails to build there fails the job.
+
 ### Why ucode is pinned
 
-`UCODE_REV` in both toolchain scripts is the revision the ImmortalWrt/OpenWrt
+`UCODE_REV` in the toolchain script is the revision the ImmortalWrt/OpenWrt
 snapshot ships (`2026.01.16~85922056`). That ucode is stricter than current
 upstream HEAD: it requires a terminating `;` after `export function ... }` and
 rejects object and array destructuring, both of which upstream relaxed
@@ -158,8 +186,8 @@ probing a newer ucode.
 **If the canary reports `exported_function_without_semicolon compiles, but the
 target ucode rejects it`, the problem is usually the local build, not the pin.**
 A testbed built before `UCODE_REV` was introduced tracks upstream HEAD and is
-too permissive; rebuild it with `tests/toolchain/build-ucode-macos.sh` (or
-`-linux.sh`) and the canary passes. This is worth doing rather than reaching
+too permissive; rebuild it with `tests/toolchain/build-ucode-linux.sh` and the
+canary passes. This is worth doing rather than reaching
 for `HP_ALLOW_PERMISSIVE_UCODE=1`: on a permissive toolchain the canary's
 "rejected" probes pass for the wrong reason, and a real
 missing-`;`/destructuring regression would go unnoticed — which is precisely
@@ -208,10 +236,12 @@ Two further host differences are bridged so the remaining checks still run:
   `tests/ucode/test_generators.sh` substitutes it while staging the generator.
 * **`routing_mark`** — a Linux-only `SO_MARK` socket option in sing-box (1.14
   has no portable `set_mark` route action), so redirect/tproxy configs cannot
-  pass `sing-box check` on macOS. On Darwin the generator *copy* staged by the
-  test is rewritten to emit `routing_mark: null`, which `removeBlankAttrs()`
-  drops; the emitted JSON is then identical on every platform and the
-  production generator is untouched.
+  pass `sing-box check` outside Linux. This is a property of the *host*, not of
+  the product: the ucode layer runs on Linux (the toolchain, CI and the target
+  all are), and the assertion that the mark is emitted reads the generated JSON
+  instead of asking the local sing-box about it. The suite used to rewrite the
+  generated field to `null` on Darwin instead — which is how the regression
+  that deleted it in production stayed invisible (see guard 32).
 
 ## What is covered
 
@@ -231,8 +261,8 @@ Two further host differences are bridged so the remaining checks still run:
 | `tests/ucode/test_parser_normalize.uc` | Asserts that `parser/normalize.uc` correctly maps the parser's flat UCI-key output to the canonical Node shape (`tls`, `transport`, `multiplex`, `common`, `credentials`, `protocol_options`); pins the contract between the parser, the Loader's `PROTOCOL_OPTIONS` (now derived from `parser/mapping.uc`) and the Adapter. |
 | `tests/ucode/test_parser_flatten.uc` | Round-trip invariant for the canonical-Node pipeline: `flatten(normalize(parse_uri(uri)))` must equal the parser's flat UCI dict field-for-field for every supported scheme. This is what stops the parser, the Loader's `PROTOCOL_OPTIONS` (now derived from `parser/mapping.uc`) and the Repository's flatten from drifting apart. |
 | `tests/ucode/test_subscription_repository.uc` | Integration test for `subscription/repository.uc`: stages a sandboxed UCI file with a user node, a kept subscription node, and a dropped subscription node, then runs `Repository.apply_nodes` and asserts (a) the user node is untouched, (b) the kept node has the new fields and no stale fields, (c) the dropped node is gone, (d) a brand-new node is added under `md5(group+label)`. PR-03 added the `apply_main_node_refs` paths (urltest prune + missing-target switch + reset-to-nil) and the `scrub_stale_urltest_refs` pass to the same test. |
-| `tests/ucode/test_generators.sh` | Runs `generate_client.uc`/`generate_server.uc` against the UCI fixtures in `tests/fixtures/generators/` inside a scratch directory (the `uci` cursor and `HP_DIR`/`RUN_DIR` are redirected) and validates each result with `sing-box check`. |
-| `tests/toolchain/build-ucode-macos.sh` | Builds the local ucode toolchain described above; not part of `tests/run.sh`. |
+| `tests/ucode/test_generators.sh` | Runs `generate_client.uc`/`generate_server.uc` against the UCI fixtures in `tests/fixtures/generators/` inside a scratch directory (the `uci` cursor and `HP_DIR`/`RUN_DIR` are redirected) and validates each result with `sing-box check`. The `redirect` case is the product's default `proxy_mode` and asserts, from the emitted JSON, that every dialling outbound carries the runtime `routing_mark`. |
+| `tests/toolchain/build-ucode-linux.sh` | Builds the local ucode toolchain described above; not part of `tests/run.sh`. |
 | `tests/toolchain/validate-data.sh` | Off-target stand-in for `/sbin/validate_data`, used through `HP_VALIDATE_DATA`; not part of `tests/run.sh`. |
 | `tests/ucode/test_ucode_grammar.sh` | Pins the ucode dialect: the toolchain must reject `export function ... }` without `;` and object/array destructuring, and must accept the constructs the package uses (`?.`/`??`, object spread, computed keys, template literals). |
 | `tests/ucode/test_generators.sh` (wireguard case) | Asserts the WireGuard fixture keeps its private key, peer public key and local address list, so the endpoint builder cannot silently regress to reading flat UCI option names. |

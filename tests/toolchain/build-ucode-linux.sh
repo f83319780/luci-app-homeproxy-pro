@@ -3,10 +3,10 @@
 #
 # Build a self-contained ucode toolchain on Linux so tests/run.sh can execute
 # the ucode part locally (and in CI) without copying the checkout to an
-# OpenWrt device. Mirrors tests/toolchain/build-ucode-macos.sh: same source
-# repos, same ucode CMake flags, same module layout under $PREFIX. The
-# differences are entirely the host-side details (apt vs brew, linux-amd64
-# sing-box release, no install_name_tool/dylib acrobatics).
+# OpenWrt device. This is the only toolchain script on purpose: the target is
+# Linux, the CI runner is Linux, and `sing-box check` accepts the Linux-only
+# routing_mark only there - an off-target layer anywhere else would have to
+# weaken the very configuration it exists to validate.
 #
 # Usage:
 #   sh tests/toolchain/build-ucode-linux.sh [prefix] [build-dir]
@@ -54,10 +54,9 @@ PREFIX="$(cd "$PREFIX" && pwd)"
 BUILD="$(cd "$BUILD" && pwd)"
 
 # BUILD_WITH_INSTALL_RPATH links against the final install location from the
-# start, so `cmake --install` never has to rewrite the load commands. The
-# Linux toolchain does not need install_name_tool because Linux uses
-# RUNPATH/RPATH and standard .so naming; the macOS install_name dance is
-# strictly a Mach-O concern.
+# start, so `cmake --install` never has to rewrite the load commands. Linux
+# uses RUNPATH and standard .so naming, so no install_name_tool step is needed
+# here at all.
 #
 # CMAKE_INSTALL_RPATH is what BUILD_WITH_INSTALL_RPATH actually bakes in:
 # without it the installed binaries get an empty RUNPATH, and the first
@@ -151,7 +150,6 @@ build "$(clone jow-/ucode "$UCODE_REV")" \
 #   -L$PREFIX/lib         upstream links `-lucode` by bare name without a
 #     find_library() call, relying on libucode being in a default search
 #     path. $PREFIX is not one.
-# The macOS script passes the same two for the same reasons.
 LUCIHTTP_DIR="$(clone jow-/lucihttp)"
 echo "==> building lucihttp"
 cmake -S "$LUCIHTTP_DIR" -B "$LUCIHTTP_DIR/build" $CMAKE_COMMON \
