@@ -463,6 +463,29 @@ else
 	FAILED=1
 fi
 
+echo "== generator tag helpers =="
+# get_outbound() emits `cfg-<node>-out`; isDirectOutboundTag() is asked about
+# that emitted tag, so it has to undo the wrapper before looking the node up.
+# It did not, and every routing_node answered "not direct".
+rm -rf "$WORK/gen_common"
+mkdir -p "$WORK/gen_common/config" "$WORK/gen_common/parser" "$WORK/gen_common/generator"
+GEN_VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
+sed -e "s#/sbin/validate_data#${GEN_VALIDATE_DATA}#" \
+	"$ROOT/root/etc/homeproxy/scripts/homeproxy.uc" > "$WORK/gen_common/homeproxy.uc"
+cp "$ROOT/root/etc/homeproxy/scripts/config/loader.uc"  "$WORK/gen_common/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/model.uc"   "$WORK/gen_common/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/config/adapter.uc" "$WORK/gen_common/config/"
+cp "$ROOT/root/etc/homeproxy/scripts/parser/"*.uc       "$WORK/gen_common/parser/"
+cp "$ROOT/root/etc/homeproxy/scripts/generator/"*.uc    "$WORK/gen_common/generator/"
+cp "$ROOT/tests/ucode/test_generator_common.uc"         "$WORK/gen_common/"
+
+if ( cd "$WORK/gen_common" && ucode -L "$WORK/gen_common" test_generator_common.uc ); then
+	echo "PASS: generator tag helpers"
+else
+	echo "FAIL: generator tag helpers"
+	FAILED=1
+fi
+
 echo "== golden inbound snapshot =="
 # PR-04: the server-side counterpart. Before this the server path had no
 # snapshot, which is how the fixture's unused `listen_port` option survived
