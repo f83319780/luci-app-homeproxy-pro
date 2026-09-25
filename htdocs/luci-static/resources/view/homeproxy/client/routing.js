@@ -88,7 +88,14 @@ function render(ctx) {
 	o.default = 'bypass_mainland_china';
 	o.rmempty = false;
 	o.onchange = function(ev, section_id, value) {
-		if (section_id && value === 'custom')
+		/* Save on every transition, not only into custom: leaving custom
+		 * leaves the user's `routing.default_outbound`, `default_outbound_dns`
+		 * and `bypass_cn_traffic` in UCI. The generator's read-only-in-custom
+		 * gate (5573269) keeps the generation valid, but the residue stays in
+		 * the file until the next time someone enters custom and saves
+		 * again, which is invisible to the user. Triggering save on every
+		 * change makes the UCI state track the mode the user actually picked. */
+		if (section_id && value)
 			this.map.save(null, true);
 	}
 
