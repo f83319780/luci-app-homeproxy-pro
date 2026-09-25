@@ -21,6 +21,7 @@
 
 import argparse
 import os
+import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -103,6 +104,18 @@ def parse_po(path):
     return entries
 
 
+def placeholder_counts(text):
+    """How many %s/%d/%j conversions a string carries.
+
+    LuCI's String.format() silently substitutes an empty string for a missing
+    argument, so a translation with extra placeholders renders an empty
+    <code></code> and one with too few drops whatever the source interpolated.
+    Neither shows up in the coverage percentage - only the presence and the
+    completeness of the msgstr are checked - which is how two zh_Hans entries
+    shipped with four placeholders against a two-placeholder msgid."""
+    return len(re.findall(r"%(?:[sdj])", text))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--warn-below", type=float, default=100.0,
@@ -127,11 +140,31 @@ def main():
         if not entry or entry["fuzzy"] or not entry["msgstr"].strip():
             untranslated.append(msgid)
 
+    # A translated string has to keep the msgid's placeholders: the count, not
+    # the letters around them. Checked on its own so a bad translation cannot
+    # hide behind a 100% coverage number.
+    mismatched = []
+    for msgid, entry in translation.items():
+        if msgid not in template or entry["fuzzy"] or not entry["msgstr"].strip():
+            continue
+        want, got = placeholder_counts(msgid), placeholder_counts(entry["msgstr"])
+        if want != got:
+            mismatched.append((msgid, want, got))
+
     translated = total - len(untranslated)
     coverage = (translated / total * 100) if total else 100.0
 
     print(f"zh_Hans translation coverage: {translated}/{total} ({coverage:.1f}%)"
           f", {len(ignored)} msgid(s) ignored by tests/i18n-ignore.txt")
+
+    if mismatched:
+        print(f"::error title=Translation placeholders::{len(mismatched)} translated"
+              f" string(s) do not carry the same number of %s/%d/%j conversions as"
+              f" their msgid - LuCI's format() renders an empty fragment for a"
+              f" missing argument and drops the extra ones")
+        for msgid, want, got in mismatched[:args.list]:
+            print(f"  - msgid has {want}, msgstr has {got}: {msgid}")
+        return 1
 
     # A denominator below the floor means the template is empty or truncated,
     # not that the translation is perfect. Fail hard whatever the flags say;
