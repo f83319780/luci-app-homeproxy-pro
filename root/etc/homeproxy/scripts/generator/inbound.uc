@@ -62,7 +62,13 @@ export function build_inbounds(config, ctx) {
 			listen_port: int(ctx.redirect_port)
 		});
 
-	if (match(ctx.proxy_mode, /tproxy/))
+	/* tproxy-in is gated on the port existing, not only on the proxy mode:
+	 * context.uc only assigns tproxy_port when a dedicated UDP node is
+	 * configured (or in custom mode), because that is exactly when
+	 * firewall_post.ut emits the tproxy chain.  Emitting the inbound anyway
+	 * bound a UDP socket to listen_port 0 - a random port that no nft rule
+	 * ever points at - so the two layers now share one condition. */
+	if (match(ctx.proxy_mode, /tproxy/) && !isEmpty(ctx.tproxy_port))
 		push(inbounds, {
 			type: 'tproxy',
 			tag: 'tproxy-in',

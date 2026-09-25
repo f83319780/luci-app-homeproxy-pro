@@ -336,7 +336,17 @@ function initDns(config, ctx) {
 		client_subnet: ctx.dns_client_subnet,
 		optimistic: optimistic ? {
 			enabled: true,
-			timeout: !isEmpty(ctx.dns_optimistic_timeout) ? ctx.dns_optimistic_timeout : '3d'
+			/* strToTime(), not the raw UCI string: sing-box parses this
+			 * field as a duration and rejects a bare number outright
+			 * ("time: missing unit in duration \"3600\""), so the whole
+			 * generation would fail - and a failed generation keeps the
+			 * previous configuration running, which the user sees as
+			 * "my setting did not take".  The UI documents the field as
+			 * "Examples: 3d, 1h" but does not enforce a unit, so both
+			 * forms have to work: strToTime() turns "3600" into "3600s"
+			 * and leaves "3d" alone.  dns_query_timeout below already
+			 * does this. */
+			timeout: !isEmpty(ctx.dns_optimistic_timeout) ? strToTime(ctx.dns_optimistic_timeout) : '3d'
 		} : null,
 		timeout: !isEmpty(ctx.dns_query_timeout) ? strToTime(ctx.dns_query_timeout) : null
 	};

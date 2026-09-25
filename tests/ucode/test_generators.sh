@@ -260,12 +260,27 @@ elif [ ! -f "$redir_json" ]; then
 	echo "FAIL: redirect: no config was generated"
 	FAILED=1
 else
-	for tag in redirect-in tproxy-in; do
-		if ! grep -q "\"tag\": \"$tag\"" "$redir_json"; then
-			echo "FAIL: redirect: proxy_mode=redirect_tproxy did not emit $tag"
-			FAILED=1
-		fi
-	done
+	if ! grep -q '"tag": "redirect-in"' "$redir_json"; then
+		echo "FAIL: redirect: proxy_mode=redirect_tproxy did not emit redirect-in"
+		FAILED=1
+	fi
+
+	# tproxy-in is gated on a dedicated UDP node, exactly like the nft
+	# tproxy chain in firewall_post.ut.  This fixture leaves main_udp_node at
+	# 'nil', so the inbound must NOT be emitted: the old code emitted it
+	# anyway with listen_port 0 - context.uc only assigns tproxy_port when a
+	# UDP node exists - binding a random UDP port that no rule ever points
+	# at.  The positive case is redirect-udp below.
+	if grep -q '"tag": "tproxy-in"' "$redir_json"; then
+		echo "FAIL: redirect: main_udp_node=nil emitted tproxy-in, which no nft rule"
+		echo "      points at (see the tproxy_port gate in generator/inbound.uc)"
+		FAILED=1
+	fi
+	if grep -q '"listen_port": 0' "$redir_json"; then
+		echo "FAIL: redirect: a generated inbound has listen_port 0:"
+		grep -n -B 3 '"listen_port": 0' "$redir_json" | head -8
+		FAILED=1
+	fi
 
 	# Which outbounds must carry the mark: every outbound that dials.  Group
 	# outbounds (urltest/selector) must NOT - sing-box rejects the field on
@@ -319,6 +334,28 @@ EOF
 		fi
 		;;
 	esac
+fi
+
+# The UDP tproxy path: a dedicated UDP node makes context.uc assign
+# tproxy_port, firewall_post.ut emit the tproxy chain, and inbound.uc emit the
+# tproxy-in that chain redirects to.  No fixture covered this path before -
+# every one either used tun or left main_udp_node at 'nil'.
+run_case redirect-udp "$ROOT/tests/fixtures/generators/redirect.uci" generate_client.uc sing-box-c.json \
+	"s/^\([[:space:]]*\)option main_udp_node '.*'/\1option main_udp_node 'same'/"
+
+rudp_json="$WORK/redirect-udp/run/sing-box-c.json"
+if [ ! -f "$rudp_json" ]; then
+	echo "FAIL: redirect-udp: no config was generated"
+	FAILED=1
+elif ! grep -q '"tag": "tproxy-in"' "$rudp_json"; then
+	echo "FAIL: redirect-udp: main_udp_node=same did not emit tproxy-in"
+	FAILED=1
+elif ! grep -A 4 '"tag": "tproxy-in"' "$rudp_json" | grep -q '"listen_port": 5332'; then
+	echo "FAIL: redirect-udp: tproxy-in does not listen on the configured tproxy port:"
+	grep -A 4 '"tag": "tproxy-in"' "$rudp_json" | head -6
+	FAILED=1
+else
+	echo "PASS: redirect-udp: a dedicated UDP node emits tproxy-in on 5332"
 fi
 
 # P1-3: 'wan' is the value the UI writes for "WAN DNS (read from interface)" and

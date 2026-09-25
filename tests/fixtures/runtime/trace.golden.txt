@@ -9,11 +9,11 @@ ip -6 route show default
 ifstatus wan
 ucode -S etc/homeproxy/scripts/generate_client.uc
 init.d/dnsmasq restart
-ip tuntap add mode tun user root name singtun0
-sleep 1s
+ip link show singtun0
 ip link set singtun0 up
 ip route replace default dev singtun0 table 100
-ip rule add fwmark 102 lookup 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json
@@ -159,10 +159,12 @@ ucode -S etc/homeproxy/scripts/generate_client.uc
 chmod 600 etc/crontabs/root
 init.d/cron restart
 init.d/dnsmasq restart
+ip rule del fwmark 101 table 100
 ip rule add fwmark 101 table 100
-ip route add local 0.0.0.0/0 dev lo table 100
+ip route replace local 0.0.0.0/0 dev lo table 100
+ip -6 rule del fwmark 101 table 100
 ip -6 rule add fwmark 101 table 100
-ip -6 route add local ::/0 dev lo table 100
+ip -6 route replace local ::/0 dev lo table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json
@@ -422,11 +424,11 @@ ip -6 route show default
 ifstatus wan
 ucode -S etc/homeproxy/scripts/generate_client.uc
 init.d/dnsmasq restart
-ip tuntap add mode tun user root name singtun0
-sleep 1s
+ip link show singtun0
 ip link set singtun0 up
 ip route replace default dev singtun0 table 100
-ip rule add fwmark 102 lookup 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json
@@ -563,11 +565,11 @@ ip -6 route show default
 ifstatus wan
 log Activating the client configuration validated by the reload preflight.
 log dnsmasq snippets unchanged, skipping the restart.
-ip tuntap add mode tun user root name singtun0
-sleep 1s
+ip link show singtun0
 ip link set singtun0 up
 ip route replace default dev singtun0 table 100
-ip rule add fwmark 102 lookup 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json
@@ -833,11 +835,11 @@ ip -6 route show default
 ifstatus wan
 log Starting with the last known-good client configuration.
 init.d/dnsmasq restart
-ip tuntap add mode tun user root name singtun0
-sleep 1s
+ip link show singtun0
 ip link set singtun0 up
 ip route replace default dev singtun0 table 100
-ip rule add fwmark 102 lookup 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json
@@ -984,11 +986,11 @@ ip -6 route show default
 ifstatus wan
 ucode -S etc/homeproxy/scripts/generate_client.uc
 init.d/dnsmasq restart
-ip tuntap add mode tun user root name singtun0
-sleep 1s
+ip link show singtun0
 ip link set singtun0 up
 ip route replace default dev singtun0 table 100
-ip rule add fwmark 102 lookup 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
 procd_open_instance sing-box-c
 procd_set_param command /usr/bin/sing-box
 procd_append_param command run --config var/run/homeproxy/sing-box-c.json

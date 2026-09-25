@@ -34,9 +34,36 @@ hp_net_wait_wan() {
 	done
 }
 
+# hp_net_try <描述> <命令...>
+# Run a step that may legitimately fail, logging the wrapped message.
+hp_net_try() {
+	local message="$1"; shift
+	"$@" 2>"/dev/null" || log "Error: ${message}"
+}
+
+# hp_net_rule_add <family> <fwmark> <table> <描述>
+# Install one ip rule idempotently.  `ip rule add` has no replace form and the
+# kernel appends a second identical rule instead of reporting a conflict, so a
+# repeated start (rc.common's `start` never calls stop_service) used to leave
+# duplicates behind.  The teardown side already drains them with `while del`;
+# this is the matching install side.  family is "" for ip, "-6" for ip -6.
+hp_net_rule_add() {
+	local family="$1" mark="$2" table="$3" message="$4"
+
+	while ip $family rule del fwmark "$mark" table "$table" 2>"/dev/null"; do :; done
+	hp_net_try "$message" ip $family rule add fwmark "$mark" table "$table"
+}
+
 # hp_net_setup <proxy-mode> <routing-mode>
 # Create the tproxy or TUN routing state for the configured proxy mode.
 # Requires config_load.
+#
+# Every step is idempotent on purpose: `start` on an already-running service
+# re-runs this function without a preceding teardown.  The old code reported
+# "failed to add the tproxy local route (table 100)" on every such start
+# (EEXIST from `ip route add`) while silently appending a duplicate ip rule.
+# Routes use `replace`, rules are drained before they are added, and the TUN
+# device is only created when it does not already exist.
 hp_net_setup() {
 	local proxy_mode="$1"
 	local routing_mode="$2"
@@ -51,16 +78,16 @@ hp_net_setup() {
 		if [ "$outbound_udp_node" != "nil" ] || [ "$routing_mode" = "custom" ]; then
 			config_get tproxy_mark "infra" "tproxy_mark" "101"
 
-			ip rule add fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null" \
-				|| log "Error: failed to add the tproxy ip rule (fwmark ${tproxy_mark}, table ${table_mark})."
-			ip route add local 0.0.0.0/0 dev lo table "$table_mark" 2>"/dev/null" \
-				|| log "Error: failed to add the tproxy local route (table ${table_mark})."
+			hp_net_rule_add "" "$tproxy_mark" "$table_mark" \
+				"failed to add the tproxy ip rule (fwmark ${tproxy_mark}, table ${table_mark})."
+			hp_net_try "failed to add the tproxy local route (table ${table_mark})." \
+				ip route replace local 0.0.0.0/0 dev lo table "$table_mark"
 
 			if [ "$ipv6_support" -eq "1" ]; then
-				ip -6 rule add fwmark "$tproxy_mark" table "$table_mark" 2>"/dev/null" \
-					|| log "Error: failed to add the tproxy IPv6 rule (fwmark ${tproxy_mark}, table ${table_mark})."
-				ip -6 route add local ::/0 dev lo table "$table_mark" 2>"/dev/null" \
-					|| log "Error: failed to add the tproxy IPv6 local route (table ${table_mark})."
+				hp_net_rule_add "-6" "$tproxy_mark" "$table_mark" \
+					"failed to add the tproxy IPv6 rule (fwmark ${tproxy_mark}, table ${table_mark})."
+				hp_net_try "failed to add the tproxy IPv6 local route (table ${table_mark})." \
+					ip -6 route replace local ::/0 dev lo table "$table_mark"
 			fi
 		fi
 		;;
@@ -68,22 +95,27 @@ hp_net_setup() {
 		config_get tun_name "infra" "tun_name" "singtun0"
 		config_get tun_mark "infra" "tun_mark" "102"
 
-		ip tuntap add mode tun user root name "$tun_name" 2>"/dev/null" \
-			|| log "Error: failed to create the TUN device ${tun_name}."
-		sleep 1s
-		ip link set "$tun_name" up 2>"/dev/null" \
-			|| log "Error: failed to bring up the TUN device ${tun_name}."
+		# Only wait after a real creation: the old unconditional `sleep 1s`
+		# delayed every start (including reloads) even when the device was
+		# already present.
+		if ! ip link show "$tun_name" >"/dev/null" 2>&1; then
+			hp_net_try "failed to create the TUN device ${tun_name}." \
+				ip tuntap add mode tun user root name "$tun_name"
+			sleep 1s
+		fi
+		hp_net_try "failed to bring up the TUN device ${tun_name}." \
+			ip link set "$tun_name" up
 
-		ip route replace default dev "$tun_name" table "$table_mark" 2>"/dev/null" \
-			|| log "Error: failed to set the TUN default route (table ${table_mark})."
-		ip rule add fwmark "$tun_mark" lookup "$table_mark" 2>"/dev/null" \
-			|| log "Error: failed to add the TUN ip rule (fwmark ${tun_mark}, table ${table_mark})."
+		hp_net_try "failed to set the TUN default route (table ${table_mark})." \
+			ip route replace default dev "$tun_name" table "$table_mark"
+		hp_net_rule_add "" "$tun_mark" "$table_mark" \
+			"failed to add the TUN ip rule (fwmark ${tun_mark}, table ${table_mark})."
 
 		if [ "$ipv6_support" -eq "1" ]; then
-			ip -6 route replace default dev "$tun_name" table "$table_mark" 2>"/dev/null" \
-				|| log "Error: failed to set the TUN IPv6 default route (table ${table_mark})."
-			ip -6 rule add fwmark "$tun_mark" lookup "$table_mark" 2>"/dev/null" \
-				|| log "Error: failed to add the TUN IPv6 rule (fwmark ${tun_mark}, table ${table_mark})."
+			hp_net_try "failed to set the TUN IPv6 default route (table ${table_mark})." \
+				ip -6 route replace default dev "$tun_name" table "$table_mark"
+			hp_net_rule_add "-6" "$tun_mark" "$table_mark" \
+				"failed to add the TUN IPv6 rule (fwmark ${tun_mark}, table ${table_mark})."
 		fi
 		;;
 	esac

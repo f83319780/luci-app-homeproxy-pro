@@ -109,6 +109,14 @@ echo "== frontend title escaping =="
 # alone would hand it live markup. This models both decodes.
 node "$ROOT/tests/frontend-title-escaping.js" "$ROOT" || FAILED=1
 
+echo "== certificate upload argument alignment =="
+# L.bind prepends the bound arguments and the Button hands the event in first,
+# so a handler with a leading parameter no caller passes writes its staging file
+# to /tmp/homeproxy_cert_[object Event].tmp - a path neither the ACL nor
+# certificate_write knows. Drives each real call site with the framework's
+# argument order and checks the path that comes out.
+node "$ROOT/tests/frontend-certificate-upload.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init

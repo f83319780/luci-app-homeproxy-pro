@@ -10,7 +10,7 @@
  *                 main_override route-options, main-out final,
  *                 plus the static inline + remote rule_sets
  *                 (direct-domain / proxy-domain / geoip-cn /
- *                 geosite-cn / geosite-noncn).
+ *                 geosite-cn).
  *   custom mode - the user-defined routing_node -> outbound graph,
  *                 routing_rule iteration with the 1.14 action-specific
  *                 fields, find_neighbor, the optional resolve prefix,
@@ -150,8 +150,15 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 		 * Fetched straight from the upstream SagerNet repositories and
 		 * downloaded through the selected node. A direct fetch depends on
 		 * the CDN staying reachable from mainland China, where DNS pollution
-		 * makes it fail intermittently; the three files total ~250 KB per
+		 * makes it fail intermittently; the files total ~250 KB per
 		 * day, so proxying the download costs almost nothing.
+		 *
+		 * Only geosite-cn and geoip-cn are emitted: they are the two the
+		 * DNS and route blocks actually reference.  A third geosite-noncn
+		 * used to be declared here as well, but no rule ever referenced it -
+		 * sing-box creates (and keeps updating, and holds in memory) every
+		 * declared rule-set regardless of use, so it was a daily ~100 KB
+		 * download through the proxy for nothing.
 		 */
 		push(config.route.rule_set, {
 			type: 'remote',
@@ -166,14 +173,6 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 			tag: 'geosite-cn',
 			format: 'binary',
 			url: 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-cn.srs',
-			update_interval: '24h',
-			download_detour: 'main-out'
-		});
-		push(config.route.rule_set, {
-			type: 'remote',
-			tag: 'geosite-noncn',
-			format: 'binary',
-			url: 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-!cn.srs',
 			update_interval: '24h',
 			download_detour: 'main-out'
 		});

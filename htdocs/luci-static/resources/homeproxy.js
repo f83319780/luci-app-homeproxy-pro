@@ -973,7 +973,7 @@ return baseclass.extend({
 		return el;
 	},
 
-	uploadCertificate(_option, type, filename, ev) {
+	uploadCertificate(type, filename, ev) {
 		/* Per-type staging file: the four buttons (server public key /
 		 * server private key / client CA / client ECH config) all
 		 * shared /tmp/homeproxy_certificate.tmp before, so two uploads
@@ -981,7 +981,16 @@ return baseclass.extend({
 		 * land in the certs/ directory. The filename argument is the
 		 * UCI option name (e.g. server_publickey), which we map onto
 		 * a stable per-button path. The ACL write list in
-		 * acl.d/luci-app-homeproxy.json enumerates all four paths. */
+		 * acl.d/luci-app-homeproxy.json enumerates all four paths.
+		 *
+		 * The signature is (type, filename, ev) on purpose: L.bind()
+		 * binds arguments *in front of* the event the Button hands in
+		 * (form.js calls onclick(ev, section_id)), so a leading
+		 * parameter that no caller passes shifts every argument by one
+		 * and the staging path becomes
+		 * /tmp/homeproxy_cert_[object Event].tmp - a path neither the
+		 * ACL nor certificate_write knows. tests/arch-guard.sh checks
+		 * this argument alignment. */
 		const tmpPath = '/tmp/homeproxy_cert_' + filename + '.tmp';
 
 		return ui.uploadFile(tmpPath, ev.target)
