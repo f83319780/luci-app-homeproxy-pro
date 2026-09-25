@@ -92,11 +92,31 @@ hp_dnsmasq_render_snippets() {
 	local gfw_nftset_v6="" wan_nftset_v6=""
 	local nftset_ok=1
 
+	# dns_port comes from `infra`, a section with no UI and no validator, and
+	# it is interpolated both into the snippet text and into sed's replacement
+	# below.  A value carrying a newline reaches sed as `\n` and becomes a real
+	# dnsmasq directive (the generator accepts it too: int() is strtoll-based,
+	# so '5333\nlog-queries' is simply 5333 there), and a value with a `/`
+	# makes sed fail - while `> "$stage/x.conf"` has already truncated the
+	# file, so an empty snippet used to be installed and then cached by the
+	# "unchanged" comparison.  Keep the numeric prefix, refuse the rest.
+	dns_port="$(printf '%s' "$dns_port" | sed -n 's/^\([0-9]\{1,\}\).*/\1/p')"
+	case "$dns_port" in
+	''|*[!0-9]*)
+		log "Warning: infra.dns_port is not a port (${4:-}); skipping the dnsmasq snippets."
+		return 1
+		;;
+	esac
+	if [ "$dns_port" -lt 1 ] || [ "$dns_port" -gt 65535 ]; then
+		log "Warning: infra.dns_port=$dns_port is out of range; skipping the dnsmasq snippets."
+		return 1
+	fi
+
 	hp_dnsmasq_has_nftset || nftset_ok=0
 
 	case "$routing_mode" in
 	"bypass_mainland_china"|"custom"|"global")
-		cat <<-EOF > "$stage/redirect-dns.conf"
+		cat <<-EOF > "$stage/redirect-dns.conf" || return 1
 			no-poll
 			no-resolv
 			server=127.0.0.1#$dns_port
@@ -107,18 +127,18 @@ hp_dnsmasq_render_snippets() {
 			if [ "$nftset_ok" = "1" ]; then
 				[ "$ipv6" -eq "0" ] || gfw_nftset_v6=",6#inet#fw4#homeproxy_gfw_list_v6"
 				sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_gfw_list_v4$gfw_nftset_v6/g" \
-					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf" || return 1
 			else
 				log "Warning: this dnsmasq has no nftset support; gfwlist routing degrades to plain server= entries (no address sets)."
 				sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
-					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf"
+					"$hp_dir/resources/gfw_list.txt" > "$stage/gfw_list.conf" || return 1
 			fi
 		fi
 		;;
 	"proxy_mainland_china")
 		if [ -s "$hp_dir/resources/china_list.txt" ]; then
 			sed -r -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
-				"$hp_dir/resources/china_list.txt" > "$stage/china_list.conf"
+				"$hp_dir/resources/china_list.txt" > "$stage/china_list.conf" || return 1
 		fi
 		;;
 	esac
@@ -127,11 +147,11 @@ hp_dnsmasq_render_snippets() {
 		if [ "$nftset_ok" = "1" ]; then
 			[ "$ipv6" -eq "0" ] || wan_nftset_v6=",6#inet#fw4#homeproxy_wan_proxy_addr_v6"
 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port\nnftset=\/\1\\/4#inet#fw4#homeproxy_wan_proxy_addr_v4$wan_nftset_v6/g" \
-				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
+				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf" || return 1
 		else
 			log "Warning: this dnsmasq has no nftset support; the proxy list degrades to plain server= entries."
 			sed -r -e '/^\s*$/d' -e "s/(.*)/server=\/\1\/127.0.0.1#$dns_port/g" \
-				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf"
+				"$hp_dir/resources/proxy_list.txt" > "$stage/proxy_list.conf" || return 1
 		fi
 	fi
 }
@@ -184,7 +204,14 @@ hp_dnsmasq_write_snippets() {
 		return 1
 	}
 
-	hp_dnsmasq_render_snippets "$stage" "$hp_dir" "$routing_mode" "$dns_port" "$ipv6_support"
+	# A refused render (an unusable dns_port, or sed failing) must leave the
+	# installed snippet set untouched: the staged directory is discarded, so
+	# the caller keeps the snippets that are already in place instead of
+	# installing a truncated one.
+	if ! hp_dnsmasq_render_snippets "$stage" "$hp_dir" "$routing_mode" "$dns_port" "$ipv6_support"; then
+		rm -rf "$stage"
+		return 1
+	fi
 
 	if [ ! -f "$include" ] || [ "$(cat "$include" 2>"/dev/null")" != "conf-dir=$dnsmasq_dir" ]; then
 		changed=1

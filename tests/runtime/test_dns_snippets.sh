@@ -207,6 +207,41 @@ expect "the include file is gone" "$(exists "$INCLUDE")" "no"
 hp_dnsmasq_remove_snippets "$DNS_DIR"
 expect "a second remove does not restart" "$(restart_count)" "7"
 
+echo "== an unusable infra.dns_port cannot reach the snippet =="
+
+# `infra` has no UI and no validator, and the value is interpolated into sed's
+# replacement.  '5333\nlog-queries' is accepted by the generator - int() is
+# strtoll-based, so it reads 5333 - and sed turns the `\n` into a real newline,
+# which used to append a dnsmasq directive of the writer's choosing.  A value
+# with a `/` made sed fail instead, and the `>`-truncated file was installed as
+# a valid (empty) snippet.  Both have to be neutralised, and a value that is
+# not a port at all has to leave the installed set alone.
+run "bypass_mainland_china"
+expect "the good snippet set is installed" "$(exists "$DNS_DIR/redirect-dns.conf")" "yes"
+GOOD_CONF="$(cat "$DNS_DIR/redirect-dns.conf")"
+GOOD_RESTARTS="$(restart_count)"
+
+HP_DNS_PORT="$(printf '5333\nlog-queries')" run "bypass_mainland_china"
+expect "a newline in dns_port cannot inject a directive" \
+	"$(has_line 'log-queries' "$DNS_DIR/redirect-dns.conf")" "no"
+expect "a newline in dns_port keeps the installed snippet" \
+	"$(cat "$DNS_DIR/redirect-dns.conf")" "$GOOD_CONF"
+expect "a newline in dns_port does not restart dnsmasq" "$(restart_count)" "$GOOD_RESTARTS"
+
+HP_DNS_PORT='5333/evil' run "bypass_mainland_china"
+expect "a slash in dns_port cannot break the snippet" \
+	"$(has_line 'evil' "$DNS_DIR/redirect-dns.conf")" "no"
+expect "a slash in dns_port keeps the installed snippet" \
+	"$(cat "$DNS_DIR/redirect-dns.conf")" "$GOOD_CONF"
+expect "a slash in dns_port does not restart dnsmasq" "$(restart_count)" "$GOOD_RESTARTS"
+
+HP_DNS_PORT='not-a-port' run "bypass_mainland_china"
+expect "an unusable dns_port leaves the snippet in place" \
+	"$(cat "$DNS_DIR/redirect-dns.conf")" "$GOOD_CONF"
+expect "an unusable dns_port does not restart dnsmasq" "$(restart_count)" "$GOOD_RESTARTS"
+expect "an unusable dns_port is reported in the log" \
+	"$(grep -c 'dns_port' "$LOG")" "1"
+
 echo
 printf '%s checks, %s failures\n' "$CHECKS" "$FAILURES"
 if [ "$FAILED" != 0 ]; then
