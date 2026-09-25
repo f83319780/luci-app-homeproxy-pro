@@ -64,6 +64,15 @@ hp_crontab_drop() {
 	sed "/#${CONF}_autosetup/d" "$crontab" > "$tmp" 2>"/dev/null" || { rm -f "$tmp"; return 1; }
 	mv -f "$tmp" "$crontab" 2>"/dev/null" || { rm -f "$tmp"; return 1; }
 
+	# mv replaces the *file*, not its contents: the temporary was created by the
+	# shell (0666 & ~umask = 0644) while procd creates /etc/crontabs/root as
+	# 0600, so every stop/start left the root crontab world-readable - verified
+	# on the device (0600 after boot, 0644 after one reload).  Only root needs
+	# to read it (crond runs as root), and a root crontab can hold other jobs'
+	# secrets, so set the mode rather than inherit it - which also repairs a
+	# file an older version already loosened.
+	chmod 600 "$crontab" 2>"/dev/null"
+
 	return 0
 }
 
