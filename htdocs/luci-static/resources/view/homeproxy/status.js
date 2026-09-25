@@ -152,9 +152,16 @@ function getResVersion(o, type) {
 	});
 }
 
-function getRuntimeLog(o, name, _option_index, section_id, _in_table) {
-	const filename = o.option.split('_')[1];
-
+/* `filename` is the log's basename (and log_clean's type argument), passed in
+ * by the caller. It used to be reverse-engineered from the option name with
+ * `o.option.split('_')[1]`, which only works while every option is spelled
+ * `_<filename>_logview` - rename one and the reader, the poll and the clean
+ * button silently disagree about which file they mean.
+ *
+ * The parameter sits after `name`, before the framework's
+ * (option_index, section_id, in_table): L.bind prepends the bound arguments,
+ * so the call sites pass it and the framework keeps handing in the rest. */
+function getRuntimeLog(o, name, filename, _option_index, section_id, _in_table) {
 	let section, log_level_el;
 	switch (filename) {
 	case 'homeproxy':
@@ -292,13 +299,13 @@ return view.extend({
 		s.anonymous = true;
 
 		o = s.option(form.DummyValue, '_homeproxy_logview');
-		o.render = L.bind(getRuntimeLog, this, o, _('HomeProxy'));
+		o.render = L.bind(getRuntimeLog, this, o, _('HomeProxy'), 'homeproxy');
 
 		o = s.option(form.DummyValue, '_sing-box-c_logview');
-		o.render = L.bind(getRuntimeLog, this, o, _('sing-box client'));
+		o.render = L.bind(getRuntimeLog, this, o, _('sing-box client'), 'sing-box-c');
 
 		o = s.option(form.DummyValue, '_sing-box-s_logview');
-		o.render = L.bind(getRuntimeLog, this, o, _('sing-box server'));
+		o.render = L.bind(getRuntimeLog, this, o, _('sing-box server'), 'sing-box-s');
 
 		return m.render();
 	},

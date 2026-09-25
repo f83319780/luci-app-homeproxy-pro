@@ -24,7 +24,7 @@
  *                    reject anything else ("GG" octet, "1:2:3:4:5", "1:2:3:4:5:6:7").
  *     isValidIface  - accept alnum + . _ -, reject whitespace, brackets, slashes,
  *                     quotes, semicolons, the obvious injection characters.
- *     isValidPort   - accept 0..65535, reject negatives, decimals, alpha.
+ *     isValidPort   - accept 1..65535, reject 0, negatives, decimals, alpha.
  *
  *     ipv4_to_nftarr / mac_to_nftarr / iface_to_nftarr  - the canonical case
  *                     (all entries valid), the all-poison case (every entry
@@ -118,7 +118,7 @@ function expect(name, actual, want) {
 
 /* isValidPort ------------------------------------------------------------ */
 {
-	expect('isValidPort accept 0',      isValidPort('0'),    true);
+	expect('isValidPort reject 0',      isValidPort('0'),    false);
 	expect('isValidPort accept 22',     isValidPort('22'),   true);
 	expect('isValidPort accept 65535',  isValidPort('65535'), true);
 	expect('isValidPort reject 65536',  isValidPort('65536'), false);

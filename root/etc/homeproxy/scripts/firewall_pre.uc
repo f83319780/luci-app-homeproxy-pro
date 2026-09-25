@@ -60,6 +60,23 @@ if (server_enabled === '1') {
 		if (s.enabled !== '1' || s.firewall !== '1')
 			return;
 
+		/* The section name is interpolated into the nft comment below, in a
+		 * file fw4 loads as root. libuci only accepts [A-Za-z0-9_] in a
+		 * section name (a `"`, `}`, `;`, space, `.` or `-` is "invalid
+		 * character in name field" / "Invalid argument" on both the parser
+		 * and the `uci set` path), so today no name that could close the
+		 * comment can reach this loop through UCI at all - this mirrors the
+		 * tun_name guard above rather than trusting a writer's in-memory
+		 * cursor or a future libuci. The alphabet is exactly libuci's and
+		 * there is deliberately no length cap (libuci has none, and a cap
+		 * would skip a legal name and silently drop that server's rule).
+		 * The check runs first so the two warnings below only ever echo a
+		 * name that already passed it. */
+		if (!match(s['.name'], /^[A-Za-z0-9_]+$/)) {
+			print(`WARN: skipping server ${s['.name']}: invalid section name.`);
+			return;
+		}
+
 		if (!validation('port', s.port)) {
 			print(`WARN: skipping server ${s['.name']}: invalid port "${s.port}".`);
 			return;

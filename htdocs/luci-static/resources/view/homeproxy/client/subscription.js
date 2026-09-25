@@ -16,7 +16,7 @@
  * download metadata). Called after dns.renderDnsRules() so the
  * ruleset tab appears after the dns_rule sub-tab. */
 function render(ctx) {
-	const { s, data, self } = ctx;
+	const { s } = ctx;
 	let o, ss, so;
 
 	s.tab('ruleset', _('Rule Set'));

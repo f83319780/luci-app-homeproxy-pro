@@ -13,6 +13,10 @@
 # percentage meaningless, and a coverage number must not be allowed to report
 # 100% for a translation set that covers nothing.
 #
+# Two defects are hard failures whatever the flags say, because neither shows
+# up in the percentage: a msgstr whose placeholders do not match its msgid, and
+# a msgstr that repeats a 20+ character run of itself.
+#
 # Usage:
 #   tests/i18n-coverage.py                       # warn below 95%
 #   tests/i18n-coverage.py --warn-below 90
@@ -37,6 +41,25 @@ IGNORE = os.path.join(ROOT, "tests/i18n-ignore.txt")
 # accepted: `translated / total` used to fall back to 100% when total was 0,
 # so a wiped .pot passed both --warn-below 100 and --fail-below 100.
 MIN_TOTAL = 400
+
+# A translation that says the same thing twice (the TUIC entry shipped with the
+# whole sentence in two half-translations) is invisible to the coverage
+# percentage - the msgstr is neither empty nor fuzzy - and to the placeholder
+# check - the conversions still match.  Any run of DUPLICATE_MIN characters
+# that occurs twice inside one msgstr fails the check, whatever --fail-below
+# says.
+#
+# Exclusion rule (why the markup-heavy entries in this catalogue do not trip
+# it): LuCI strings mix prose with HTML, so a *correct* translation can repeat
+# a structural run many times, e.g. the default-rule entry carries
+# "</code> &&<br/><code>(port || port_range)" three times over.  Those tags are
+# template scaffolding, not translated wording, so every <...> tag is stripped
+# before the scan.  A duplicated clause keeps far more than 20 characters of
+# real text after stripping, while the longest structural run above collapses
+# to ") &&(" - below the threshold.  Without the strip that entry would be a
+# false positive.
+DUPLICATE_MIN = 20
+TAG_RE = re.compile(r"<[^>]*>")
 
 
 def load_ignore(path):
@@ -116,6 +139,46 @@ def placeholder_counts(text):
     return len(re.findall(r"%(?:[sdj])", text))
 
 
+def find_repeats(text, minimum=DUPLICATE_MIN):
+    """Repeated runs of >= minimum characters inside one translated string.
+
+    Returns a list of (start, length, fragment) triplets, longest run first,
+    with overlapping reports of the same run collapsed into one.  HTML tags are
+    stripped first (see DUPLICATE_MIN above for why)."""
+    text = TAG_RE.sub("", text)
+    length = len(text)
+    if length < minimum * 2:
+        return []
+
+    hits = []
+    seen = {}
+    for index in range(length - minimum + 1):
+        gram = text[index:index + minimum]
+        first = seen.setdefault(gram, index)
+        if first == index:
+            continue
+        # Grow the match in both directions so the reported fragment is the
+        # maximal repeated run rather than the first 20-character window.
+        end = minimum
+        while (index + end < length and first + end < length
+               and text[first + end] == text[index + end]):
+            end += 1
+        back = 0
+        while (index - back > 0 and first - back > 0
+               and text[first - back - 1] == text[index - back - 1]):
+            back += 1
+        hits.append((first - back, index - back, end + back,
+                     text[first - back:first - back + end + back]))
+
+    hits.sort(key=lambda hit: (-hit[2], hit[0], hit[1]))
+    kept = []
+    for hit in hits:
+        if any(hit[0] >= other[0] and hit[0] < other[0] + other[2] for other in kept):
+            continue
+        kept.append(hit)
+    return kept
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--warn-below", type=float, default=100.0,
@@ -164,6 +227,24 @@ def main():
               f" missing argument and drops the extra ones")
         for msgid, want, got in mismatched[:args.list]:
             print(f"  - msgid has {want}, msgstr has {got}: {msgid}")
+        return 1
+
+    # Same idea as the placeholder check: a msgstr that repeats itself counts
+    # as translated, so only this scan can catch it. Hard failure, not tied to
+    # --fail-below.
+    duplicated = []
+    for msgid, entry in translation.items():
+        if entry["fuzzy"] or not entry["msgstr"].strip():
+            continue
+        for _start, length, _second, fragment in find_repeats(entry["msgstr"]):
+            duplicated.append((msgid, length, fragment))
+
+    if duplicated:
+        print(f"::error title=Duplicate translation::{len(duplicated)} msgstr(s)"
+              f" repeat a run of {DUPLICATE_MIN}+ characters inside themselves -"
+              f" the entry looks translated but ships the same wording twice")
+        for msgid, length, fragment in duplicated[:args.list]:
+            print(f"  - {length} chars repeated: {fragment!r} in: {msgid}")
         return 1
 
     # A denominator below the floor means the template is empty or truncated,

@@ -679,7 +679,7 @@
 								"subsection": null,
 								"props": {
 									"modalonly": true,
-									"validate": "fn(191:9e12deb88a51)"
+									"validate": "fn(142:31d82e5bd86a)"
 								}
 							},
 							{
@@ -3838,7 +3838,7 @@
 									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
 									"load": "fn(274:3a38855f08ed)",
 									"monospace": true,
-									"remove": "fn(340:e5ff92a397f3)",
+									"remove": "fn(338:d04583a0e63e)",
 									"rows": 10,
 									"validate": "fn(203:c60da90ca2f3)",
 									"write": "fn(247:51376a274a47)"
@@ -3861,7 +3861,7 @@
 									"description": "One domain per line. No spaces, no comments, no wildcards; the backend rejects invalid characters and tells you which line.",
 									"load": "fn(275:0bec3bd57ebe)",
 									"monospace": true,
-									"remove": "fn(341:288f4ec1c7ea)",
+									"remove": "fn(339:4486a5c409ee)",
 									"rows": 10,
 									"validate": "fn(203:c60da90ca2f3)",
 									"write": "fn(248:6bd5224288bd)"

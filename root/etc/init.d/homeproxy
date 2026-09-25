@@ -219,13 +219,11 @@ start_service() {
 	local disable_gso=0
 	uname -r | grep -Eq "^6\.6" && disable_gso=1
 
-	# The ports the client configuration declares as listeners.  The gate
-	# checks that sing-box owns them, because a port that is listening but
-	# belongs to another process is exactly the failure it has to catch.
-	local mixed_port dns_port
-	config_get mixed_port "infra" "mixed_port" "5330"
-	config_get dns_port "infra" "dns_port" "5333"
-
+	# The health gate reads the ports the running configuration declares from
+	# sing-box-c.json (service_started -> hp_config_ports), not from UCI: after
+	# a rollback the live file is the older known-good copy and may bind
+	# different ports.  Reading mixed_port/dns_port here as well only produced
+	# two unused locals.
 	if [ "$client_enabled" = "1" ]; then
 		hp_net_wait_wan 60
 
@@ -239,7 +237,17 @@ start_service() {
 		config_get auto_update_time "subscription" "auto_update_time" "2"
 		hp_sync_autoupdate_cron "$auto_update" "$auto_update_time"
 
-		hp_dnsmasq_write_snippets "$DNSMASQ_DIR" "$HP_DIR" "$routing_mode"
+		# The DNS snippets are the other half of the intercept layer: without
+		# them the LAN resolves through the ISP while the nft rules still send
+		# its DNS to sing-box's dns-in, which the redirect chain does not cover.
+		# The writer already reports failures (render or install) instead of
+		# leaving an empty snippet behind; record it the same way a firewall
+		# failure is recorded, so the configuration is not promoted to
+		# known-good and the log names the real problem.
+		if ! hp_dnsmasq_write_snippets "$DNSMASQ_DIR" "$HP_DIR" "$routing_mode"; then
+			log "Error: the dnsmasq snippets were not installed; LAN DNS keeps using the previous configuration."
+			printf '%s\n' "dns" > "$RUN_DIR/failed-dns"
+		fi
 		hp_net_setup "$proxy_mode" "$routing_mode"
 
 		# R-08: gfwlist mode routes by the nft set that dnsmasq populates
@@ -391,12 +399,17 @@ service_started() {
 	[ "$client_enabled" = "1" ] && hp_rearm_intercept "$proxy_mode" "$routing_mode"
 
 	# Proven good: this is what a later failed reload rolls back to.  A
-	# configuration whose firewall did not apply is not "good" - traffic is not
-	# being intercepted - so it is not recorded, and the previous known-good
-	# survives as the rollback target.
-	if [ -s "$RUN_DIR/failed-firewall" ]; then
-		rm -f "$RUN_DIR/failed-firewall"
-		log "Warning: the firewall rules did not apply; keeping the previous known-good configuration."
+	# configuration whose intercept layer is incomplete is not "good" - traffic
+	# is not being intercepted the way the configuration says - so it is not
+	# recorded, and the previous known-good survives as the rollback target.
+	# Two independent markers, because a successful hp_firewall_apply() must not
+	# be able to mask a failed snippet install (or the other way round).
+	if [ -s "$RUN_DIR/failed-firewall" ] || [ -s "$RUN_DIR/failed-dns" ]; then
+		[ -s "$RUN_DIR/failed-firewall" ] \
+			&& log "Warning: the firewall rules did not apply; keeping the previous known-good configuration."
+		[ -s "$RUN_DIR/failed-dns" ] \
+			&& log "Warning: the DNS snippets were not installed; keeping the previous known-good configuration."
+		rm -f "$RUN_DIR/failed-firewall" "$RUN_DIR/failed-dns"
 	else
 		[ "$client_enabled" = "1" ] && hp_promote_known_good c "$RUN_DIR" "$GOOD_DIR"
 		[ "$server_enabled" = "1" ] && hp_promote_known_good s "$RUN_DIR" "$GOOD_DIR"
@@ -432,7 +445,7 @@ stop_service() {
 
 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log" \
-		"$RUN_DIR/failed-side" "$RUN_DIR/failed-firewall"
+		"$RUN_DIR/failed-side" "$RUN_DIR/failed-firewall" "$RUN_DIR/failed-dns"
 	# A released marker only means something within one start; a stop clears it
 	# so the next start does not reinstall a layer it is about to install anyway.
 	[ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ] || rm -f "$RUN_DIR/intercept-released"

@@ -7,7 +7,6 @@
 'use strict';
 'require baseclass';
 'require form';
-'require fs';
 'require rpc';
 'require uci';
 'require ui';
@@ -951,7 +950,13 @@ return baseclass.extend({
 		return { 'hash': hash, 'title': this.escapeHtml(title) };
 	},
 
-	renderSectionAdd(section, extra_class) {
+	/* Shared grid "add section" renderer: the stock one plus a uniqueness
+	 * validator on the name field. `extra_button` is an optional factory for
+	 * a button to append after it; the node page passes one for its "Import
+	 * share links" action. That page used to carry a verbatim copy of this
+	 * whole method just to append the button, and the section is handed back
+	 * to the factory so the caller can bind the handler to itself. */
+	renderSectionAdd(section, extra_class, extra_button) {
 		let el = form.GridSection.prototype.renderSectionAdd.apply(section, [ extra_class ]),
 			nameEl = el.querySelector('.cbi-section-create-name');
 		ui.addValidator(nameEl, 'uciname', true, (v) => {
@@ -969,6 +974,9 @@ return baseclass.extend({
 				return true;
 			}
 		}, 'blur', 'keyup');
+
+		if (typeof(extra_button) === 'function')
+			el.appendChild(extra_button(section));
 
 		return el;
 	},

@@ -8,6 +8,7 @@
 
 'require baseclass';
 'require form';
+'require uci';
 
 'require homeproxy as hp';
 'require tools.firewall as fwtool';
@@ -18,7 +19,7 @@
  * sub-tab reads/writes the proxy_list / direct_list files through an
  * ubus RPC; the load callback is the only path that touches that RPC. */
 function render(ctx) {
-	const { s, data, hosts, self, stubValidator } = ctx;
+	const { s, hosts, stubValidator } = ctx;
 	let o, ss, so;
 
 	s.tab('control', _('Access Control'));
@@ -135,7 +136,13 @@ function render(ctx) {
 		});
 	}
 	so.remove = function(/* ... */) {
-		let routing_mode = this.section.formvalue('config', 'routing_mode');
+		/* routing_mode is an option of the page's 'config' NamedSection, not
+		 * of this nested 'control' one: `this.section.formvalue(...)` walks
+		 * the children of `this.section`, never found it and returned null,
+		 * so the test below was always true and a reset wiped the file even
+		 * in custom mode, where the list is in use. Read the saved UCI value
+		 * the backend will act on. */
+		let routing_mode = uci.get('homeproxy', 'config', 'routing_mode');
 		if (routing_mode !== 'custom')
 			return hp.rpcCall('acllist_write', ['proxy_list', ''], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 				if (ret && ret.result === false)
@@ -179,7 +186,8 @@ function render(ctx) {
 		});
 	}
 	so.remove = function(/* ... */) {
-		let routing_mode = this.section.formvalue('config', 'routing_mode');
+		/* Same `this.section` mistake as the proxy list above. */
+		let routing_mode = uci.get('homeproxy', 'config', 'routing_mode');
 		if (routing_mode !== 'custom')
 			return hp.rpcCall('acllist_write', ['direct_list', ''], { params: ['type', 'content'], expect: { '': {} } }).then((ret) => {
 				if (ret && ret.result === false)

@@ -102,6 +102,24 @@ case 'invalid-network':
 	expect('invalid-network input', input, null);
 	break;
 
+case 'invalid-section-name':
+	/* The section name lands inside an nft comment, in a file fw4 loads as
+	 * root, so a name containing a closing quote would end the comment and
+	 * turn the rest of the name into nft syntax. libuci refuses such a name
+	 * before it can reach this loop (see the shell wrapper), so this case is
+	 * driven through a cursor stub that yields it verbatim: the server must
+	 * be skipped, not interpolated. */
+	expect('invalid-section-name input', input, null);
+	break;
+
+case 'mock-good-section-name':
+	/* The same stub with a name libuci would accept: the rule is emitted,
+	 * which is what makes the `null` above the guard's doing rather than the
+	 * stub never reaching the emit path. */
+	expect('mock-good-section-name input', input,
+		'meta l4proto { tcp, udp } th dport 443 counter accept comment "!homeproxy: accept server srv_ok_mock"');
+	break;
+
 case 'firewall-off':
 	/* firewall='0' means the user opted this server out of the automatic
 	 * rule; nothing is emitted. */

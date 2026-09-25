@@ -2899,8 +2899,7 @@ msgid ""
 "QUIC stream based UDP relay mode that TUIC does not provide."
 msgstr ""
 "这是 UDP over TCP 协议的 TUIC 版本，旨在提供 TUIC 本身不具备的基于 QUIC 流的 "
-"UDP 中继模式。这是 TUIC 的 UDP over TCP 协议移植， 旨在提供 TUIC 不提供的基"
-"于 QUIC 流的 UDP 中继模式。"
+"UDP 中继模式。"
 
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:133
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:168
