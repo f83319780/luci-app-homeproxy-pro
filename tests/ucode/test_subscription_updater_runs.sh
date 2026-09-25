@@ -34,6 +34,21 @@ rm -rf "$WORK"
 mkdir -p "$WORK/scripts" "$WORK/cfg" "$WORK/run"
 cp -R "$ROOT/root/etc/homeproxy/scripts/." "$WORK/scripts/"
 
+# Shadow `touch` so the test can see that a run refreshes its lock: the lock's
+# mtime is the only thing that separates a live run from one a kill left
+# behind, and the fetch loop (one wget per URL, ten seconds each) is where a
+# run spends its time.  The stub records the call and forwards to the real one.
+REAL_TOUCH="$(command -v touch)"
+mkdir -p "$WORK/bin"
+cat > "$WORK/bin/touch" <<EOF
+#!/bin/sh
+printf '%s\n' "\$*" >> "$WORK/touch.log"
+exec "$REAL_TOUCH" "\$@"
+EOF
+chmod +x "$WORK/bin/touch"
+PATH="$WORK/bin:$PATH"
+export PATH
+
 # Redirect the package's runtime dir into the sandbox so the test does not
 # append to the device's live /var/run/homeproxy/homeproxy.log, and point the
 # configuration directory at the sandbox.  The updater reads the config
@@ -69,7 +84,7 @@ cat > "$WORK/cfg/homeproxy" <<-EOF
 		option main_node 'nil'
 
 	config homeproxy 'subscription'
-		option subscription_url 'https://127.0.0.1:1/never'
+		list subscription_url 'https://127.0.0.1:1/never'
 		option filter_nodes 'disabled'
 		option auto_update '0'
 EOF
@@ -99,6 +114,18 @@ fi
 # And the log must name the failure rather than claim success.
 if grep -q "Successfully updated subscriptions" "$LOGFILE" 2>/dev/null; then
 	echo "FAIL: the updater reported success against an unreachable subscription"
+	FAILED=1
+fi
+
+# The run has to keep its own lock fresh for as long as it works: nothing
+# refreshed the mtime while the fetch was in progress, so a run slower than
+# LOCK_STALE could have its lock reclaimed as stale and then race the second
+# run through the same read-modify-write.
+if grep -q "update_subscriptions.lock" "$WORK/touch.log" 2>/dev/null; then
+	echo "PASS: the updater refreshes its lock while it works"
+else
+	echo "FAIL: the lock's mtime is never refreshed - a run longer than the stale"
+	echo "      window can have its lock broken underneath it"
 	FAILED=1
 fi
 

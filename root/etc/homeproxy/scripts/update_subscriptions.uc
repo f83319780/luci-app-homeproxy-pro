@@ -218,6 +218,16 @@ function main() {
 		const groupHash = md5(url);
 		node_cache[groupHash] = {};
 
+		/* Keep the lock's mtime current for as long as this run is alive.
+		 * The stale window (LOCK_STALE) is what lets a later run reclaim a
+		 * lock a killed process left behind, but nothing refreshed it while
+		 * the fetch was in progress - and the fetch is one wget per URL,
+		 * ten seconds each.  A run that crosses the threshold while still
+		 * working can therefore have its lock broken underneath it, and the
+		 * two runs then interleave their read-modify-write exactly like the
+		 * comment above acquire_lock() describes. */
+		system(sprintf('touch %s 2>/dev/null', shellQuote(LOCK_DIR)));
+
 		const fetched = fetch_subscription(url, user_agent, log);
 		if (fetched.content === null)
 			continue;
