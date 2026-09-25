@@ -642,8 +642,21 @@ return view.extend({
 									return uci.save()
 										.then(L.bind(this.map.load, this.map))
 										.then(L.bind(this.map.reset, this.map))
-										.then(L.ui.hideModal)
-										.catch(() => {});
+										.then(ui.hideModal)
+										.catch((e) => {
+											/* The .catch above used to swallow
+											 * every error silently, so a failed
+											 * hideModal (L.ui is undefined; this
+											 * module imported ui, not L.ui) made
+											 * the modal look stuck after a
+											 * successful import. Surface it now:
+											 * the import itself ran, the modal
+											 * just did not close, and the user
+											 * deserves to know which. */
+											ui.addNotification(null, E('p', e && e.message
+												? _('Failed to close the import dialog: %s').format(e.message)
+												: _('Imported the nodes, but the dialog did not close automatically. Close it manually.')));
+										});
 								});
 						})
 					}, [ _('Import') ])
