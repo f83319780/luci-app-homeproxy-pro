@@ -1431,6 +1431,37 @@ fi
 
 echo
 echo
+echo "== guard 34: the bundled resource versions use the writers' format =="
+
+# Both writers - scripts/update_resources.sh on the device and
+# .github/update-geodata.sh for the package - store `<YYYY-MM-DD> <git-sha>`,
+# and the reader (rpcd ucode, resources_get_version) splits the value on the
+# space.  The package shipped bare timestamps instead (20260704060757), so the
+# status page presented a 14-digit number as the upstream version and the
+# "already at the latest version" comparison could never match.  The date/sha
+# shape is checked with case/parameter expansion rather than a grep interval,
+# which busybox grep may not support.
+RES_VER_BAD=""
+for f in "$ROOT"/root/etc/homeproxy/resources/*.ver; do
+	[ -f "$f" ] || continue
+	RES_VER="${f##*/}"
+	RES_VER_VALUE="$(cat "$f" 2>"/dev/null")"
+	RES_VER_SHA="${RES_VER_VALUE##* }"
+	case "$RES_VER_VALUE" in
+	[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' '*) ;;
+	*) RES_VER_BAD="$RES_VER_BAD $RES_VER(missing date)"; continue ;;
+	esac
+	if [ "${#RES_VER_SHA}" -ne 40 ] || printf '%s' "$RES_VER_SHA" | grep -q '[^0-9a-f]'; then
+		RES_VER_BAD="$RES_VER_BAD $RES_VER(missing sha)"
+	fi
+done
+if [ -n "$RES_VER_BAD" ]; then
+	fail "bundled .ver files are not '<date> <sha>':$RES_VER_BAD"
+else
+	pass "every bundled .ver file is '<date> <sha>'"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
