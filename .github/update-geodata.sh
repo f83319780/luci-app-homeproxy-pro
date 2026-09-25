@@ -47,7 +47,23 @@ check_list_update() {
 check_list_update "china_ip4" "1715173329/IPCIDR-CHINA" "master" "ipv4.txt"
 check_list_update "china_ip6" "1715173329/IPCIDR-CHINA" "master" "ipv6.txt"
 check_list_update "gfw_list" "Loyalsoldier/v2ray-rules-dat" "release" "gfw.txt"
-check_list_update "china_list" "Loyalsoldier/v2ray-rules-dat" "release" "direct-list.txt" && \
-	sed -i -e "s/full://g" -e "/:/d" "$RESOURCES_DIR/china_list.txt"
+
+# The upstream direct-list is not a dnsmasq domain list: `full:` marks an exact
+# match and `regexp:` lines are regular expressions, which the consumer
+# (runtime/dns.sh renders `server=/<domain>/...`) cannot express.  Strip the
+# prefix and drop the regex lines, through a temporary file: `sed -i -e` is a
+# GNU form that BSD sed - i.e. macOS, where this maintenance script normally
+# runs - rejects with "sed: -e: No such file or directory".  The upload had
+# already replaced the file by then, so the failure shipped a raw direct-list
+# in a package whose every other script converter was written portably for
+# exactly that reason.
+if check_list_update "china_list" "Loyalsoldier/v2ray-rules-dat" "release" "direct-list.txt"; then
+	if ! sed -e "s/full://g" -e "/:/d" "$RESOURCES_DIR/china_list.txt" > "$RESOURCES_DIR/china_list.txt.hp-new" \
+	   || ! mv -f "$RESOURCES_DIR/china_list.txt.hp-new" "$RESOURCES_DIR/china_list.txt"; then
+		rm -f "$RESOURCES_DIR/china_list.txt.hp-new"
+		echo -e "[CHINA_LIST] Conversion failed; the file may still be in the upstream format."
+		exit 1
+	fi
+fi
 
 rm -rf "$TEMP_DIR"
