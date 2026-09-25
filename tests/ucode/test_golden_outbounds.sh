@@ -86,6 +86,32 @@ if [ "$protocols" -lt 10 ]; then
 	exit 1
 fi
 
+# The runtime-owned fields the literal in build_outbound() sets are applied
+# BEFORE the COMMON_FIELDS table, so listing one of them there (even as null)
+# silently deletes it.  routing_mark is exactly that case: without it sing-box
+# does not mark its own sockets and the nft redirect chain loops the proxy
+# connection back into sing-box's own redirect inbound.
+#
+# Deliberately checked against the emitted JSON rather than through
+# `sing-box check`: routing_mark is a Linux-only field, so the schema check
+# below accepts it on Linux and rejects it elsewhere, which is how this
+# regression survived a green suite.  Asserting on the bytes is
+# platform-independent.
+SELF_MARK="$(sed -n "s/^[[:space:]]*option self_mark '\([0-9]*\)'.*/\1/p" "$FIXTURE" | head -1)"
+if [ -z "$SELF_MARK" ]; then
+	echo "FAIL: $FIXTURE declares no infra.self_mark, so the mark cannot be asserted"
+	exit 1
+fi
+marked="$(grep -c "\"routing_mark\": $SELF_MARK" "$WORK/outbounds.json")"
+if [ "$marked" -ne "$protocols" ]; then
+	echo "FAIL: $protocols node outbounds were built, but only $marked carry routing_mark=$SELF_MARK"
+	echo "      every node outbound must carry the runtime mark (see COMMON_FIELDS in"
+	echo "      config/adapter.uc): without it the nft OUTPUT redirect chain sends"
+	echo "      sing-box's own proxy connection back into its redirect inbound"
+	exit 1
+fi
+echo "PASS: every node outbound carries routing_mark=$SELF_MARK"
+
 if [ "${HP_UPDATE_SNAPSHOTS:-0}" = "1" ]; then
 	mkdir -p "$(dirname "$SNAPSHOT")"
 	cp "$WORK/outbounds.json" "$SNAPSHOT"

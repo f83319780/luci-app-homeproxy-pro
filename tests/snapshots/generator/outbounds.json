@@ -2,6 +2,7 @@
 	"n_vless_reality_ws": {
 		"type": "vless",
 		"tag": "cfg-n_vless_reality_ws-out",
+		"routing_mark": 100,
 		"server": "b.example.com",
 		"server_port": 443,
 		"tcp_fast_open": true,
@@ -49,6 +50,7 @@
 	"n_vmess_http": {
 		"type": "vmess",
 		"tag": "cfg-n_vmess_http-out",
+		"routing_mark": 100,
 		"server": "l.example.com",
 		"server_port": 443,
 		"packet_encoding": "packetaddr",
@@ -76,6 +78,7 @@
 	"n_trojan_grpc": {
 		"type": "trojan",
 		"tag": "cfg-n_trojan_grpc-out",
+		"routing_mark": 100,
 		"server": "h.example.com",
 		"server_port": 443,
 		"password": "trojan-pwd",
@@ -92,6 +95,7 @@
 	"n_hysteria": {
 		"type": "hysteria",
 		"tag": "cfg-n_hysteria-out",
+		"routing_mark": 100,
 		"server": "m.example.com",
 		"server_port": 443,
 		"auth_str": "hy1-auth",
@@ -107,6 +111,7 @@
 	"n_hy2": {
 		"type": "hysteria2",
 		"tag": "cfg-n_hy2-out",
+		"routing_mark": 100,
 		"server": "k.example.com",
 		"server_port": 443,
 		"password": "hy2-pwd",
@@ -129,6 +134,7 @@
 	"n_tuic": {
 		"type": "tuic",
 		"tag": "cfg-n_tuic-out",
+		"routing_mark": 100,
 		"server": "j.example.com",
 		"server_port": 443,
 		"uuid": "11111111-2222-3333-4444-555555555555",
@@ -147,6 +153,7 @@
 	"n_shadowsocks": {
 		"type": "shadowsocks",
 		"tag": "cfg-n_shadowsocks-out",
+		"routing_mark": 100,
 		"server": "d.example.com",
 		"server_port": 8389,
 		"password": "ss-password",
@@ -161,6 +168,7 @@
 	"n_snell": {
 		"type": "snell",
 		"tag": "cfg-n_snell-out",
+		"routing_mark": 100,
 		"server": "c.example.com",
 		"server_port": 8388,
 		"psk": "snell-psk",
@@ -173,6 +181,7 @@
 	"n_socks": {
 		"type": "socks",
 		"tag": "cfg-n_socks-out",
+		"routing_mark": 100,
 		"server": "g.example.com",
 		"server_port": 1080,
 		"username": "bob",
@@ -186,6 +195,7 @@
 	"n_http": {
 		"type": "http",
 		"tag": "cfg-n_http-out",
+		"routing_mark": 100,
 		"server": "f.example.com",
 		"server_port": 8080,
 		"username": "alice",
@@ -198,6 +208,7 @@
 	"n_shadowtls": {
 		"type": "shadowtls",
 		"tag": "cfg-n_shadowtls-out",
+		"routing_mark": 100,
 		"server": "i.example.com",
 		"server_port": 443,
 		"password": "shadowtls-pwd",
@@ -210,6 +221,7 @@
 	"n_anytls": {
 		"type": "anytls",
 		"tag": "cfg-n_anytls-out",
+		"routing_mark": 100,
 		"server": "e.example.com",
 		"server_port": 443,
 		"password": "anytls-pwd",
@@ -224,6 +236,7 @@
 	"n_ssh": {
 		"type": "ssh",
 		"tag": "cfg-n_ssh-out",
+		"routing_mark": 100,
 		"server": "n.example.com",
 		"server_port": 22,
 		"user": "root",
@@ -239,6 +252,7 @@
 	"n_direct": {
 		"type": "direct",
 		"tag": "cfg-n_direct-out",
+		"routing_mark": 100,
 		"tcp_fast_open": true
 	}
 }
