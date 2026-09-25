@@ -1496,6 +1496,75 @@ else
 	fi
 fi
 
+
+echo "== guard 36: the certificate upload buttons pass the handler's arguments =="
+
+# The four Upload buttons wire L.bind(hp.uploadCertificate, hp, <label>, <name>)
+# and LuCI calls onclick(ev, section_id): L.bind prepends the bound arguments,
+# the event comes first.  A handler that declares a leading parameter no caller
+# passes shifts everything by one - filename became the event object, the
+# staging path became /tmp/homeproxy_cert_[object Event].tmp, and neither the
+# ACL nor certificate_write knew that path, so every certificate upload failed.
+# guard 3 cannot see it (the last quoted argument of the call site was still the
+# right UCI option name) and guard 23 only checks the bound receiver.
+#
+# The call site must therefore pass exactly the two arguments that occupy the
+# handler's first two parameter slots: the button label and the UCI option
+# name, each as a quoted literal.  Nothing else may sit between them (a third
+# argument, or a bare value shifted into the wrong slot, changes the staging
+# path), and the handler must take exactly one parameter more than the call
+# passes - the event LuCI adds in front.
+CERT_HANDLER="$VIEWS/homeproxy.js"
+CERT_SITES=0
+CERT_BAD=""
+CERT_CALLS="$(mktemp)"
+trap 'rm -f "$CERT_CALLS"' EXIT INT TERM
+
+CERT_ARGS="$(sed -n 's/.*uploadCertificate(\([^)]*\)).*/\1/p' "$CERT_HANDLER" | head -1)"
+CERT_NARGS="$(printf '%s' "$CERT_ARGS" | awk -F',' '{ print NF }')"
+case "$CERT_NARGS" in
+''|*[!0-9]*) CERT_NARGS="" ;;
+esac
+
+if [ -z "$CERT_ARGS" ]; then
+	fail "could not read the uploadCertificate parameter list from $CERT_HANDLER"
+elif [ "$CERT_NARGS" != "3" ]; then
+	fail "uploadCertificate takes $CERT_NARGS parameters; the buttons pass the label and the filename, LuCI prepends the event, so it must take 3 (type, filename, ev)"
+fi
+
+grep -hoE "L\.bind\(hp\.uploadCertificate[^;]*" "$VIEWS"/view/homeproxy/*.js > "$CERT_CALLS" 2>"/dev/null"
+
+while IFS= read -r call; do
+	[ -n "$call" ] || continue
+	CERT_SITES=$((CERT_SITES + 1))
+	# The quoted literals of the call, in order.
+	lits="$(printf '%s' "$call" | sed -n "s/'[^']*'/&\n/gp" | tr -d "'" | tr '\n' '|')"
+	label="${lits%%|*}"
+	filename="$(printf '%s' "$lits" | sed 's/^[^|]*|//; s/|.*//')"
+	nlits="$(printf '%s' "$lits" | awk -F'|' '{ print NF - 1 }')"
+	if [ -z "$filename" ]; then
+		CERT_BAD="$CERT_BAD
+	      $call passes no quoted filename"
+	elif [ "$nlits" -ne 2 ]; then
+		CERT_BAD="$CERT_BAD
+	      $call passes $nlits quoted arguments (expected exactly the label and the filename)"
+	elif [ -z "$label" ]; then
+		CERT_BAD="$CERT_BAD
+	      $call passes an empty button label"
+	fi
+done < "$CERT_CALLS"
+
+if [ "$CERT_SITES" -eq 0 ]; then
+	fail "no L.bind(hp.uploadCertificate ...) call site was found under $VIEWS"
+elif [ -n "$CERT_BAD" ]; then
+	fail "the certificate upload call sites do not match uploadCertificate's signature:$CERT_BAD"
+	echo "      L.bind prepends its arguments and LuCI passes the event first, so an unused"
+	echo "      leading parameter makes 'filename' the event object and the staging path"
+	echo "      leaves the ACL whitelist"
+else
+	pass "$CERT_SITES certificate upload call sites pass a label and a filename for 3 parameters"
+fi
+
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then

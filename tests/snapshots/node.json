@@ -2296,7 +2296,7 @@
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
 									"modalonly": true,
-									"onclick": "bind(674:951101e37638;\"certificate\",\"client_ca\")"
+									"onclick": "bind(665:a64e0e63d165;\"certificate\",\"client_ca\")"
 								}
 							},
 							{
@@ -2356,7 +2356,7 @@
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
 									"modalonly": true,
-									"onclick": "bind(674:951101e37638;\"ECH config\",\"client_ech_conf\")"
+									"onclick": "bind(665:a64e0e63d165;\"ECH config\",\"client_ech_conf\")"
 								}
 							},
 							{
