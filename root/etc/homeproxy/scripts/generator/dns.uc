@@ -179,7 +179,7 @@ function append_custom_dns(config, dm, ctx) {
 				server_name: cfg.tls_sni
 			} : null,
 			domain_resolver: (cfg.address_resolver || cfg.address_strategy) ? {
-				server: get_resolver(cfg.address_resolver || ctx.dns_default_server),
+				server: get_resolver(cfg.address_resolver || ctx.dns_default_server, dm),
 				strategy: cfg.address_strategy
 			} : null,
 			detour: outbound
@@ -213,13 +213,13 @@ function append_custom_dns(config, dm, ctx) {
 			process_path: cfg.process_path,
 			process_path_regex: cfg.process_path_regex,
 			user: cfg.user,
-			rule_set: get_ruleset(cfg.rule_set),
+			rule_set: get_ruleset(cfg.rule_set, dm),
 			rule_set_ip_cidr_match_source: strToBool(cfg.rule_set_ip_cidr_match_source),
 			invert: strToBool(cfg.invert),
 			race: strToBool(cfg.race),
 			speculative: strToBool(cfg.speculative),
 			action: cfg.action,
-			server: get_resolver(cfg.server),
+			server: get_resolver(cfg.server, dm),
 			disable_cache: strToBool(cfg.dns_disable_cache),
 			disable_optimistic_cache: strToBool(cfg.disable_optimistic_cache),
 			rewrite_ttl: strToInt(cfg.rewrite_ttl),
@@ -258,7 +258,7 @@ function append_custom_dns(config, dm, ctx) {
 			const eval_tag = '_hp_eval_' + cfg.name;
 			const eval_rule = {
 				action: 'evaluate',
-				server: get_resolver(cfg.server),
+				server: get_resolver(cfg.server, dm),
 				tag: eval_tag
 			};
 			const eval_match_fields = [
@@ -294,7 +294,7 @@ function append_custom_dns(config, dm, ctx) {
 	}
 	config.dns.rules = builtin_dns_rules;
 
-	config.dns.final = get_resolver(ctx.dns_default_server);
+	config.dns.final = get_resolver(ctx.dns_default_server, dm);
 }
 
 /* --- public entry ------------------------------------------------------ */

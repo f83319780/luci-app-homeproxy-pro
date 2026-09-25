@@ -150,6 +150,7 @@ run_case() {
 	if ! ( cd "$dir/scripts" && ucode -L "$dir/scripts" "$generator" 2> "$dir/generate.err" ); then
 		echo "FAIL: $name: $generator exited non-zero"
 		head -5 "$dir/generate.err"
+		cp "$dir/generate.err" "$WORK/$name.err" 2>"/dev/null"
 		FAILED=1
 		return
 	fi
@@ -167,6 +168,45 @@ run_case() {
 	fi
 
 	echo "PASS: $name ($(wc -c < "$dir/run/$outfile") bytes)"
+}
+
+# run_case_type_error <case-name> <expected message fragment> <run_case args...>
+# Stages a case the same way run_case() does and asserts that generation FAILS
+# with a message naming the offender.  The generator's die() paths are what keep
+# a dangling reference from reaching sing-box, where the failure would be a
+# rejected configuration and a reload that silently keeps the previous one.
+run_case_type_error() {
+	local name="$1" expect="$2"; shift 2
+
+	# run_case() reports a non-zero generator as its own failure and sets the
+	# global FAILED - but here that non-zero exit *is* the expected outcome, so
+	# the flag is saved and restored around the call.  Its return status is
+	# always 0 (the function ends with `echo "PASS: ..."`), so the refusal is
+	# observed through the artifacts instead: the generator's stderr, and the
+	# absence of the configuration it would otherwise write.
+	local saved_failed="$FAILED"
+	run_case "$name" "$@" > "$WORK/$name.out" 2>&1
+	FAILED="$saved_failed"
+	local err="$WORK/$name.err"
+
+	if [ -f "$WORK/$name/run/sing-box-c.json" ]; then
+		echo "FAIL: $name: a configuration was generated, but it must be refused"
+		FAILED=1
+	elif [ ! -s "$err" ]; then
+		echo "FAIL: $name: generation produced no diagnostic:"
+		sed -n '1,5p' "$WORK/$name.out"
+		FAILED=1
+	elif grep -q "$expect" "$err"; then
+		echo "PASS: $name: refused with a message naming the offender"
+	else
+		echo "FAIL: $name: the diagnostic does not name the offender (expected '$expect'):"
+		head -3 "$err"
+		FAILED=1
+	fi
+
+	# Without this the caller's status is the grep's, and a passing case reports
+	# failure to the suite.
+	return 0
 }
 
 # The fixture's infra.self_mark, i.e. the value every node outbound has to
@@ -358,13 +398,54 @@ else
 	echo "PASS: redirect-udp: a dedicated UDP node emits tproxy-in on 5332"
 fi
 
-# P1-3: 'wan' is the value the UI writes for "WAN DNS (read from interface)" and
-# has to be replaced by the resolver the CLI read off the WAN interface before
-# it reaches sing-box.  Left as-is it becomes a *hostname* sing-box tries to
-# resolve, and every proxied lookup fails.  Off-target the CLI has no ubus, so
-# what the assertion sees is build_context()'s documented public fallback
-# (223.5.5.5 in these routing modes); the point is that the literal never
-# survives into the config.
+# H1: custom-only scalars must not survive into a preset mode.
+#
+# route.uc and outbound.uc choose their branch with `isEmpty(default_outbound)`
+# while the preset DNS builder keys off main_node.  A residual
+# routing.default_outbound (LuCI hides the field in preset modes but does not
+# clear it) therefore switched generation onto the custom branch, the DNS block
+# silently lost main-dns/china-dns, and the rule-set tags the leftover custom
+# rules referenced were never built - `sing-box check` rejected the whole
+# configuration, so the reload kept the old one and the user only saw "my
+# change did not take".  client.uci is the preset path with no main node; the
+# expression below is a no-op unless generation writes the field.
+run_case preset-stale-default-outbound "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json \
+	"s#^\\([[:space:]]*\\)option proxy_mode .*#\\1option proxy_mode 'redirect_tproxy'\\n\\1option main_udp_node 'same'\\n\\1option default_outbound 'direct-out'#"
+
+# A residual routing.default_outbound must not switch a preset-mode router onto
+# the custom branch: the preset DNS builder keys off main_node and bails out,
+# so the DNS block would lose main-dns/china-dns, and the leftover custom rules
+# reference rule-set tags that only custom mode builds.  The expression above
+# inserts the stale option; with the mode gate in build_context() it is never
+# read, so the generated config must still be the preset one.
+pso_json="$WORK/preset-stale-default-outbound/run/sing-box-c.json"
+if [ ! -f "$pso_json" ]; then
+	echo "FAIL: preset-stale-default-outbound: no config was generated"
+	FAILED=1
+else
+	for probe in '"tag": "main-dns"' '"tag": "china-dns"'; do
+		if ! grep -q "$probe" "$pso_json"; then
+			echo "FAIL: preset-stale-default-outbound: the preset DNS path is missing $probe"
+			echo "      a residual routing.default_outbound put generation on the custom branch"
+			FAILED=1
+		fi
+	done
+	if ! grep -q '"final": "main-out"' "$pso_json"; then
+		echo "FAIL: preset-stale-default-outbound: route.final is not main-out"
+		FAILED=1
+	fi
+	# find_neighbor is emitted only by the custom route builder.
+	if grep -q '"find_neighbor"' "$pso_json"; then
+		echo "FAIL: preset-stale-default-outbound: find_neighbor leaked into the preset config"
+		FAILED=1
+	fi
+	if ! grep -q '"type": "redirect"' "$pso_json"; then
+		echo "FAIL: preset-stale-default-outbound: the redirect inbound is missing"
+		FAILED=1
+	fi
+fi
+
+
 run_case wan-dns "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json \
 	"s/^\([[:space:]]*\)option dns_server '.*'/\1option dns_server 'wan'/"
 
@@ -549,4 +630,14 @@ else
 	fi
 fi
 
-exit $FAILED
+# H3: a reference to a dns_server or ruleset that is disabled (or deleted) used
+# to be emitted verbatim as `cfg-<name>-dns` / `cfg-<name>-rule`.  Nothing
+# defines those tags, so sing-box rejected the whole configuration with
+# "dns server not found" / "rule-set not found" - and because the rejected
+# generation never reaches the running service, the reload kept the previous
+# configuration and the user only saw that their change did not take.
+run_case_type_error dangling-resolver "does not exist or is disabled" \
+	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
+	"s#domain_resolver 'default-dns'#domain_resolver 'rs_local_gone'#"
+
+exit ${FAILED:-0}

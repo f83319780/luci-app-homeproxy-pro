@@ -143,10 +143,22 @@ export function build_context(dm, env) {
 		 * routing rule and made route.final 'main-out'. */
 		main_node: (routing_mode === 'custom') ? null : dm.general.main_node,
 		main_udp_node: (routing_mode === 'custom') ? null : dm.general.main_udp_node,
-		default_outbound: (dm.routing.settings || {}).default_outbound,
-		default_outbound_dns: (dm.routing.settings || {}).default_outbound_dns || 'default-dns',
-		domain_strategy: (dm.routing.settings || {}).domain_strategy,
-		find_neighbor: (dm.routing.settings || {}).find_neighbor,
+		/* Custom-only scalars.  The gate is not cosmetic: route.uc picks its
+		 * branch with `isEmpty(default_outbound)` and outbound.uc does the
+		 * same, while the preset branch keys off main_node.  A residual
+		 * default_outbound from an earlier custom configuration therefore
+		 * switched a preset-mode router onto the custom branch with the
+		 * preset DNS builder bailing out (it keys off main_node) - the DNS
+		 * block then ended up with only default-dns/system-dns and no
+		 * main-dns/china-dns, the route block with leftover custom rules -
+		 * and the rule-set tags those rules reference are only built in
+		 * custom mode, so `sing-box check` rejected the whole generation.
+		 * Preset modes read custom-only fields nowhere; gate them all. */
+		default_outbound: (routing_mode === 'custom') ? (dm.routing.settings || {}).default_outbound : null,
+		default_outbound_dns: (routing_mode === 'custom')
+			? ((dm.routing.settings || {}).default_outbound_dns || 'default-dns') : null,
+		domain_strategy: (routing_mode === 'custom') ? (dm.routing.settings || {}).domain_strategy : null,
+		find_neighbor: (routing_mode === 'custom') ? (dm.routing.settings || {}).find_neighbor : null,
 
 		/* Main-line defaults, mirroring what the pre-refactor
 		 * generate_client.uc did inline: an empty UCI value becomes 'wan'
