@@ -125,7 +125,10 @@ export function isValidPort(s) {
 	if (!match(s, PORT_RE))
 		return false;
 	const n = +s;
-	return n >= 0 && n <= 65535;
+	/* Port 0 is not a port: nft rejects `th dport 0` and `redirect to :0`, and a
+	 * ruleset that carries one is rolled back as a whole by fw4.  The callers
+	 * use this as "the value is usable", so 0 has to be a rejection. */
+	return n >= 1 && n <= 65535;
 };
 
 export function ports_to_nftarr(s) {

@@ -117,6 +117,13 @@ echo "== certificate upload argument alignment =="
 # argument order and checks the path that comes out.
 node "$ROOT/tests/frontend-certificate-upload.js" "$ROOT" || FAILED=1
 
+echo "== frontend view wiring =="
+# Loads the real view modules and drives the form.js calling conventions the
+# snapshots cannot see: the log view's explicit log filename, the validator that
+# used to dereference a null formvalue, and the routing_mode lookup that used to
+# read the wrong UCI section (and therefore never actually guarded anything).
+node "$ROOT/tests/frontend-view-wiring.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init

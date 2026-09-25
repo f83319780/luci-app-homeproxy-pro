@@ -17,7 +17,7 @@
  * order of the protocol/network/query-type triplet, a handful of
  * descriptions and their action-specific field sets; everything else is
  * emitted identically. */
-function renderRuleSection(s, kind, self, data) {
+function renderRuleSection(s, kind, self) {
 	let o, ss, so;
 	let is_dns = (kind === 'dns');
 	let uci_type = is_dns ? 'dns_rule' : 'routing_rule';

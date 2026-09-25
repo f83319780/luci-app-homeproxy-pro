@@ -71,7 +71,6 @@ function renderStatus(isRunning, version) {
 }
 
 let stubValidator = {
-	factory: validation,
 	apply(type, value, args) {
 		if (value != null)
 			this.value = value;
@@ -147,7 +146,7 @@ return view.extend({
 		 * have to recompute them. The destructuring keys are intentionally
 		 * explicit - a tab that grabs something not in this list is a bug. */
 		const ctx = {
-			s, data, features, hosts, proxy_nodes,
+			s, features, hosts, proxy_nodes,
 			stubValidator, self: this,
 		};
 

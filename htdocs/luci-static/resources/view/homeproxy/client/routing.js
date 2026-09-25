@@ -17,7 +17,7 @@
  * routing_node tab lives in nodes.js; the routing_rule sub-section is
  * shared with dns and lives in common.js as renderRuleSection. */
 function render(ctx) {
-	const { s, proxy_nodes, features, data, stubValidator } = ctx;
+	const { s, proxy_nodes, features, stubValidator } = ctx;
 	let o, ss, so;
 
 	s.tab('routing', _('Routing Settings'));
@@ -227,10 +227,10 @@ function render(ctx) {
  * call it after nodes.renderRoutingNodes() and preserve the original tab
  * ordering (routing, routing_node, routing_rule). */
 function renderRoutingRules(ctx) {
-	const { s, self, data } = ctx;
+	const { s, self } = ctx;
 
 	/* Routing rules start */
-	common.renderRuleSection(s, 'routing', self, data);
+	common.renderRuleSection(s, 'routing', self);
 	/* Routing rules end */
 }
 

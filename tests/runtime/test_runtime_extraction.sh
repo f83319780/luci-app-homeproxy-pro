@@ -670,6 +670,18 @@ HP_TEST_OCCUPIED_PORT=5399 run_scenario "G-start-health-gate-failure" start \
 # pointed at the client's dead redirect port.  This is also what makes the
 # reload path's "keep the DNS layer across the stop" safe: without it,
 # disabling the client would leave the snippets installed forever.
+# Scenario I: the DNS snippet writer fails (an unusable infra.dns_port).  The
+# snippets are half of the intercept layer - without them the LAN keeps
+# resolving through the ISP while the nft rules still send its DNS to sing-box's
+# dns-in - and the writer returns non-zero for exactly this case rather than
+# installing an empty snippet.  A start must say so and must not promote the
+# configuration to known-good, which is the same rule a failed firewall apply
+# already follows.
+run_scenario "I-dns-snippet-write-failure" start \
+	proxy_mode=tun routing_mode=bypass_mainland_china \
+	main_node=n1 main_udp_node=nil server_enabled=0 ipv6_support=0 \
+	mixed_port=5398 dns_port="70000"
+
 run_scenario "H-start-disables-client" start-twice \
 	proxy_mode=redirect_tproxy routing_mode=bypass_mainland_china \
 	main_node=n1 main_udp_node=nil server_enabled=1 ipv6_support=0
@@ -765,6 +777,32 @@ if awk '/^===== scenario: G-start-health-gate-failure/,/^===== scenario: H-/' "$
 	exit 1
 else
 	echo "PASS: a failed start records no known-good configuration"
+fi
+
+# Scenario I: a failed snippet install must be reported and must not promote the
+# configuration.  The DNS layer is half the intercept, and the writer returns
+# non-zero instead of installing an empty snippet - so the start has to notice.
+SCEN_I="/^===== scenario: I-dns-snippet-write-failure/"
+if awk "$SCEN_I,0" "$TRACE.norm" | grep -q "^log Error: the dnsmasq snippets were not installed"; then
+	echo "PASS: a failed DNS snippet install is reported by the start"
+else
+	echo "FAIL: a failed DNS snippet install was silently ignored"
+	awk "$SCEN_I,0" "$TRACE.norm" | head -30
+	exit 1
+fi
+
+# The known-good pair persists across scenarios, so the dump shows whatever the
+# last successful start recorded.  Scenario I generates a configuration nothing
+# else does (mixed_port 5398), so the copy is identifiable by content: if the
+# dump holds 5398 the failed start promoted over it, if it holds anything else
+# the previous known-good survived - which is the required behaviour.
+if awk "$SCEN_I,0" "$TRACE.norm" \
+	| grep '^file var/run/homeproxy/known-good/sing-box-c.json:' \
+	| grep -q '5398'; then
+	echo "FAIL: a start whose DNS snippets did not install recorded a known-good configuration"
+	exit 1
+else
+	echo "PASS: a start whose DNS snippets did not install records no known-good"
 fi
 
 if awk '/^===== scenario: A-tun-bypass-client-only/,/^===== scenario: B-/' "$TRACE.norm" \

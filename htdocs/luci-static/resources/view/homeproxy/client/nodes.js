@@ -17,7 +17,7 @@
  * actions dispatch to). Called after routing.render() so the SectionValue
  * grid nesting is intact. */
 function renderRoutingNodes(ctx) {
-	const { s, proxy_nodes, data, self } = ctx;
+	const { s, proxy_nodes } = ctx;
 	let o, ss, so;
 
 	s.tab('routing_node', _('Routing Nodes'));
@@ -125,9 +125,15 @@ function renderRoutingNodes(ctx) {
 	for (let i in proxy_nodes)
 		so.value(i, proxy_nodes[i]);
 	so.depends('node', 'urltest');
-	so.validate = function(section_id) {
-		let value = this.section.formvalue(section_id, 'urltest_nodes');
-		if (section_id && !value.length)
+	/* The repository's other validators take (section_id, value) and check
+	 * `value` before dereferencing it. This one re-read the value through
+	 * `this.section.formvalue()`, which returns null when the widget is not
+	 * in the DOM, so `.length` threw a TypeError - the save aborted with a
+	 * console error instead of the "non-empty value" message. The framework
+	 * already hands the current value in (getValidator is
+	 * L.bind(this.validate, this, section_id)), so use it. */
+	so.validate = function(section_id, value) {
+		if (section_id && value && !value.length)
 			return _('Expecting: %s').format(_('non-empty value'));
 
 		return true;
@@ -196,7 +202,7 @@ function renderRoutingNodes(ctx) {
  * actions can target). Called after dns.renderDnsSettings() so the dns
  * NamedSection is in place. */
 function renderDnsServers(ctx) {
-	const { s, data, self } = ctx;
+	const { s } = ctx;
 	let o, ss, so;
 
 	s.tab('dns_server', _('DNS Servers'));

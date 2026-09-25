@@ -50,7 +50,7 @@ function renderDnsCacheOptions(ss) {
  * routing.renderRoutingRules() so the NamedSection chain reads
  * config -> routing_node -> routing_rule -> dns from left to right. */
 function renderDnsSettings(ctx) {
-	const { s, data } = ctx;
+	const { s } = ctx;
 	let o, ss, so;
 
 	s.tab('dns', _('DNS Settings'));
@@ -98,10 +98,10 @@ function renderDnsSettings(ctx) {
  * orchestrator can call it after nodes.renderDnsServers() and preserve
  * the original tab ordering (dns, dns_server, dns_rule). */
 function renderDnsRules(ctx) {
-	const { s, self, data } = ctx;
+	const { s, self } = ctx;
 
 	/* DNS rules start */
-	common.renderRuleSection(s, 'dns', self, data);
+	common.renderRuleSection(s, 'dns', self);
 	/* DNS rules end */
 }
 
@@ -116,7 +116,7 @@ function renderDnsRules(ctx) {
  * happened to be written in.  They stay on the 'config' NamedSection, so
  * only the tab they render under changed. */
 function renderDnsCache(ctx) {
-	const { s, data, stubValidator } = ctx;
+	const { s, stubValidator } = ctx;
 	let o, ss;
 
 	s.tab('dns_cache', _('DNS Settings'));

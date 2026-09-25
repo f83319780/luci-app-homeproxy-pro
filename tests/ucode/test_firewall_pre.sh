@@ -187,6 +187,111 @@ if ! grep -q 'WARN: skipping server srv_badnet: invalid network' "$WORK/invalid-
 	FAILED=1
 fi
 
+# --- scenario: a hostile section name is refused, not interpolated -----
+# firewall_pre.uc interpolates the section name into the nft comment, and that
+# guard cannot be exercised through a config *file*: libuci accepts only
+# [A-Za-z0-9_] in a section name, so a name carrying `"`/`}` - the only kind
+# that can close the comment - never survives the parser ("invalid character in
+# name field" on load, "Invalid argument" on `uci set`). The guard is the
+# second line of defense for any path that hands the script a name libuci never
+# validated, so this stage supplies one directly: the copy imports a cursor
+# stub instead of libuci and yields the name verbatim.
+#
+# The stub reads the name from <sandbox>/section-name, which lets the same
+# stage cover both halves: a name libuci would accept still gets its rule (so
+# the stub really does reach the emit path and the refusal below is the guard,
+# not a stub that emits nothing), and a hostile one is skipped.
+#
+# Grep for the warning, not the payload: the warning quotes the rejected name,
+# so a payload grep would match even when the guard worked - the same false
+# positive the bad-tun scenario calls out.
+
+MOCK_STAGE="$WORK/mock-stage"
+mkdir -p "$MOCK_STAGE"
+cp "$ROOT/tests/ucode/mocks/homeproxy_firewall.uc" "$MOCK_STAGE/homeproxy.uc"
+cp "$ROOT/tests/ucode/test_firewall_pre.uc" "$MOCK_STAGE/"
+
+# The cursor stub. It replaces libuci for this stage only; print / writefile and
+# the rest of the runtime stay real.
+cat > "$MOCK_STAGE/test_uci.uc" <<'STUB'
+/* Cursor stub for the section-name scenario in tests/ucode/test_firewall_pre.sh.
+ * It yields a single `server` section whose name comes verbatim from
+ * <sandbox>/section-name - including names libuci refuses, so the firewall_pre
+ * guard is the only thing between the name and the nft comment. Everything
+ * else matches the file-based fixture (config / infra / server globals). */
+import { readfile } from 'fs';
+
+export function cursor(dir) {
+	const name = trim(readfile(dir + '/section-name'));
+	const globals = {
+		config: { routing_mode: 'bypass_mainland_china', proxy_mode: 'redirect_tproxy', main_node: 'urltest' },
+		infra:  { tun_name: 'singtun0' },
+		server: { enabled: '1' }
+	};
+
+	function load() {
+		return true;
+	}
+
+	function get(cfg, section, option) {
+		const entry = globals[section];
+
+		return entry ? entry[option] : null;
+	}
+
+	function foreach(cfg, type, cb) {
+		if (type === 'server')
+			cb({ '.name': name, enabled: '1', firewall: '1', port: '443' });
+	}
+
+	return { load: load, get: get, foreach: foreach };
+};
+STUB
+
+sed -e '1{/^#!\/usr\/bin\/ucode$/d;}' \
+	-e "s|^import { cursor } from 'uci';\$|import { cursor } from './test_uci.uc';|" \
+	-e 's|^const uci = cursor();$|const uci = cursor(ARGV[0]);|' \
+	"$ROOT/root/etc/homeproxy/scripts/firewall_pre.uc" > "$MOCK_STAGE/firewall_pre.uc"
+
+# Same hard guards as above: a no-op sed must not silently fall back to libuci
+# (the hostile name would vanish and the scenario would pass for the wrong
+# reason) or to the live /etc/config.
+if ! grep -q "from './test_uci.uc'" "$MOCK_STAGE/firewall_pre.uc"; then
+	echo "FAIL: firewall_pre: could not redirect the cursor to the test stub"
+	echo "      (the \"import { cursor } from 'uci';\" anchor no longer matches)"
+	exit 1
+fi
+if ! grep -q 'cursor(ARGV\[0\])' "$MOCK_STAGE/firewall_pre.uc"; then
+	echo "FAIL: firewall_pre: could not redirect the UCI cursor"
+	echo "      (the 'const uci = cursor();' anchor no longer matches)"
+	exit 1
+fi
+
+run_mock_scenario() {
+	scenario="$1"
+	name="$2"
+	mkdir -p "$WORK/$scenario/sandbox" "$WORK/$scenario/run"
+	printf '%s' "$name" > "$WORK/$scenario/sandbox/section-name"
+	if ( cd "$MOCK_STAGE" && ucode -L "$MOCK_STAGE" \
+		test_firewall_pre.uc \
+		"$WORK/$scenario/sandbox" \
+		"$WORK/$scenario/run" \
+		"$scenario" > "$WORK/$scenario/out.txt" 2>&1 ); then
+		cat "$WORK/$scenario/out.txt"
+	else
+		echo "FAIL: firewall_pre scenario '$scenario'"
+		cat "$WORK/$scenario/out.txt"
+		FAILED=1
+	fi
+}
+
+run_mock_scenario mock-good-section-name 'srv_ok_mock'
+run_mock_scenario invalid-section-name 'srv" } ; chain evil { type filter hook prerouting priority 0; policy accept; }'
+if ! grep -q 'WARN: skipping server .*: invalid section name' "$WORK/invalid-section-name/out.txt"; then
+	echo "FAIL: firewall_pre: the hostile section name was not refused with a warning"
+	FAILED=1
+fi
+
 # --- scenario: firewall='0' opts a server out entirely ----------------
 ROUTING_MODE='bypass_mainland_china' PROXY_MODE='redirect_tproxy' MAIN_NODE='urltest' SERVER_ENABLED='1'
 seed firewall-off "config server 'srv_manual'

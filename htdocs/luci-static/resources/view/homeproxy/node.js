@@ -11,7 +11,6 @@
 'require view';
 
 'require homeproxy as hp';
-'require tools.widgets as widgets';
 
 function allowInsecureConfirm(ev, _section_id, value) {
 	if (value === '1' && !confirm(_('Are you sure to allow insecure?')))
@@ -651,34 +650,15 @@ return view.extend({
 				])
 			])
 		}
-		ss.renderSectionAdd = function(/* ... */) {
-			let el = form.GridSection.prototype.renderSectionAdd.apply(this, arguments),
-				nameEl = el.querySelector('.cbi-section-create-name');
-
-			ui.addValidator(nameEl, 'uciname', true, (v) => {
-				let button = el.querySelector('.cbi-section-create > .cbi-button-add');
-				let uciconfig = this.uciconfig || this.map.config;
-
-				if (!v) {
-					button.disabled = true;
-					return true;
-				} else if (uci.get(uciconfig, v)) {
-					button.disabled = true;
-					return _('Expecting: %s').format(_('unique UCI identifier'));
-				} else {
-					button.disabled = null;
-					return true;
-				}
-			}, 'blur', 'keyup');
-
-			el.appendChild(E('button', {
-				'class': 'cbi-button cbi-button-add',
-				'title': _('Import share links'),
-				'click': ui.createHandlerFn(this, 'handleLinkImport')
-			}, [ _('Import share links') ]));
-
-			return el;
-		}
+		/* The shared renderer (homeproxy.js) appends the extra button this
+		 * page needs; it used to carry a verbatim copy of the whole method.
+		 * The factory gets the section back so the handler binds to it, the
+		 * same receiver the copy's `this` had. */
+		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, (section) => E('button', {
+			'class': 'cbi-button cbi-button-add',
+			'title': _('Import share links'),
+			'click': ui.createHandlerFn(section, 'handleLinkImport')
+		}, [ _('Import share links') ]));
 		/* Import subscription links end */
 		/* User nodes end */
 
@@ -795,7 +775,7 @@ return view.extend({
 			return hp.rpcCall('update_subscriptions').then((res) => {
 				if (res && res.result === false)
 					return ui.addNotification(null, E('p', [
-						_('An error occurred during updating subscriptions: %s').format(res.stderr || res.error || '')
+						_('An error occurred during updating subscriptions: %s').format(res.stderr || '')
 					]));
 
 				return location.reload();
