@@ -1409,6 +1409,27 @@ else
 fi
 
 echo
+echo "== guard 33: both packaging paths declare every Makefile conffile =="
+
+# The release artifacts are built by .github/build-pkg.sh, which parses the
+# Makefile itself - so the Makefile's conffiles block has to reach both package
+# formats.  It used to filter that list down to /etc/config/<app> for the apk
+# and the ipk, which meant the released packages protected one path while the
+# feed build protected all nine; the resource lists the device updates were
+# then overwritten by an upgrade.  A filtered list or a single write means the
+# two packaging paths have diverged again.
+BUILD_PKG="$ROOT/.github/build-pkg.sh"
+CONF_FILTERED="$(grep -n 'CONFFILES\[@\]' "$BUILD_PKG" 2>"/dev/null" | grep 'grep -x' || true)"
+CONF_WRITES="$(grep -c 'CONFFILES\[@\]' "$BUILD_PKG" 2>"/dev/null")"
+if [ -n "$CONF_FILTERED" ]; then
+	fail "build-pkg.sh filters the conffile list instead of shipping it whole: $CONF_FILTERED"
+elif [ "${CONF_WRITES:-0}" -lt 2 ]; then
+	fail "build-pkg.sh writes the conffile list ${CONF_WRITES:-0} time(s); the apk and the ipk each need it"
+else
+	pass "the whole conffile list reaches both the apk and the ipk"
+fi
+
+echo
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then

@@ -182,8 +182,19 @@ if [ "$PKG_MGR" == "apk" ]; then
 	find "$TEMP_PKG_DIR" -type f,l -printf '/%P\n' | sort > "$TEMP_DIR/$PKG_NAME.list"
 	mv "$TEMP_DIR/$PKG_NAME.list" "$TEMP_PKG_DIR/lib/apk/packages/$PKG_NAME.list"
 
-	if printf '%s\n' "${CONFFILES[@]}" | grep -qx "/etc/config/$APP_ID" 2>/dev/null || [ "${#CONFFILES[@]}" -eq 0 ]; then
-		echo "/etc/config/$APP_ID" >> "$TEMP_PKG_DIR/lib/apk/packages/$PKG_NAME.conffiles"
+	# Every conffile the Makefile declares, not just /etc/config/<app>.
+	#
+	# The four resource lists and their .ver files are updated *on the device*
+	# by the resource updater, and the Makefile's comment says why they are
+	# listed: without the declaration a package upgrade overwrites them with
+	# the shelf copy.  The old form filtered that list down to the config file
+	# (`grep -x "/etc/config/$APP_ID"`), so the released apk protected one path
+	# while the feed build (luci.mk, which reads the same block) protected
+	# nine - the two packaging paths meant different things.
+	if [ "${#CONFFILES[@]}" -gt 0 ]; then
+		printf '%s\n' "${CONFFILES[@]}" > "$TEMP_PKG_DIR/lib/apk/packages/$PKG_NAME.conffiles"
+	else
+		echo "/etc/config/$APP_ID" > "$TEMP_PKG_DIR/lib/apk/packages/$PKG_NAME.conffiles"
 	fi
 	if [ -f "$TEMP_PKG_DIR/lib/apk/packages/$PKG_NAME.conffiles" ]; then
 		while IFS= read -r file; do
@@ -270,9 +281,11 @@ else
 	EOF
 	chmod 0644 "$TEMP_PKG_DIR/CONTROL/control"
 
+	# The same full list as the apk branch.  ipkg-build keeps only the entries
+	# that exist in the package and sorts them, so passing the Makefile's list
+	# verbatim is both safe and what the feed build would have produced.
 	if [ "${#CONFFILES[@]}" -gt 0 ]; then
-		printf '%s\n' "${CONFFILES[@]}" | grep -x "/etc/config/$APP_ID" > "$TEMP_PKG_DIR/CONTROL/conffiles" || \
-			echo "/etc/config/$APP_ID" > "$TEMP_PKG_DIR/CONTROL/conffiles"
+		printf '%s\n' "${CONFFILES[@]}" > "$TEMP_PKG_DIR/CONTROL/conffiles"
 	else
 		echo "/etc/config/$APP_ID" > "$TEMP_PKG_DIR/CONTROL/conffiles"
 	fi
