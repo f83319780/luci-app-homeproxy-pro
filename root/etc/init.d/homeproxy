@@ -134,11 +134,33 @@ hp_intercept_installed() {
 # The server's inbound accepts (fw4_forward/fw4_input) are left in place: a
 # failed *client* does not make the server unreachable, and the two sides are
 # independent instances.
+#
+# The release is recorded in $RUN_DIR/intercept-released so that service_started
+# can put the layer back once the instance does come up.  Without that marker the
+# release is one-way: procd keeps respawning the instance, the health check can
+# start passing on a later attempt, and nothing reinstalls the rules - the router
+# then reports the service as running while the LAN is not proxied at all.
 hp_release_intercept() {
 	log "Reverting the intercept layer; traffic will go out unproxied until the client is up."
 	hp_net_teardown
 	hp_firewall_teardown "$RUN_DIR" keep-pre
 	hp_dnsmasq_remove_snippets "$DNSMASQ_DIR"
+	printf '%s\n' "1" > "$RUN_DIR/intercept-released"
+}
+
+# hp_rearm_intercept <proxy-mode> <routing-mode>
+# Reinstall the layer a failed start released, once the client is proven up.
+# It only runs when that failure actually happened - on a healthy start there is
+# nothing to redo - which is what makes the release in hp_release_intercept()
+# reversible instead of a silent, permanent downgrade to direct routing.
+hp_rearm_intercept() {
+	[ -f "$RUN_DIR/intercept-released" ] || return 0
+	rm -f "$RUN_DIR/intercept-released"
+	log "Client is up again; reinstalling the intercept layer."
+	hp_dnsmasq_write_snippets "$DNSMASQ_DIR" "$HP_DIR" "$2"
+	hp_net_setup "$1" "$2"
+	hp_firewall_apply "$HP_DIR" "$RUN_DIR" "1" \
+		|| log "Error: the firewall rules could not be reinstalled; the proxy may not be enforced."
 }
 
 # hp_release_stale_intercept
@@ -220,12 +242,31 @@ start_service() {
 		hp_dnsmasq_write_snippets "$DNSMASQ_DIR" "$HP_DIR" "$routing_mode"
 		hp_net_setup "$proxy_mode" "$routing_mode"
 
+		# R-08: gfwlist mode routes by the nft set that dnsmasq populates
+		# (`nftset=`), and the post-template gates every proxy chain on
+		# `ip daddr != @homeproxy_gfw_list_v4`.  On a dnsmasq without nftset the
+		# set is never filled, so that gate is true for every packet and the
+		# whole mode silently degrades to direct routing.  Record the capability
+		# where the template can read it (it renders before this point on the
+		# next start, so the file has to exist by then) and let the template
+		# omit the gate instead: traffic then reaches sing-box, which routes it
+		# by geoip exactly like the nftset gate would have.
+		hp_dnsmasq_has_nftset && printf '%s\n' "1" > "$HP_DIR/resources/.dnsmasq-nftset" \
+			|| rm -f "$HP_DIR/resources/.dnsmasq-nftset"
+
 		hp_procd_client_instance "$PROG" "$HP_DIR" "$RUN_DIR" "$routing_mode" "$disable_gso"
 	fi
 
 	if [ "$server_enabled" = "1" ]; then
 		if ! hp_start_generated_config s "$HP_DIR" "$RUN_DIR" "$GOOD_DIR"; then
-			hp_release_stale_intercept
+			# Only the server side failed.  hp_release_stale_intercept() tears
+			# down the *client* layer (net rules + redirect chains + DNS
+			# snippets), so calling it here took a healthy, already-verified
+			# client off the air because a server certificate or port was bad -
+			# the opposite of the "the two sides are independent instances"
+			# rule this file states above.  service_started()'s
+			# failed="sing-box-s" path handles the server side and already
+			# leaves the client layer alone.
 			return 1
 		fi
 
@@ -264,8 +305,9 @@ start_service() {
 service_started() {
 	config_load "$CONF"
 
-	local routing_mode outbound_node server_enabled
+	local routing_mode outbound_node server_enabled proxy_mode
 	config_get routing_mode "config" "routing_mode" "bypass_mainland_china"
+	config_get proxy_mode "config" "proxy_mode" "redirect_tproxy"
 	hp_client_outbound_node "$routing_mode" outbound_node
 	config_get_bool server_enabled "server" "enabled" "0"
 
@@ -342,6 +384,12 @@ service_started() {
 
 	rm -f "$RUN_DIR/failed-side"
 
+	# A previous start may have released the intercept layer because the client
+	# did not come up (hp_release_intercept).  procd respawns the instance, and
+	# now that it is proven healthy the rules have to come back - otherwise the
+	# service runs and reports "running" while the LAN is not proxied.
+	[ "$client_enabled" = "1" ] && hp_rearm_intercept "$proxy_mode" "$routing_mode"
+
 	# Proven good: this is what a later failed reload rolls back to.  A
 	# configuration whose firewall did not apply is not "good" - traffic is not
 	# being intercepted - so it is not recorded, and the previous known-good
@@ -363,7 +411,12 @@ stop_service() {
 
 	config_load "$CONF"
 
-	hp_net_teardown
+	# P1-8: on a reload the network layer is left in place too.  The ip rules and
+	# the routing table are the same before and after a configuration change
+	# (they derive from the infra marks, not from the nodes), hp_net_setup() is
+	# idempotent since r20, and tearing them down here only opened a window in
+	# which the tproxy rules were gone.  A real stop still removes them.
+	[ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ] || hp_net_teardown
 	hp_firewall_teardown "$RUN_DIR"
 	# A reload is a restart, not a shutdown, and it keeps the DNS layer: the
 	# snippets are re-rendered by start_service moments later, and their writer
@@ -380,6 +433,9 @@ stop_service() {
 	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
 		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log" \
 		"$RUN_DIR/failed-side" "$RUN_DIR/failed-firewall"
+	# A released marker only means something within one start; a stop clears it
+	# so the next start does not reinstall a layer it is about to install anyway.
+	[ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ] || rm -f "$RUN_DIR/intercept-released"
 
 	log "Service stopped."
 }

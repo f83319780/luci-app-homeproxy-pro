@@ -493,14 +493,6 @@ chmod 600 var/run/homeproxy/candidate/sing-box-c.json
 chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
-ip rule del fwmark 101 table 100
-ip route del local 0.0.0.0/0 dev lo table 100
-ip -6 rule del fwmark 101 table 100
-ip -6 route del local ::/0 dev lo table 100
-ip route del default dev singtun0 table 100
-ip rule del fwmark 102 table 100
-ip -6 route del default dev singtun0 table 100
-ip -6 rule del fwmark 102 table 100
 nft flush chain inet fw4 homeproxy_output_redir
 nft delete chain inet fw4 homeproxy_output_redir
 nft flush chain inet fw4 homeproxy_redirect
@@ -763,14 +755,6 @@ log Error: sing-box-c did not come up with the new configuration, rolling back.
 chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
-ip rule del fwmark 101 table 100
-ip route del local 0.0.0.0/0 dev lo table 100
-ip -6 rule del fwmark 101 table 100
-ip -6 route del local ::/0 dev lo table 100
-ip route del default dev singtun0 table 100
-ip rule del fwmark 102 table 100
-ip -6 route del default dev singtun0 table 100
-ip -6 rule del fwmark 102 table 100
 nft flush chain inet fw4 homeproxy_output_redir
 nft delete chain inet fw4 homeproxy_output_redir
 nft flush chain inet fw4 homeproxy_redirect
@@ -893,6 +877,19 @@ jsonfilter -e @.exit_code
 netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
+log Client is up again; reinstalling the intercept layer.
+log dnsmasq snippets unchanged, skipping the restart.
+ip link show singtun0
+ip link set singtun0 up
+ip route replace default dev singtun0 table 100
+ip rule del fwmark 102 table 100
+ip rule add fwmark 102 table 100
+ucode etc/homeproxy/scripts/firewall_pre.uc
+utpl -S etc/homeproxy/scripts/firewall_post.ut
+fw4 reload
+init.d/miniupnpd enabled
+init.d/miniupnpd running
+init.d/miniupnpd restart
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 sing-box version -n
 log sing-box 1.14.0 started.
@@ -901,14 +898,6 @@ reload_service rc=0
 chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
-ip rule del fwmark 101 table 100
-ip route del local 0.0.0.0/0 dev lo table 100
-ip -6 rule del fwmark 101 table 100
-ip -6 route del local ::/0 dev lo table 100
-ip route del default dev singtun0 table 100
-ip rule del fwmark 102 table 100
-ip -6 route del default dev singtun0 table 100
-ip -6 rule del fwmark 102 table 100
 nft flush chain inet fw4 homeproxy_output_redir
 nft delete chain inet fw4 homeproxy_output_redir
 nft flush chain inet fw4 homeproxy_redirect

@@ -120,6 +120,24 @@ function mark_value_or(str, fallback) {
 	return match(m || '', /^0x[0-9a-fA-F]+$/) ? m : fallback;
 }
 
+/* gfwlist mode routes by the address set that dnsmasq fills through
+ * `nftset=`, and the gates below compare the destination against it.  A dnsmasq
+ * built without HAVE_NFTSET never fills the set, and `ip daddr != @<empty set>`
+ * is true for every packet - the whole mode then silently routes everything
+ * direct while the DNS side keeps answering through sing-box.  init.d records
+ * the capability in resources/.dnsmasq-nftset before this template is rendered,
+ * so the gates can be omitted there and sing-box decides by geoip instead.
+ * A missing file means "capability unknown" and keeps the historical output. */
+function dnsmasq_nftset() {
+	let marker = null;
+	try {
+		marker = trim(readfile(resources_dir + '/.dnsmasq-nftset'));
+	} catch (e) {
+		return true;
+	}
+	return marker === '' || marker === '1';
+}
+
 /* Misc config */
 const resources_dir = '/etc/homeproxy/resources';
 
@@ -418,7 +436,7 @@ chain homeproxy_redirect {
 	ip6 daddr @homeproxy_wan_direct_addr_v6 counter return
 	{% endif /* ipv6_support */ %}
 
-	{% if (routing_mode === 'gfwlist'): %}
+	{% if (routing_mode === 'gfwlist' && dnsmasq_nftset()): %}
 	ip daddr != @homeproxy_gfw_list_v4 counter return
 	{% if (ipv6_support === '1'): %}
 	ip6 daddr != @homeproxy_gfw_list_v6 counter return
@@ -539,7 +557,7 @@ chain homeproxy_mangle_prerouting {
 	ip6 daddr @homeproxy_wan_direct_addr_v6 counter return
 	{% endif /* ipv6_support */ %}
 
-	{% if (routing_mode === 'gfwlist'): %}
+	{% if (routing_mode === 'gfwlist' && dnsmasq_nftset()): %}
 	ip daddr != @homeproxy_gfw_list_v4 counter return
 	{% if (ipv6_support === '1'): %}
 	ip6 daddr != @homeproxy_gfw_list_v6 counter return
@@ -591,7 +609,7 @@ chain homeproxy_mangle_output {
 	ip6 daddr @homeproxy_wan_direct_addr_v6 counter return
 	{% endif /* ipv6_support */ %}
 
-	{% if (routing_mode === 'gfwlist'): %}
+	{% if (routing_mode === 'gfwlist' && dnsmasq_nftset()): %}
 	ip daddr != @homeproxy_gfw_list_v4 counter return
 	{% if (ipv6_support === '1'): %}
 	ip6 daddr != @homeproxy_gfw_list_v6 counter return
@@ -700,7 +718,7 @@ chain homeproxy_mangle_tun {
 	ip6 daddr {{ ipv6_to_nftarr(control_info.wan_direct_ipv6_ips) }} counter return
 	{% endif /* wan_direct_ipv6_ips */ %}
 
-	{% if (routing_mode === 'gfwlist'): %}
+	{% if (routing_mode === 'gfwlist' && dnsmasq_nftset()): %}
 	ip daddr != @homeproxy_gfw_list_v4 counter return
 	{% if (ipv6_support === '1'): %}
 	ip6 daddr != @homeproxy_gfw_list_v6 counter return
