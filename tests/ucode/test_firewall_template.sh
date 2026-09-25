@@ -56,6 +56,46 @@ else
 	fi
 fi
 
+# --- R-08: the gfwlist gate follows the dnsmasq nftset capability ----------
+# The gate compares the destination against the set dnsmasq fills with
+# `nftset=`.  On a dnsmasq built without HAVE_NFTSET that set stays empty and
+# `ip daddr != @<empty set>` is true for every packet, so gfwlist mode would
+# silently route everything direct.  The template therefore reads the
+# capability from resources/.dnsmasq-nftset - written by init.d before the
+# render - and must omit the gate when it says "no".
+#
+# This is asserted at the source level, not by rendering gfwlist mode: the
+# renderer runs with the device's own UCI (routing_mode = bypass_mainland_china
+# on any normal router, including this suite's host), so the gfwlist branch is
+# not reachable from here at all.  What is checkable is that every gate is
+# wrapped and that the helper reads the marker the way init.d writes it.
+# The declaration `{% if (routing_mode === 'gfwlist'): %}` in front of the set
+# is data, not a gate; the gates are the same condition with a trailing colon.
+GATED="$(grep -c "routing_mode === 'gfwlist' && dnsmasq_nftset()" "$TEMPLATE_SRC")"
+UNGATED="$(grep -c "routing_mode === 'gfwlist'):" "$TEMPLATE_SRC")"
+
+if [ "$GATED" -lt 4 ]; then
+	echo "FAIL: only $GATED gfwlist gates carry the nftset capability check (expected 4:"
+	echo "      the LAN redirect, the UDP tproxy, the local output and the include chain)"
+	FAILED=1
+fi
+# Exactly one ungated condition is expected: the one that declares the set the
+# gates match against.  Every additional one is a gate, and a gate over an empty
+# set is true for every packet.
+if [ "$UNGATED" -ne 1 ]; then
+	echo "FAIL: $UNGATED ungated 'routing_mode === 'gfwlist'' conditions in the template"
+	echo "      (exactly 1 is expected - the set declaration; the rest are gates)"
+	FAILED=1
+fi
+if ! grep -q "resources_dir + '/.dnsmasq-nftset'" "$TEMPLATE_SRC"; then
+	echo "FAIL: the template does not read resources/.dnsmasq-nftset, the marker init.d writes"
+	FAILED=1
+fi
+if ! grep -q '\.dnsmasq-nftset' "$ROOT/root/etc/init.d/homeproxy"; then
+	echo "FAIL: init.d no longer records the dnsmasq nftset capability for the template"
+	FAILED=1
+fi
+
 # --- layer 2: the render -------------------------------------------------
 # The render output and its stderr live beside the staged template, never at a
 # fixed /tmp path.  A caller that passes a work dir (tests/ucode/run.sh hands
@@ -141,6 +181,9 @@ if grep -nE "^#[^!].*homeproxy_[a-z0-9_]+ \{" "$OUT" > "/dev/null"; then
 	FAILED=1
 fi
 
-[ "$FAILED" -eq 0 ] && echo "PASS: firewall_post.ut renders homeproxy objects as standalone nft statements"
+if [ "$FAILED" -eq 0 ]; then
+	echo "PASS: firewall_post.ut renders homeproxy objects as standalone nft statements"
+	echo "PASS: the gfwlist gate follows the dnsmasq nftset capability"
+fi
 
 exit $FAILED
