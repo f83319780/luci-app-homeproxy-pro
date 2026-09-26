@@ -356,5 +356,56 @@ expect('scrub: live ref preserved',
 const scrub2 = Repository.scrub_stale_urltest_refs(uci2, CFG, LOG);
 expect('scrub: clean state changes nothing', scrub2.changed, 0);
 
+/* --- RFC 1321 MD5 vectors: the cross-language half of the contract ------ */
+
+/* update_subscriptions.uc computes a node's `grouphash` as md5(url, fragment
+ * stripped), and the Repository above names each section
+ * md5(grouphash + label). The browser compares *its own* MD5 -
+ * homeproxy.js calcStringMD5(), which cannot use crypto.subtle because the
+ * Web Crypto spec has no MD5 - against that grouphash to decide which
+ * subscription tab a section belongs to, and whether it is a subscription
+ * node at all.
+ *
+ * So the two languages have to agree exactly, and nothing in the suite
+ * checked it: there was no MD5 vector anywhere, on either side. The failure
+ * mode is quiet - a digest that does not match does not raise, it just drops
+ * the subscription's nodes out of their tab. tests/frontend-md5.js pins the
+ * browser side to these same vectors; this block pins the ucode side, which
+ * is what turns "each side is standard" into "the two sides are equal".
+ *
+ * The last three cover what the browser implementation used to get wrong: it
+ * normalised CRLF to LF before hashing, and it encoded UTF-8 one UTF-16 code
+ * unit at a time. They are built with chr() rather than spelled as literals
+ * so the bytes under test are unambiguous:
+ *
+ *   U+4E2D U+6587  ->  e4 b8 ad e6 96 87
+ *   U+1F600        ->  f0 9f 98 80                                          */
+const MD5_CJK = chr(0xe4) + chr(0xb8) + chr(0xad) + chr(0xe6) + chr(0x96) + chr(0x87);
+const MD5_EMOJI = chr(0xf0) + chr(0x9f) + chr(0x98) + chr(0x80);
+
+expect('md5: RFC 1321 A.5 ""', md5(''), 'd41d8cd98f00b204e9800998ecf8427e');
+expect('md5: RFC 1321 A.5 "a"', md5('a'), '0cc175b9c0f1b6a831c399e269772661');
+expect('md5: RFC 1321 A.5 "abc"', md5('abc'), '900150983cd24fb0d6963f7d28e17f72');
+expect('md5: RFC 1321 A.5 "message digest"',
+	md5('message digest'), 'f96b697d7cb7938d525a2f31aaf161d0');
+expect('md5: RFC 1321 A.5 a-z',
+	md5('abcdefghijklmnopqrstuvwxyz'), 'c3fcd3d76192e4007dfb496cca67e13b');
+expect('md5: RFC 1321 A.5 alphanumeric',
+	md5('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'),
+	'd174ab98d277d9f5a5611c2c9f419d9f');
+expect('md5: RFC 1321 A.5 eighty digits',
+	md5('12345678901234567890123456789012345678901234567890123456789012345678901234567890'),
+	'57edf4a22be3c955ac49da2e2107b67a');
+expect('md5: CJK hashes as UTF-8', md5(MD5_CJK), 'a7bac2239fcdcb3a067903d8077c4a07');
+expect('md5: an astral char is one 4-byte sequence',
+	md5(MD5_EMOJI), '2a02eac39d716a70ecf37579185927b6');
+expect('md5: CRLF is hashed as-is', md5(chr(0x0d) + chr(0x0a)),
+	'81051bcc2cf1bedf378224b0a93e2877');
+/* The grouphash shape itself: this is md5 of a subscription URL, i.e. what
+ * update_subscriptions.uc writes and what node.js has to reproduce after
+ * stripping the "#label" fragment. */
+expect('md5: the grouphash shape',
+	md5('https://example.com/sub?token=abc'), '89167ef6961b44a5ba6e799f7cf8cd30');
+
 printf('%d checks, %d failures\n', checks, failures);
 exit(failures ? 1 : 0);

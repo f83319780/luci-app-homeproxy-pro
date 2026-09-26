@@ -30,7 +30,11 @@ function render(ctx) {
 	ss.nodescriptions = true;
 	ss.modaltitle = L.bind(hp.loadModalTitle, hp, _('Rule set'), _('Add a rule set'), 'homeproxy');
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
-	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss);
+	/* Plain wrapper, not L.bind(): see hp.renderSectionAdd() for why the bound
+	 * form hands a call site's button factory to the wrong argument. */
+	ss.renderSectionAdd = function(extra_class) {
+		return hp.renderSectionAdd(ss, extra_class);
+	};
 
 	so = ss.option(form.Value, 'label', _('Label'));
 	so.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');

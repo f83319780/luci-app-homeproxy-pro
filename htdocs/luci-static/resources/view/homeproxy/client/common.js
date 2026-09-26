@@ -34,7 +34,11 @@ function renderRuleSection(s, kind, self) {
 	ss.modaltitle = L.bind(hp.loadModalTitle, hp, is_dns ? _('DNS rule') : _('Routing rule'),
 		is_dns ? _('Add a DNS rule') : _('Add a routing rule'), 'homeproxy');
 	ss.sectiontitle = L.bind(hp.loadDefaultLabel, self, 'homeproxy');
-	ss.renderSectionAdd = L.bind(hp.renderSectionAdd, self, ss);
+	/* Plain wrapper, not L.bind(): see hp.renderSectionAdd() for why the bound
+	 * form hands a call site's button factory to the wrong argument. */
+	ss.renderSectionAdd = function(extra_class) {
+		return hp.renderSectionAdd(ss, extra_class);
+	};
 
 	ss.tab('field_other', _('Other fields'));
 	ss.tab('field_host', _('Host/IP fields'));

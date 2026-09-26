@@ -38,6 +38,25 @@ const HP_CERT_PATH_ROOTS = [ '/etc/homeproxy/certs/', '/etc/acme/', '/etc/ssl/' 
    cannot repeat the same notification every few seconds. */
 const rpc_warned = new Set();
 
+/* RFC 1321 section 3.4's two per-round tables, for calcStringMD5() below.
+ *
+ * Both are derived constants, so they are built once here rather than per
+ * call: the node view hashes every subscription URL on every render.
+ *
+ *   MD5_S - the per-operation left-rotation amounts.
+ *   MD5_K - floor(abs(sin(i + 1)) * 2^32), the standard way to spell the
+ *           table without transcribing 64 magic numbers. */
+const MD5_S = [
+	7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+	5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+	4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+	6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+];
+
+const MD5_K = new Uint32Array(64);
+for (let i = 0; i < 64; i++)
+	MD5_K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296);
+
 return baseclass.extend({
 	dns_strategy: {
 		'': _('Default'),
@@ -706,78 +725,98 @@ return baseclass.extend({
 		return o;
 	},
 
-	calcStringMD5(e) {
-		/* Thanks to https://stackoverflow.com/a/41602636 */
-		let h = (a, b) => {
-			let c, d, e, f, g;
-			c = a & 2147483648;
-			d = b & 2147483648;
-			e = a & 1073741824;
-			f = b & 1073741824;
-			g = (a & 1073741823) + (b & 1073741823);
-			return e & f ? g ^ 2147483648 ^ c ^ d : e | f ? g & 1073741824 ? g ^ 3221225472 ^ c ^ d : g ^ 1073741824 ^ c ^ d : g ^ c ^ d;
-		}, k = (a, b, c, d, e, f, g) => h((a = h(a, h(h(b & c | ~b & d, e), g))) << f | a >>> 32 - f, b),
-		l = (a, b, c, d, e, f, g) => h((a = h(a, h(h(b & d | c & ~d, e), g))) << f | a >>> 32 - f, b),
-		m = (a, b, c, d, e, f, g) => h((a = h(a, h(h(b ^ c ^ d, e), g))) << f | a >>> 32 - f, b),
-		n = (a, b, c, d, e, f, g) => h((a = h(a, h(h(c ^ (b | ~d), e), g))) << f | a >>> 32 - f, b),
-		p = a => { let b = '', d = ''; for (let c = 0; c <= 3; c++) d = a >>> 8 * c & 255, d = '0' + d.toString(16), b += d.substr(d.length - 2, 2); return b; };
+	/* MD5 of the UTF-8 bytes of `input`, as 32 lowercase hex characters.
+	 *
+	 * WHY STILL HAND-ROLLED.  The obvious replacement, crypto.subtle.digest(),
+	 * does not do MD5: the Web Crypto specification requires only SHA-1,
+	 * SHA-256, SHA-384 and SHA-512, and browsers reject
+	 * crypto.subtle.digest('MD5', ...) with NotSupportedError - MD5 was left
+	 * out deliberately, being collision-broken.  Nor can this switch to
+	 * SHA-256: the value is compared against the `grouphash` option that
+	 * update_subscriptions.uc writes with ucode's own md5() (over the URL with
+	 * its fragment stripped) and repository.uc names each node section
+	 * md5(grouphash + label).  A different hash on either side stops matching,
+	 * and every existing install's subscription nodes would drop out of their
+	 * tabs.  MD5 is part of that cross-language contract, so it stays MD5.
+	 *
+	 * What the previous body got wrong, besides being an unreadable minified
+	 * snippet with h/k/l/m/n/p for names:
+	 *
+	 *   - it normalised CRLF to LF before hashing, which is not part of RFC
+	 *     1321 and cannot match ucode's md5() for an input containing CRLF;
+	 *   - it encoded UTF-8 one UTF-16 code unit at a time, so an astral
+	 *     character (any emoji) became invalid UTF-8 and a digest that could
+	 *     not match ucode's.
+	 *
+	 * Both are gone: the bytes hashed here are exactly TextEncoder's, the same
+	 * UTF-8 ucode's md5() hashes.  tests/frontend-md5.js pins this to the RFC
+	 * 1321 vectors and cross-checks it against Node's
+	 * crypto.createHash('md5'), so a future edit cannot drift unnoticed.
+	 *
+	 * Throws on a non-string.  The old body did too, but only by accident
+	 * (`null.replace` is a TypeError); TextEncoder would instead encode the
+	 * text "null" and return a digest, silently naming a section after a
+	 * string nobody asked for.  Hence the explicit check. */
+	calcStringMD5(input) {
+		if (typeof(input) !== 'string')
+			throw new TypeError('calcStringMD5: expected a string, got ' +
+				(input === null ? 'null' : typeof(input)));
 
-		let f = [], q, r, s, t, a, b, c, d;
-		e = (() => {
-			e = e.replace(/\r\n/g, '\n');
-			let b = '';
-			for (let d = 0; d < e.length; d++) {
-				let c = e.charCodeAt(d);
-				b += c < 128 ? String.fromCharCode(c) : c < 2048 ? String.fromCharCode(c >> 6 | 192) + String.fromCharCode(c & 63 | 128) :
-					String.fromCharCode(c >> 12 | 224) + String.fromCharCode(c >> 6 & 63 | 128) + String.fromCharCode(c & 63 | 128);
+		/* RFC 1321 sections 3.1/3.2: append 0x80, pad with zeros, then write
+		 * the original length in bits as a little-endian 64-bit integer, out
+		 * to the next multiple of 64 bytes. */
+		const bytes = new TextEncoder().encode(input);
+		const length = bytes.length;
+		const paddedLength = (((length + 8) >> 6) + 1) << 6;
+		const block = new Uint8Array(paddedLength);
+		block.set(bytes);
+		block[length] = 0x80;
+
+		const view = new DataView(block.buffer);
+		const bitLength = length * 8;
+		view.setUint32(paddedLength - 8, bitLength >>> 0, true);
+		view.setUint32(paddedLength - 4, Math.floor(bitLength / 4294967296), true);
+
+		let a0 = 0x67452301, b0 = 0xefcdab89, c0 = 0x98badcfe, d0 = 0x10325476;
+
+		for (let offset = 0; offset < paddedLength; offset += 64) {
+			/* This block as sixteen little-endian 32-bit words. */
+			const M = new Uint32Array(16);
+			for (let i = 0; i < 16; i++)
+				M[i] = view.getUint32(offset + i * 4, true);
+
+			let A = a0, B = b0, C = c0, D = d0;
+
+			for (let i = 0; i < 64; i++) {
+				let F, g;
+
+				/* RFC 1321 section 3.4: four rounds of sixteen operations,
+				 * each round with its own F() and its own word order. */
+				if (i < 16)      { F = (B & C) | (~B & D); g = i; }
+				else if (i < 32) { F = (D & B) | (~D & C); g = (5 * i + 1) % 16; }
+				else if (i < 48) { F = B ^ C ^ D;          g = (3 * i + 5) % 16; }
+				else             { F = C ^ (B | ~D);       g = (7 * i) % 16; }
+
+				F = (F + A + MD5_K[i] + M[g]) | 0;
+				A = D;
+				D = C;
+				C = B;
+				B = (B + ((F << MD5_S[i]) | (F >>> (32 - MD5_S[i])))) | 0;
 			}
-			return b;
-		})();
-		f = (() => {
-			let c = e.length, a = c + 8, d = 16 * ((a - a % 64) / 64 + 1), b = Array(d - 1), f = 0, g = 0;
-			for (; g < c;) a = (g - g % 4) / 4, f = g % 4 * 8, b[a] |= e.charCodeAt(g) << f, g++;
-			a = (g - g % 4) / 4, b[a] |= 128 << g % 4 * 8, b[d - 2] = c << 3, b[d - 1] = c >>> 29;
-			return b;
-		})();
 
-		a = 1732584193, b = 4023233417, c = 2562383102, d = 271733878;
-		for (e = 0; e < f.length; e += 16) {
-			q = a, r = b, s = c, t = d;
-			a = k(a, b, c, d, f[e +  0],  7, 3614090360), d = k(d, a, b, c, f[e +  1], 12, 3905402710),
-			c = k(c, d, a, b, f[e +  2], 17,  606105819), b = k(b, c, d, a, f[e +  3], 22, 3250441966),
-			a = k(a, b, c, d, f[e +  4],  7, 4118548399), d = k(d, a, b, c, f[e +  5], 12, 1200080426),
-			c = k(c, d, a, b, f[e +  6], 17, 2821735955), b = k(b, c, d, a, f[e +  7], 22, 4249261313),
-			a = k(a, b, c, d, f[e +  8],  7, 1770035416), d = k(d, a, b, c, f[e +  9], 12, 2336552879),
-			c = k(c, d, a, b, f[e + 10], 17, 4294925233), b = k(b, c, d, a, f[e + 11], 22, 2304563134),
-			a = k(a, b, c, d, f[e + 12],  7, 1804603682), d = k(d, a, b, c, f[e + 13], 12, 4254626195),
-			c = k(c, d, a, b, f[e + 14], 17, 2792965006), b = k(b, c, d, a, f[e + 15], 22, 1236535329),
-			a = l(a, b, c, d, f[e +  1],  5, 4129170786), d = l(d, a, b, c, f[e +  6],  9, 3225465664),
-			c = l(c, d, a, b, f[e + 11], 14,  643717713), b = l(b, c, d, a, f[e +  0], 20, 3921069994),
-			a = l(a, b, c, d, f[e +  5],  5, 3593408605), d = l(d, a, b, c, f[e + 10],  9,   38016083),
-			c = l(c, d, a, b, f[e + 15], 14, 3634488961), b = l(b, c, d, a, f[e +  4], 20, 3889429448),
-			a = l(a, b, c, d, f[e +  9],  5,  568446438), d = l(d, a, b, c, f[e + 14],  9, 3275163606),
-			c = l(c, d, a, b, f[e +  3], 14, 4107603335), b = l(b, c, d, a, f[e +  8], 20, 1163531501),
-			a = l(a, b, c, d, f[e + 13],  5, 2850285829), d = l(d, a, b, c, f[e +  2],  9, 4243563512),
-			c = l(c, d, a, b, f[e +  7], 14, 1735328473), b = l(b, c, d, a, f[e + 12], 20, 2368359562),
-			a = m(a, b, c, d, f[e +  5],  4, 4294588738), d = m(d, a, b, c, f[e +  8], 11, 2272392833),
-			c = m(c, d, a, b, f[e + 11], 16, 1839030562), b = m(b, c, d, a, f[e + 14], 23, 4259657740),
-			a = m(a, b, c, d, f[e +  1],  4, 2763975236), d = m(d, a, b, c, f[e +  4], 11, 1272893353),
-			c = m(c, d, a, b, f[e +  7], 16, 4139469664), b = m(b, c, d, a, f[e + 10], 23, 3200236656),
-			a = m(a, b, c, d, f[e + 13],  4,  681279174), d = m(d, a, b, c, f[e +  0], 11, 3936430074),
-			c = m(c, d, a, b, f[e +  3], 16, 3572445317), b = m(b, c, d, a, f[e +  6], 23,   76029189),
-			a = m(a, b, c, d, f[e +  9],  4, 3654602809), d = m(d, a, b, c, f[e + 12], 11, 3873151461),
-			c = m(c, d, a, b, f[e + 15], 16,  530742520), b = m(b, c, d, a, f[e +  2], 23, 3299628645),
-			a = n(a, b, c, d, f[e +  0],  6, 4096336452), d = n(d, a, b, c, f[e +  7], 10, 1126891415),
-			c = n(c, d, a, b, f[e + 14], 15, 2878612391), b = n(b, c, d, a, f[e +  5], 21, 4237533241),
-			a = n(a, b, c, d, f[e + 12],  6, 1700485571), d = n(d, a, b, c, f[e +  3], 10, 2399980690),
-			c = n(c, d, a, b, f[e + 10], 15, 4293915773), b = n(b, c, d, a, f[e +  1], 21, 2240044497),
-			a = n(a, b, c, d, f[e +  8],  6, 1873313359), d = n(d, a, b, c, f[e + 15], 10, 4264355552),
-			c = n(c, d, a, b, f[e +  6], 15, 2734768916), b = n(b, c, d, a, f[e + 13], 21, 1309151649),
-			a = n(a, b, c, d, f[e +  4],  6, 4149444226), d = n(d, a, b, c, f[e + 11], 10, 3174756917),
-			c = n(c, d, a, b, f[e +  2], 15,  718787259), b = n(b, c, d, a, f[e +  9], 21, 3951481745),
-			a = h(a, q), b = h(b, r), c = h(c, s), d = h(d, t);
+			a0 = (a0 + A) | 0;
+			b0 = (b0 + B) | 0;
+			c0 = (c0 + C) | 0;
+			d0 = (d0 + D) | 0;
 		}
-		return (p(a) + p(b) + p(c) + p(d)).toLowerCase();
+
+		/* The four state words are emitted little-endian, in order. */
+		let out = '';
+		for (let word of [ a0, b0, c0, d0 ])
+			for (let i = 0; i < 4; i++)
+				out += ((word >>> (i * 8)) & 0xff).toString(16).padStart(2, '0');
+
+		return out;
 	},
 
 	/* The single place that declares and calls a backend RPC.
@@ -955,8 +994,33 @@ return baseclass.extend({
 	 * a button to append after it; the node page passes one for its "Import
 	 * share links" action. That page used to carry a verbatim copy of this
 	 * whole method just to append the button, and the section is handed back
-	 * to the factory so the caller can bind the handler to itself. */
+	 * to the factory so the caller can bind the handler to itself.
+	 *
+	 * CALLING CONVENTION - call sites must NOT reach this through L.bind().
+	 * LuCI calls a section's renderSectionAdd() as
+	 * `this.renderSectionAdd(extra_class)`, so the method takes the section as
+	 * its first argument and the instance it is called on is thrown away.
+	 * `ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss)` therefore
+	 * pins `ss` correctly but leaves the two remaining slots to the *call
+	 * site*, which means `ss.renderSectionAdd(factory)` lands the factory in
+	 * `extra_class` and hands it to the DOM as a class string:
+	 * `InvalidCharacterError` and the whole tab fails to render. That shipped
+	 * once (see AGENTS.md). Use a one-line wrapper instead, which also keeps
+	 * `extra_button` reachable:
+	 *
+	 *   ss.renderSectionAdd = function(extra_class) {
+	 *       return hp.renderSectionAdd(ss, extra_class);
+	 *   };
+	 *
+	 * The guard below is the containment half of the fix, for a call site
+	 * that has not been converted yet: a lone factory in the `extra_class`
+	 * slot is treated as the button factory it was meant to be. */
 	renderSectionAdd(section, extra_class, extra_button) {
+		if (typeof(extra_button) !== 'function' && typeof(extra_class) === 'function') {
+			extra_button = extra_class;
+			extra_class = undefined;
+		}
+
 		let el = form.GridSection.prototype.renderSectionAdd.apply(section, [ extra_class ]),
 			nameEl = el.querySelector('.cbi-section-create-name');
 		ui.addValidator(nameEl, 'uciname', true, (v) => {
