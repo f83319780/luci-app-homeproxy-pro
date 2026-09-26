@@ -1005,8 +1005,8 @@ return baseclass.extend({
 	 * site*, which means `ss.renderSectionAdd(factory)` lands the factory in
 	 * `extra_class` and hands it to the DOM as a class string:
 	 * `InvalidCharacterError` and the whole tab fails to render. That shipped
-	 * once (see AGENTS.md). Use a one-line wrapper instead, which also keeps
-	 * `extra_button` reachable:
+	 * once (commit e598923 against the r23 baseline 67d2c3a). Use a one-line
+	 * wrapper instead, which also keeps `extra_button` reachable:
 	 *
 	 *   ss.renderSectionAdd = function(extra_class) {
 	 *       return hp.renderSectionAdd(ss, extra_class);
