@@ -4,7 +4,7 @@
  * Copyright (C) 2023 ImmortalWrt.org
  */
 
-import { access, mkdtemp, open, rmdir, unlink } from 'fs';
+import { access, lstat, mkdtemp, open, rmdir, unlink } from 'fs';
 import { urldecode_params } from 'luci.http';
 
 /* Global variables start */
@@ -171,7 +171,10 @@ export function executeCommand(...args) {
 		 * so every subscription between 512 KiB and 5 MiB was handed to the
 		 * parser as a truncated body with error: null - the size check
 		 * could never fire and the caller had no way to tell.  stderr keeps
-		 * the smaller cap: it is a diagnostic message, not a payload. */
+		 * the smaller cap: it is a diagnostic message, not a payload. The
+		 * stderr_truncated flag on the result tells the caller the cap
+		 * actually fired, so a "reload exited with status N" line is not
+		 * the only signal that something went wrong upstream. */
 		stdout = read_capped(outpath, HP_FETCH_CAP + 1);
 		stderr = read_capped(errpath, 1024 * 512);
 	} catch (e) {
@@ -185,12 +188,20 @@ export function executeCommand(...args) {
 
 	const binary = isBinary(stdout);
 
+	/* Did stderr actually overflow the 512 KiB cap?  The temp file is
+	 * unlinked right after this, so size is read while it still exists.
+	 * lstat() returns null on missing files, so the .size fallback is
+	 * defensive against an exception-driven early cleanup. */
+	const stderr_size = (lstat(errpath) || {}).size || 0;
+	const stderr_truncated = stderr_size > 1024 * 512;
+
 	cleanup_exec_dir(dir, outpath, errpath);
 
 	return {
 		command,
 		stdout: binary ? null : stdout,
 		stderr,
+		stderr_truncated,
 		exitcode,
 		binary
 	};

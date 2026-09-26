@@ -283,8 +283,7 @@ function main() {
 
 				apply_policy(node_canonical, { allow_insecure, packet_encoding });
 
-				push(node_result, []);
-				push(node_result[length(node_result)-1], node_canonical);
+				push(node_result, [ node_canonical ]);
 				node_cache[groupHash][confHash] = node_canonical;
 				node_cache[groupHash][nameHash] = node_canonical;
 
@@ -377,6 +376,12 @@ function main() {
 	if (reload.exitcode !== 0)
 		log(sprintf('Warning: reload exited with status %d: %s',
 			reload.exitcode, trim(reload.stderr || '')));
+	else if (reload.stderr_truncated)
+		/* Non-zero exit + stderr_truncated is unambiguous; the
+		 * log line above already carries the message. The truncated
+		 * case is the subtle one: a clean exit can still hide a
+		 * sing-box check warning that was truncated out of view. */
+		log('Warning: reload stderr was truncated (>512 KiB); the captured output is incomplete.');
 
 	log(sprintf('%s nodes added, %s removed.', added, removed));
 	log('Successfully updated subscriptions.');
