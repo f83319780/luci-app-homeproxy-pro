@@ -5,8 +5,12 @@ msgstr "Content-Type: text/plain; charset=UTF-8"
 msgid "%s log"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:830
+#: htdocs/luci-static/resources/view/homeproxy/node.js:883
 msgid "%s nodes removed"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:828
+msgid "(empty)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/status.js:113
@@ -197,10 +201,6 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/server.js:435
 msgid "Alternative TLS port"
-msgstr ""
-
-#: htdocs/luci-static/resources/view/homeproxy/node.js:791
-msgid "An error occurred during updating subscriptions: %s"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client/common.js:301
@@ -443,6 +443,10 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:165
 msgid "Conservative"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:796
+msgid "Could not start subscription update: %s"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client/routing.js:86
@@ -1754,7 +1758,7 @@ msgstr ""
 msgid "No subscription available"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:811
+#: htdocs/luci-static/resources/view/homeproxy/node.js:864
 msgid "No subscription node"
 msgstr ""
 
@@ -2157,7 +2161,7 @@ msgstr ""
 msgid "Remote"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:808
+#: htdocs/luci-static/resources/view/homeproxy/node.js:861
 msgid "Remove %s nodes"
 msgstr ""
 
@@ -2165,7 +2169,7 @@ msgstr ""
 msgid "Remove EDNS client subnet"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:798
+#: htdocs/luci-static/resources/view/homeproxy/node.js:851
 msgid "Remove all nodes from subscriptions"
 msgstr ""
 
@@ -2497,6 +2501,22 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:707
 msgid "Subscription URL-s"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:827
+msgid "Subscription update did not complete cleanly. Last log:"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:792
+msgid ""
+"Subscription update is already running. This page will reload when the "
+"previous run finishes."
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:837
+msgid ""
+"Subscription update is taking longer than 90 seconds. Check the log and "
+"reload manually."
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:691
@@ -3007,6 +3027,10 @@ msgstr ""
 msgid "Update via proxy"
 msgstr ""
 
+#: htdocs/luci-static/resources/view/homeproxy/node.js:800
+msgid "Updating subscriptions…"
+msgstr ""
+
 #: htdocs/luci-static/resources/view/homeproxy/node.js:457
 msgid "Upload ECH config"
 msgstr ""
@@ -3255,6 +3279,10 @@ msgstr ""
 
 #: htdocs/luci-static/resources/homeproxy.js:1073
 msgid "unique value"
+msgstr ""
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:796
+msgid "unknown error"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:94

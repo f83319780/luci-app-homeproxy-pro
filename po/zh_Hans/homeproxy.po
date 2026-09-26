@@ -12,9 +12,13 @@ msgstr ""
 msgid "%s log"
 msgstr "%s 日志"
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:830
+#: htdocs/luci-static/resources/view/homeproxy/node.js:883
 msgid "%s nodes removed"
 msgstr "移除了 %s 个节点"
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:828
+msgid "(empty)"
+msgstr "(空)"
 
 #: htdocs/luci-static/resources/view/homeproxy/status.js:113
 msgid "(last updated %s)"
@@ -208,10 +212,6 @@ msgstr "替代 HTTP 端口"
 #: htdocs/luci-static/resources/view/homeproxy/server.js:435
 msgid "Alternative TLS port"
 msgstr "替代 HTTPS 端口"
-
-#: htdocs/luci-static/resources/view/homeproxy/node.js:791
-msgid "An error occurred during updating subscriptions: %s"
-msgstr "更新订阅时发生错误：%s"
 
 #: htdocs/luci-static/resources/view/homeproxy/client/common.js:301
 msgid "Answer"
@@ -457,6 +457,10 @@ msgstr "连接复用"
 #: htdocs/luci-static/resources/view/homeproxy/node.js:165
 msgid "Conservative"
 msgstr "保守"
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:796
+msgid "Could not start subscription update: %s"
+msgstr "无法启动订阅更新：%s"
 
 #: htdocs/luci-static/resources/view/homeproxy/client/routing.js:86
 msgid "Custom routing"
@@ -1799,7 +1803,7 @@ msgstr "无额外加密支持：它基本上是重复加密。"
 msgid "No subscription available"
 msgstr "无可用订阅"
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:811
+#: htdocs/luci-static/resources/view/homeproxy/node.js:864
 msgid "No subscription node"
 msgstr "无订阅节点"
 
@@ -2202,7 +2206,7 @@ msgstr "拒绝"
 msgid "Remote"
 msgstr "远程"
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:808
+#: htdocs/luci-static/resources/view/homeproxy/node.js:861
 msgid "Remove %s nodes"
 msgstr "移除 %s 个节点"
 
@@ -2210,7 +2214,7 @@ msgstr "移除 %s 个节点"
 msgid "Remove EDNS client subnet"
 msgstr "移除 EDNS Client Subnet"
 
-#: htdocs/luci-static/resources/view/homeproxy/node.js:798
+#: htdocs/luci-static/resources/view/homeproxy/node.js:851
 msgid "Remove all nodes from subscriptions"
 msgstr "移除所有订阅节点"
 
@@ -2557,6 +2561,22 @@ msgstr "订阅（%s）"
 #: htdocs/luci-static/resources/view/homeproxy/node.js:707
 msgid "Subscription URL-s"
 msgstr "订阅地址"
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:827
+msgid "Subscription update did not complete cleanly. Last log:"
+msgstr "订阅更新未正常完成。最新日志："
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:792
+msgid ""
+"Subscription update is already running. This page will reload when the "
+"previous run finishes."
+msgstr "订阅更新已在运行中。本次页面会在上轮更新完成后自动刷新。"
+
+#: htdocs/luci-static/resources/view/homeproxy/node.js:837
+msgid ""
+"Subscription update is taking longer than 90 seconds. Check the log and "
+"reload manually."
+msgstr "订阅更新耗时已超过 90 秒。请查看日志并手动刷新页面。"
 
 #: htdocs/luci-static/resources/view/homeproxy/node.js:691
 msgid "Subscriptions"
@@ -3095,6 +3115,10 @@ msgstr "更新时间"
 msgid "Update via proxy"
 msgstr "使用代理更新"
 
+#: htdocs/luci-static/resources/view/homeproxy/node.js:800
+msgid "Updating subscriptions…"
+msgstr "正在更新订阅…"
+
 #: htdocs/luci-static/resources/view/homeproxy/node.js:457
 msgid "Upload ECH config"
 msgstr "上传 ECH 配置"
@@ -3354,6 +3378,10 @@ msgstr "独立 UCI 标识"
 msgid "unique value"
 msgstr "独立值"
 
+#: htdocs/luci-static/resources/view/homeproxy/node.js:796
+msgid "unknown error"
+msgstr "未知错误"
+
 #: htdocs/luci-static/resources/view/homeproxy/node.js:94
 #: htdocs/luci-static/resources/view/homeproxy/node.js:202
 #: htdocs/luci-static/resources/view/homeproxy/node.js:531
@@ -3448,6 +3476,9 @@ msgstr "使用额外标签时 URL 需包含 {tag}"
 #: htdocs/luci-static/resources/view/homeproxy/client/subscription.js:122
 msgid "{tag} in initial path when extra tags are used"
 msgstr "使用额外标签时初始路径需包含 {tag}"
+
+#~ msgid "An error occurred during updating subscriptions: %s"
+#~ msgstr "更新订阅时发生错误：%s"
 
 #~ msgid "Persist DNS cache across restarts (replaces Store RDRC)."
 #~ msgstr "重启后持久化 DNS 缓存（替代 Store RDRC）。"

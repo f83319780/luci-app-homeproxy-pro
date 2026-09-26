@@ -14,7 +14,8 @@
 					"connection_check",
 					"node_parse",
 					"resources_get_version",
-					"singbox_get_features"
+					"singbox_get_features",
+					"update_subscriptions_status"
 				]
 			},
 			"uci": [ "homeproxy" ]
