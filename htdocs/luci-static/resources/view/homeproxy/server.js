@@ -175,7 +175,11 @@ return view.extend({
 		s.nodescriptions = true;
 		s.modaltitle = L.bind(hp.loadModalTitle, hp, _('Server'), _('Add a server'), 'homeproxy');
 		s.sectiontitle = L.bind(hp.loadDefaultLabel, this, 'homeproxy');
-		s.renderSectionAdd = L.bind(hp.renderSectionAdd, this, s);
+		/* Plain wrapper, not L.bind(): see hp.renderSectionAdd() for why the
+		 * bound form hands a call site's button factory to the wrong argument. */
+		s.renderSectionAdd = function(extra_class) {
+			return hp.renderSectionAdd(s, extra_class);
+		};
 
 		o = s.option(form.Value, 'label', _('Label'));
 		o.load = L.bind(hp.loadDefaultLabel, this, 'homeproxy');

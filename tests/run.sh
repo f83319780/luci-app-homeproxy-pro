@@ -124,6 +124,15 @@ echo "== frontend view wiring =="
 # read the wrong UCI section (and therefore never actually guarded anything).
 node "$ROOT/tests/frontend-view-wiring.js" "$ROOT" || FAILED=1
 
+echo "== frontend MD5 (the grouphash contract) =="
+# calcStringMD5() has to be RFC 1321 MD5 and nothing else: its output is
+# compared against the md5() ucode writes into a node's `grouphash`, so a
+# non-standard variant does not error - it silently drops a subscription's
+# nodes out of their tab. crypto.subtle has no MD5, so the implementation is
+# hand-rolled; this is what keeps it honest. The ucode half is pinned to the
+# same vectors in tests/ucode/test_subscription_repository.uc.
+node "$ROOT/tests/frontend-md5.js" "$ROOT" || FAILED=1
+
 echo "== runtime extraction equivalence (PR-05) =="
 # Pure shell: no ucode/sing-box needed, so it runs before the local-or-SSH
 # branch below. A host without the toolchain can still prove that the init
