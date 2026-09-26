@@ -410,7 +410,14 @@ const methods = {
 		 * updater is still running (lock file present) and the last ~12
 		 * lines of the homeproxy log so the page can show what the run
 		 * said without re-reading everything. The log is world-readable
-		 * and is rotated by runtime/service.sh -> log-cleaner.sh. */
+		 * and is rotated by runtime/service.sh -> log-cleaner.sh.
+		 *
+		 * `readfile()` returns null (not throws) on a missing file in this
+		 * ucode build, and the downstream split/slice/join then propagate
+		 * that null straight through. Guard with a truthy check on the
+		 * raw text so log_tail stays a string even when the log has never
+		 * been written - the test_rpc_methods shape contract pins it as
+		 * `string`, and the UI otherwise shows "null" in the toast. */
 		call: function() {
 			const lock = `${RUN_DIR}/update_subscriptions.lock`;
 			const running = !!lstat(lock);
@@ -418,9 +425,11 @@ const methods = {
 			let tail = '';
 			try {
 				const text = readfile(`${LOG_PATH}`);
-				const lines = split(text, '\n');
-				const start = length(lines) > 12 ? length(lines) - 12 : 0;
-				tail = join('\n', slice(lines, start));
+				if (text) {
+					const lines = split(text, '\n');
+					const start = length(lines) > 12 ? length(lines) - 12 : 0;
+					tail = join('\n', slice(lines, start)) || '';
+				}
 			} catch (e) {
 				tail = '';
 			}

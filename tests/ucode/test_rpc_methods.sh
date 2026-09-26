@@ -212,8 +212,8 @@ check('certificate_write tolerates an empty request', threw == null, threw);
 	 * deterministically. */
 	const sret = rpc.update_subscriptions_status.call({ args: {} });
 	check('update_subscriptions_status returns an object', type(sret) === 'object');
-	check('update_subscriptions_status.running is a boolean',
-		type(sret.running) === 'boolean',
+	check('update_subscriptions_status.running is a bool',
+		type(sret.running) === 'bool',
 		sprintf('got %J', sret));
 	check('update_subscriptions_status.log_tail is a string',
 		type(sret.log_tail) === 'string',
