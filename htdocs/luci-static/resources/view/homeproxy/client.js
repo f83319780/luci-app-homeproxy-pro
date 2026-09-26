@@ -71,6 +71,14 @@ function renderStatus(isRunning, version) {
 }
 
 let stubValidator = {
+	/* Forward the type functions from the real validator module and let
+	 * them call back into their factory. validation.js exports the
+	 * ValidatorFactory instance; without `factory` here the chained
+	 * apply() falls off the edge and `this.factory.parseIPv4` throws
+	 * "undefined is not an object" the first time a node's address is
+	 * fed through `ip6addr`/`ip4addr`/`cidr4`/etc. (commit 67d2c3a
+	 * missed the factory wiring when it added this helper). */
+	factory: validation,
 	apply(type, value, args) {
 		if (value != null)
 			this.value = value;
