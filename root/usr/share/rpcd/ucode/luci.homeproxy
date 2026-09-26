@@ -20,6 +20,7 @@ function hasKernelModule(kmod) {
 
 const HP_DIR = '/etc/homeproxy';
 const RUN_DIR = '/var/run/homeproxy';
+const LOG_PATH = `${RUN_DIR}/homeproxy.log`;
 
 /* Queried by singbox_get_features and by node_parse: the share-link parser
  * skips QUIC protocols and uTLS fingerprints the running sing-box cannot
@@ -369,21 +370,62 @@ const methods = {
 		 * action instead, and the ACL lists no executable path at all
 		 * (arch-guard 30).
 		 *
-		 * executeCommand() (homeproxy.uc) returns the exit status and the
-		 * captured stdout/stderr, so a failing update reaches the UI as a
-		 * message rather than as a silent no-op. Its argument is
-		 * shellQuote()d: the helper joins what it is given into one shell
-		 * line, so an unquoted path would be re-split by /bin/sh. */
+		 * The previous synchronous shape returned the orchestrator's exit
+		 * status and captured stderr, but the full pipeline (wget fetch
+		 * through a CN -> overseas link, UCI commit, /etc/init.d/homeproxy
+		 * reload, the 30 s sing-box health gate) regularly took 10-15 s,
+		 * which exceeded the browser XHR timeout on every browser we tried.
+		 * The UI button then surfaced "XHR request timed out" while the
+		 * backend happily completed the work; the user was left with a
+		 * stale page and no obvious way to know whether anything happened.
+		 *
+		 * The fix: spawn the script detached via "sh -c '... &'", return
+		 * immediately, and let the frontend poll update_subscriptions_status
+		 * until the orchestrator's lock file is gone (created in
+		 * acquire_lock(), removed on every exit path). The lock is also
+		 * what serialises two simultaneous updates, so refusing a second
+		 * call while the lock is present is consistent with the script's
+		 * own behaviour. The script's stdio is redirected so it cannot
+		 * block on a closed pipe when the rpcd process exits. */
 		call: function() {
-			const script = shellQuote(`${HP_DIR}/scripts/update_subscriptions.uc`);
-			const result = executeCommand(script);
+			const lock = `${RUN_DIR}/update_subscriptions.lock`;
+			if (lstat(lock))
+				return { result: false, error: 'Subscription update already running', running: true };
 
-			return {
-				result: result.exitcode === 0,
-				exitcode: result.exitcode,
-				stdout: result.stdout,
-				stderr: result.stderr
-			};
+			/* Trailing '&' is what makes this return immediately: /bin/sh
+			 * backgrounds the script before the shell exits, and system()
+			 * sees only the (sub-)shell's exit. Redirections (<dev/null,
+			 * >dev/null, 2>&1) are the other half: the orphaned script
+			 * must not hold open any fd inherited from rpcd, or it
+			 * keeps rpcd's stdio alive across the call. */
+			const script = shellQuote(`${HP_DIR}/scripts/update_subscriptions.uc`);
+			system(`sh -c ${shellQuote(`${script} </dev/null >/dev/null 2>&1 &`)}`);
+
+			return { result: true, async: true };
+		}
+	},
+
+	update_subscriptions_status: {
+		/* Status companion to update_subscriptions. Reports whether the
+		 * updater is still running (lock file present) and the last ~12
+		 * lines of the homeproxy log so the page can show what the run
+		 * said without re-reading everything. The log is world-readable
+		 * and is rotated by runtime/service.sh -> log-cleaner.sh. */
+		call: function() {
+			const lock = `${RUN_DIR}/update_subscriptions.lock`;
+			const running = !!lstat(lock);
+
+			let tail = '';
+			try {
+				const text = readfile(`${LOG_PATH}`);
+				const lines = split(text, '\n');
+				const start = length(lines) > 12 ? length(lines) - 12 : 0;
+				tail = join('\n', slice(lines, start));
+			} catch (e) {
+				tail = '';
+			}
+
+			return { running, log_tail: tail };
 		}
 	}
 };

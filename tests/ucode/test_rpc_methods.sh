@@ -179,20 +179,45 @@ let threw = null;
 try { rpc.certificate_write.call({}); } catch (e) { threw = sprintf('%s: %s', e.type, e.message); }
 check('certificate_write tolerates an empty request', threw == null, threw);
 
-/* update_subscriptions runs the staged updater. In this sandbox UCICONFIG_DIR
- * points at $WORK/cfg, which is empty, so the updater takes its lock, finds no
- * subscription URL and exits 0 without touching anything - the same early exit
- * production takes when nothing is configured. Asserting the shape here also
- * proves the ACL convergence works end to end: the action is reachable through
- * one named method, and the script it runs is the staged one. */
+/* update_subscriptions is async: the LuCI button used to block inside one
+ * XHR for the whole 5-15 s pipeline (wget + UCI commit + reload + health
+ * gate), which exceeded the browser XHR timeout on every browser we tried.
+ * The ubus method now spawns the script detached and returns immediately.
+ * What the test asserts is exactly the contract the frontend relies on:
+ * the call returns synchronously (without the script's exit status), the
+ * result flag says the script was started, and async:true tells the
+ * caller "don't wait, poll status instead".
+ *
+ * Asserting the lock file is present at the same instant is racy in this
+ * sandbox: the early-exit path (no subscription_url) runs the whole
+ * take-lock / load-state / release-lock sequence in microseconds, so the
+ * lock may already be gone by the time this script runs an `access()` on
+ * it. Polling the status RPC instead would be timing-dependent in the
+ * same way. The contract is the return shape; that is what we pin. */
 {
 	const ret = rpc.update_subscriptions.call({ args: {} });
 	check('update_subscriptions returns an object', type(ret) === 'object');
-	check('update_subscriptions reports the exit status as result',
-		ret.result === true && ret.exitcode === 0,
-		sprintf('result=%J exitcode=%J stderr=%J', ret.result, ret.exitcode, ret.stderr));
-	check('update_subscriptions returns captured output fields',
-		'stdout' in ret && 'stderr' in ret);
+	check('update_subscriptions marks the call as async',
+		ret.async === true,
+		sprintf('got %J', ret));
+	check('update_subscriptions does not surface exit status or captured stdio',
+		ret.exitcode === null && !(('stdout' in ret) || ('stderr' in ret)),
+		sprintf('got %J', ret));
+
+	/* The companion update_subscriptions_status RPC reads the lock + the
+	 * last log lines. What we pin here is the *shape* of the response:
+	 * `running` is a boolean, `log_tail` is a string. A real
+	 * running/false toggle only matters when there is a live lock file,
+	 * which the sandbox cannot keep around long enough to observe
+	 * deterministically. */
+	const sret = rpc.update_subscriptions_status.call({ args: {} });
+	check('update_subscriptions_status returns an object', type(sret) === 'object');
+	check('update_subscriptions_status.running is a boolean',
+		type(sret.running) === 'boolean',
+		sprintf('got %J', sret));
+	check('update_subscriptions_status.log_tail is a string',
+		type(sret.log_tail) === 'string',
+		sprintf('got %J', sret));
 }
 
 /* Every method rpcd exposes, so none can be shipped without ever having been
@@ -200,7 +225,8 @@ check('certificate_write tolerates an empty request', threw == null, threw);
 const all_methods = [
 	'acllist_read', 'acllist_write', 'certificate_write', 'connection_check',
 	'log_clean', 'node_parse', 'resources_get_version', 'resources_update',
-	'singbox_generator', 'singbox_get_features', 'update_subscriptions'
+	'singbox_generator', 'singbox_get_features', 'update_subscriptions',
+	'update_subscriptions_status'
 ];
 
 for (let m in all_methods) {

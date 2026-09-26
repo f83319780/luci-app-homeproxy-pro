@@ -771,27 +771,80 @@ return view.extend({
 			}
 		}
 		o.onclick = function() {
-			/* Through the ubus method, not fs.exec_direct() on the script: the
-			   file-exec form is what forced the ACL to grant `exec` on a
-			   root-owned entry point. The method returns the updater's exit
-			   status and captured stderr, so a failure is shown instead of the
-			   page reloading as if it had worked.
+			/* The updater pipeline (wget through a CN -> overseas link,
+			   UCI commit, /etc/init.d/homeproxy reload, the 30 s sing-box
+			   health gate) takes 5-15 s on a real device, which exceeds
+			   the browser XHR timeout. The old synchronous RPC waited
+			   for the whole thing inside one XHR; the browser saw
+			   "XHR request timed out" while the backend completed
+			   cleanly, and the user got a stale page with no signal.
 
-			   That only holds if the reload waits for the notification: it used
-			   to run in the same tick, so the notice was destroyed with the
-			   document and a failed update looked exactly like a successful one
-			   (the page just refreshed). Failures therefore return the
-			   notification's promise - it resolves when the user dismisses the
-			   notice - and only a success reloads. The message goes in as an
-			   array so the updater's captured stderr is rendered as text, not
-			   as markup. */
+			   The ubus method now spawns the script detached and
+			   returns immediately with {result:true, async:true}; we
+			   poll update_subscriptions_status (which reads the
+			   orchestrator's lock + the last log lines) until the run
+			   finishes, then reload. A failure is a status poll that
+			   stays in 'running' past the deadline, or a log tail that
+			   never recorded the success marker. */
 			return hp.rpcCall('update_subscriptions').then((res) => {
+				if (res && res.running)
+					return ui.addNotification(null, E('p',
+						_('Subscription update is already running. This page will reload when the previous run finishes.')));
+
 				if (res && res.result === false)
 					return ui.addNotification(null, E('p', [
-						_('An error occurred during updating subscriptions: %s').format(res.stderr || '')
+						_('Could not start subscription update: %s').format(res.error || _('unknown error'))
 					]));
 
-				return location.reload();
+				const notification = ui.addNotification(null,
+					E('p', _('Updating subscriptions\u2026')));
+
+				/* 90 s is a generous ceiling: even a slow fetch plus a
+				   worst-case 60 s rollback restart fits, and a stuck
+				   poll past that is worth telling the user about
+				   rather than reloading silently. */
+				const deadline = Date.now() + 90000;
+
+				const poll = () => hp.rpcCall('update_subscriptions_status').then((s) => {
+					if (!s || !s.running) {
+						/* Detect a clean run by looking for the
+						 * success marker the orchestrator writes at
+						 * the very end ("Successfully updated
+						 * subscriptions"). A run that ends without
+						 * it - the orchestrator's try/catch still
+						 * removes the lock - is treated as a
+						 * failure so the user sees what went
+						 * wrong instead of reloading onto a
+						 * silently broken state. */
+						const ok = s && s.log_tail &&
+							/Successfully updated subscriptions/m.test(s.log_tail);
+						return Promise.resolve(notification).then((n) => {
+							if (n && typeof n.close === 'function')
+								n.close();
+							if (ok)
+								return location.reload();
+							return ui.addNotification(null, E('p', [
+								_('Subscription update did not complete cleanly. Last log:'),
+								E('pre', {}, s && s.log_tail ? s.log_tail : _('(empty)'))
+							]));
+						});
+					}
+					if (Date.now() > deadline) {
+						return Promise.resolve(notification).then((n) => {
+							if (n && typeof n.close === 'function')
+								n.close();
+							return ui.addNotification(null, E('p',
+								_('Subscription update is taking longer than 90 seconds. Check the log and reload manually.')));
+						});
+					}
+					return new Promise((resolve) => setTimeout(resolve, 1000)).then(poll);
+				}).catch(() => {
+					/* A transient RPC failure (ubusd hiccup, etc.)
+					 * is not the run failing - keep polling. */
+					return new Promise((resolve) => setTimeout(resolve, 1000)).then(poll);
+				});
+
+				return poll();
 			});
 		}
 
