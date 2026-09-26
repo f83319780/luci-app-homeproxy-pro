@@ -22,9 +22,6 @@
 
 ## 按功能性对比
 
-> 这一节的"36 guards / 131 checks / 78 测试文件"等数字均由 `sh tests/print-stats.sh`
-> 实测打印，不在文档里手工维护。代码位置列指向当前 HEAD 的具体文件 / 行号 / guard 编号，diff 可追溯。
-
 ### 代码组织
 
 | 维度 | upstream 形态 | pro 形态 | 证据 |
@@ -34,7 +31,7 @@
 | 协议建模 | 单 `parse_uri.uc` 内 13 个 scheme 分支 | `parser/{uri,flatten,normalize,mapping,protocols,validator}.uc` 6 个文件 + canonical Node 模型 + adapter table | `root/etc/homeproxy/scripts/parser/` + `config/{model,adapter}.uc` |
 | Tab 模块化 | 1 个 `client.js` 含 12 个 Tab 渲染 | `homeproxy.js` (1153 行 helpers) + 4 顶层 view + 8 个 `client/*.js`；helpers 集中 RPC / MD5 / validators / statusPoller / renderSectionAdd / uploadCertificate | `view/homeproxy/client/{routing,nodes,dns,access,subscription,udp_nat,tun_dns,common}.js` |
 
-### 正确性
+### 稳定性
 
 | 维度 | upstream 形态 | pro 形态 | 证据 |
 |---|---|---|---|
@@ -74,7 +71,7 @@
 | 协议增改成本 | 改 110 行 ternary（README 旧行） | 改 5 个表行：`model.uc CREDENTIALS` + `loader.uc PROTOCOL_OPTIONS` + `adapter.uc OPTION_FIELDS` + `fixtures/` + golden snapshot；arch-guard 5 强制 fixtures 同步 | `config/{model,loader,adapter}.uc` + `tests/fixtures/generators/` |
 | 资源更新 | jsdelivr 单一镜像 | 4 镜像 fallback（`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `cdn.jsdelivr.net` / `raw.githubusercontent.com`）+ UI「上次成功时间」（arch-guard 17 / 18 锁） | `runtime/dns.sh` + arch-guard 17 / 18 |
 | ECH 上传 | 后端 case 缺失 | 补齐 `client_ech_conf` 标签 + `isValidECHConfig()` PEM 校验；ACL 显式列 4 个 tmp 路径 | `homeproxy.uc:isValidECHConfig` + `luci.homeproxy:certificate_write` |
-| 默认测试主机 | 硬编码作者内网 IP | `HP_TEST_HOST` 注入，未设时 fail-fast；`on-target.yml` 显式拒绝 192.168.1.1；ssh 前 `ssh -o ConnectTimeout=5` 先确认可达（不要从记忆里写地址） | `tests/run.sh` + `.github/workflows/on-target.yml` |
+| 默认测试主机 | 硬编码作者内网 IP | `HP_TEST_HOST` 注入，未设时 fail-fast；`on-target.yml` ；ssh 前 `ssh -o ConnectTimeout=5` 先确认可达（不要从记忆里写地址） | `tests/run.sh` + `.github/workflows/on-target.yml` |
 | 文档 | 标准（README + CONTRIBUTING + SECURITY） | 精简（README only），`docs/` 自 2026-09-16 起只留本地（untrack + `.gitignore`），远端公开仓库不再发布 | `README.md` + `docs/`（本地） |
 | 路由 ops | — | 替换文件只动 JS / menu / acl / rpcd ucode（reload 不影响网络）；更深层改动前 `cp /etc/config/homeproxy /tmp/hp-r<NN>-preflight-<DATE>/`，保留上一发版 .apk 24h；`killall -HUP rpcd` 由 apk scripts 自动做 | `runtime/{config,service}.sh` |
 
@@ -91,12 +88,6 @@
 欢迎 issue / PR。架构边界规则是可执行的，固化在 `tests/arch-guard.sh`（PR 必跑，
 每条规则都注明对应的 guard）；架构层面的变更请先开 issue 讨论，避免在
 PR review 里来回拉扯。
-
-## 漏洞上报
-
-代理类项目请不要在公开 issue 里讨论可被利用的细节（如订阅 token 格式、capabilities
-边界、XSS 载荷等）。安全相关问题请通过 GitHub Security Advisabilities 渠道提交，
-或联系 maintainer 私下沟通。
 
 ## License
 
