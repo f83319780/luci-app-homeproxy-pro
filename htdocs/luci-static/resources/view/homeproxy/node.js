@@ -666,12 +666,25 @@ return view.extend({
 		/* The shared renderer (homeproxy.js) appends the extra button this
 		 * page needs; it used to carry a verbatim copy of the whole method.
 		 * The factory gets the section back so the handler binds to it, the
-		 * same receiver the copy's `this` had. */
-		ss.renderSectionAdd = L.bind(hp.renderSectionAdd, this, ss, (section) => E('button', {
+		 * same receiver the copy's `this` had.
+		 *
+		 * Why a plain wrapper, not L.bind(hp.renderSectionAdd, this, ss, factory):
+		 * L.bind forwards its preset args in front of the caller's args, so
+		 * the bound function calls hp.renderSectionAdd.call(this, ss, factory,
+		 * extra_class) - the factory ends up in the extra_class slot and the
+		 * parent's classList.add() then coerces the function source to a
+		 * string and throws InvalidCharacterError the moment CBI invokes
+		 * renderSectionAdd('cbi-tblsection-create'). Passing them through
+		 * in their natural positions (section, extra_class, extra_button)
+		 * is the only order that lines up. */
+		const importShareLinksFactory = (section) => E('button', {
 			'class': 'cbi-button cbi-button-add',
 			'title': _('Import share links'),
 			'click': ui.createHandlerFn(section, 'handleLinkImport')
-		}, [ _('Import share links') ]));
+		}, [ _('Import share links') ]);
+		ss.renderSectionAdd = function(extra_class) {
+			return hp.renderSectionAdd(ss, extra_class, importShareLinksFactory);
+		};
 		/* Import subscription links end */
 		/* User nodes end */
 
