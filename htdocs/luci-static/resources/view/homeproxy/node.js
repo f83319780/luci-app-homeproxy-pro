@@ -812,6 +812,23 @@ return view.extend({
 				const notification = ui.addNotification(null,
 					E('p', _('Updating subscriptions\u2026')));
 
+				/* The status page already drives LuCI's poll-status
+				 * indicator via hp.statusPoller(); client/server do
+				 * too. The node view polls on demand for a single
+				 * click, so it doesn't go through that path - mirror
+				 * the same "Refreshing\u2026" pill on the top right
+				 * via ui.showIndicator so the user sees the same
+				 * affordance on every tab. The hide is in every exit
+				 * branch below; without it the indicator would survive
+				 * until the next page load. */
+				ui.showIndicator('hp-subscriptions',
+					_('Updating subscriptions\u2026'));
+
+				const finish = (fn) => {
+					ui.hideIndicator('hp-subscriptions');
+					return fn();
+				};
+
 				/* 90 s is a generous ceiling: even a slow fetch plus a
 				   worst-case 60 s rollback restart fits, and a stuck
 				   poll past that is worth telling the user about
@@ -835,19 +852,19 @@ return view.extend({
 							if (n && typeof n.close === 'function')
 								n.close();
 							if (ok)
-								return location.reload();
-							return ui.addNotification(null, E('p', [
+								return finish(() => location.reload());
+							return finish(() => ui.addNotification(null, E('p', [
 								_('Subscription update did not complete cleanly. Last log:'),
 								E('pre', {}, s && s.log_tail ? s.log_tail : _('(empty)'))
-							]));
+							])));
 						});
 					}
 					if (Date.now() > deadline) {
 						return Promise.resolve(notification).then((n) => {
 							if (n && typeof n.close === 'function')
 								n.close();
-							return ui.addNotification(null, E('p',
-								_('Subscription update is taking longer than 90 seconds. Check the log and reload manually.')));
+							return finish(() => ui.addNotification(null, E('p',
+								_('Subscription update is taking longer than 90 seconds. Check the log and reload manually.'))));
 						});
 					}
 					return new Promise((resolve) => setTimeout(resolve, 1000)).then(poll);
