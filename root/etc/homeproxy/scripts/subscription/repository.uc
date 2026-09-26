@@ -80,6 +80,14 @@ import { flatten } from '../parser/flatten.uc';
  * single commit is the boundary of "this run wrote something". */
 function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 	let added = 0, removed = 0;
+	/* Mark the canonical Node objects the foreach loop above has
+	 * already updated in place, so the second loop skips them. We
+	 * use object identity (the same Node object is held in node_cache
+	 * and in node_result, so `seen[node] === node` works as a set),
+	 * not the section name or nameHash: the orchestrator hands the
+	 * Repository the same Node instances, and tying the marker to the
+	 * object means a stale string key cannot match a renamed node. */
+	const seen = {};
 
 	uci.foreach(uciconfig, ucinode, (cfg) => {
 		/* User-created nodes do not have a grouphash. The
@@ -131,12 +139,12 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 				uci.delete(uciconfig, cfg['.name'], v);
 		}
 
-		incoming.isExisting = true;
+		seen[incoming] = true;
 	});
 
 	for (let nodes in node_result)
 		map(nodes, (node) => {
-			if (node.isExisting)
+			if (seen[node])
 				return null;
 
 			/* normalize() exposes the source label as `name`; `label`
@@ -171,6 +179,44 @@ function apply_nodes(uci, uciconfig, ucinode, node_cache, node_result, log) {
 }
 
 /* --- apply_main_node_refs ---------------------------------------------- */
+
+/* Prune the entries of an UCI list that no longer point at a live
+ * node. Used twice below for `main_urltest_nodes` and
+ * `main_udp_urltest_nodes`; the helper writes the cleaned list back
+ * only when it actually changed, and returns it for the caller to
+ * inspect (an empty list is the trigger to switch to first_server). */
+function maybeScrubUrltestNodes(uci, uciconfig, ucimain, listOption, log) {
+	const old_list = uci.get(uciconfig, ucimain, listOption) || [];
+	const cleaned = filter(old_list, (v) => {
+		if (!uci.get(uciconfig, v)) {
+			log(sprintf('Node %s is gone, removing from urltest list.', v));
+			return false;
+		}
+		return true;
+	});
+	if (length(cleaned) !== length(old_list))
+		uci.set(uciconfig, ucimain, listOption, cleaned);
+	return cleaned;
+}
+
+/* Switch a main_* field off the dangling reference and onto the first
+ * available node. The two callers below differ only in the UCI option
+ * name (`main_node` vs `main_udp_node`) and the user-facing log line,
+ * so this is what made the pre-refactor code mirror itself.
+ *
+ * The new value is also pushed onto `result.log` so the orchestrator
+ * can replay it (it uses `result.log` to log the same lines verbatim;
+ * the homeproxy.log capture goes through the separate `log` arg). */
+function switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, field, first_server, result, log) {
+	if (uci.get(uciconfig, field))
+		return field;
+	uci.set(uciconfig, ucimain, field, first_server);
+	const msg = sprintf('Main%s node is gone, switching to the first node.',
+		field === 'main_udp_node' ? ' UDP' : '');
+	log(msg);
+	push(result.log, msg);
+	return first_server;
+}
 
 /* Replace the 4 inline uci.set/commit sites (plus the 2-line
  * 'reset to nil' block) in update_subscriptions.uc. Logic parity:
@@ -220,52 +266,22 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 	}
 
 	if (main_node === 'urltest') {
-		const old_main_urltest_nodes = uci.get(uciconfig, ucimain, 'main_urltest_nodes') || [];
-		const main_urltest_nodes = filter(old_main_urltest_nodes, (v) => {
-			if (!uci.get(uciconfig, v)) {
-				log(sprintf('Node %s is gone, removing from urltest list.', v));
-				return false;
-			}
-			return true;
-		});
-		if (length(main_urltest_nodes) !== length(old_main_urltest_nodes)) {
-			uci.set(uciconfig, ucimain, 'main_urltest_nodes', main_urltest_nodes);
-		}
+		const cleaned = maybeScrubUrltestNodes(uci, uciconfig, ucimain, 'main_urltest_nodes', log);
 
-		if (!length(main_urltest_nodes)) {
-			uci.set(uciconfig, ucimain, 'main_node', first_server);
-			result.main_node = first_server;
-			push(result.log, 'Main node is gone, switching to the first node.');
-		}
-	} else if (!uci.get(uciconfig, main_node)) {
-		uci.set(uciconfig, ucimain, 'main_node', first_server);
-		result.main_node = first_server;
-		push(result.log, 'Main node is gone, switching to the first node.');
+		if (!length(cleaned))
+			result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', first_server, result, log);
+	} else {
+		result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', first_server, result, log);
 	}
 
 	if (!isEmpty(main_udp_node) && main_udp_node !== 'same') {
 		if (main_udp_node === 'urltest') {
-			const old_main_udp_urltest_nodes = uci.get(uciconfig, ucimain, 'main_udp_urltest_nodes') || [];
-			const main_udp_urltest_nodes = filter(old_main_udp_urltest_nodes, (v) => {
-				if (!uci.get(uciconfig, v)) {
-					log(sprintf('Node %s is gone, removing from urltest list.', v));
-					return false;
-				}
-				return true;
-			});
-			if (length(main_udp_urltest_nodes) !== length(old_main_udp_urltest_nodes)) {
-				uci.set(uciconfig, ucimain, 'main_udp_urltest_nodes', main_udp_urltest_nodes);
-			}
+			const cleaned = maybeScrubUrltestNodes(uci, uciconfig, ucimain, 'main_udp_urltest_nodes', log);
 
-			if (!length(main_udp_urltest_nodes)) {
-				uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
-				result.main_udp_node = first_server;
-				push(result.log, 'Main UDP node is gone, switching to the first node.');
-			}
-		} else if (!uci.get(uciconfig, main_udp_node)) {
-			uci.set(uciconfig, ucimain, 'main_udp_node', first_server);
-			result.main_udp_node = first_server;
-			push(result.log, 'Main UDP node is gone, switching to the first node.');
+			if (!length(cleaned))
+				result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', first_server, result, log);
+		} else {
+			result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', first_server, result, log);
 		}
 	}
 

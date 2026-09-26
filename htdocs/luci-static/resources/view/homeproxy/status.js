@@ -25,9 +25,6 @@ const css = '				\
 	padding: .5rem;			\
 	word-break: break-all;		\
 	margin: 0;			\
-}					\
-.description {				\
-	background-color: #33ccff;	\
 }';
 
 const hp_dir = '/var/run/homeproxy';
@@ -289,7 +286,7 @@ return view.extend({
 					return this.map.save(null, true).then(() => {
 						ui.changes.apply(true);
 					});
-				}, this.option)
+				})
 			}, [ _('Save') ]));
 
 			return node;
