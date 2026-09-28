@@ -68,7 +68,6 @@ netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
-config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -147,7 +146,6 @@ file var/run/homeproxy/fw4_post.nft:
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file etc/homeproxy/cache.db: 
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 
 ===== scenario: B-tproxy-gfwlist-ipv6-with-server (start) =====
 uci -q show dhcp.@dnsmasq[0]
@@ -259,10 +257,8 @@ jsonfilter -e @.exit_code
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
 chmod 600 var/run/homeproxy/known-good/sing-box-s.json
 sing-box version -n
-config_load homeproxy
 log sing-box 1.14.0 started.
 start rc=0
-config_load homeproxy
 chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
@@ -342,7 +338,6 @@ file var/run/homeproxy/known-good/sing-box-s.json: {|	"log": {},|	"inbounds": []
 ===== scenario: C-nothing-configured (start) =====
 uci -q show dhcp.@dnsmasq[0]
 config_load homeproxy
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=gfwlist|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 sing-box version -n
 log Neither client nor server is configured. Service not started.
 config_load homeproxy
@@ -492,7 +487,6 @@ sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
 log Reloading service...
-config_load homeproxy
 config_load homeproxy
 ucode -S etc/homeproxy/scripts/generate_client.uc
 chmod 600 var/run/homeproxy/candidate/sing-box-c.json
@@ -762,17 +756,11 @@ chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 nft flush chain inet fw4 homeproxy_output_redir
-uci set homeproxy.config.proxy_mode=tun
 nft delete chain inet fw4 homeproxy_output_redir
-uci set homeproxy.config.routing_mode=bypass_mainland_china
 nft flush chain inet fw4 homeproxy_redirect
-uci set homeproxy.infra.self_mark=
 nft delete chain inet fw4 homeproxy_redirect
-uci set homeproxy.infra.tun_name=singtun0
 nft flush chain inet fw4 homeproxy_redirect_proxy
-uci set homeproxy.infra.tun_address=
 nft delete chain inet fw4 homeproxy_redirect_proxy
-uci commit homeproxy
 nft flush chain inet fw4 homeproxy_redirect_proxy_port
 nft delete chain inet fw4 homeproxy_redirect_proxy_port
 nft flush chain inet fw4 homeproxy_redirect_lanac
@@ -911,7 +899,6 @@ chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
 nft flush chain inet fw4 homeproxy_output_redir
-config_load homeproxy
 nft delete chain inet fw4 homeproxy_output_redir
 nft flush chain inet fw4 homeproxy_redirect
 nft delete chain inet fw4 homeproxy_redirect
