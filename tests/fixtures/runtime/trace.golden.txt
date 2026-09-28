@@ -68,6 +68,7 @@ netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -145,6 +146,7 @@ file var/run/homeproxy/fw4_input.nft:
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: B-tproxy-gfwlist-ipv6-with-server (start) =====
@@ -255,7 +257,9 @@ jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 chmod 600 var/run/homeproxy/known-good/sing-box-s.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -334,6 +338,7 @@ file var/run/homeproxy/fw4_post.nft:
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file var/run/homeproxy/known-good/sing-box-s.json: {|	"log": {},|	"inbounds": [],|	"outbounds": []|}|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=gfwlist|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 
 ===== scenario: C-nothing-configured (start) =====
 uci -q show dhcp.@dnsmasq[0]
@@ -483,6 +488,7 @@ netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
@@ -547,8 +553,6 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 log Service stopped.
 config_load homeproxy
-ip link set singtun0 down
-ip tuntap del mode tun name singtun0
 config_load homeproxy
 sing-box version -n
 uname -r
@@ -752,6 +756,12 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 init.d/dnsmasq restart
 log Error: sing-box-c did not come up with the new configuration, rolling back.
+uci set homeproxy.config.proxy_mode=tun
+uci set homeproxy.config.routing_mode=bypass_mainland_china
+uci set homeproxy.infra.self_mark=
+uci set homeproxy.infra.tun_name=singtun0
+uci set homeproxy.infra.tun_address=
+uci commit homeproxy
 chmod 600 etc/crontabs/root
 init.d/cron restart
 config_load homeproxy
@@ -809,8 +819,6 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 log Service stopped.
 config_load homeproxy
-ip link set singtun0 down
-ip tuntap del mode tun name singtun0
 config_load homeproxy
 sing-box version -n
 uname -r
@@ -891,6 +899,7 @@ init.d/miniupnpd enabled
 init.d/miniupnpd running
 init.d/miniupnpd restart
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 log Rollback completed; the previous configuration is running.
@@ -952,14 +961,13 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 log Service stopped.
 config_load homeproxy
-ip link set singtun0 down
-ip tuntap del mode tun name singtun0
 stop rc=0
 file var/run/homeproxy/fw4_forward.nft: 
 file var/run/homeproxy/fw4_input.nft: 
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 file etc/homeproxy/cache.db: 
 file dnsmasq/dnsmasq-homeproxy.conf: conf-dir=dnsmasq/dnsmasq-homeproxy.d|
 file dnsmasq/dnsmasq-homeproxy.d/proxy_list.conf: server=/proxy.example.net/127.0.0.1#5333|nftset=/proxy.example.net/4#inet#fw4#homeproxy_wan_proxy_addr_v4|
@@ -1035,6 +1043,7 @@ netstat -ltnup
 nslookup -port=5333 example.com 127.0.0.1
 nc 127.0.0.1 5330
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -1112,6 +1121,7 @@ file var/run/homeproxy/fw4_input.nft:
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=custom|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: F-custom-routing-nothing-configured (start) =====
@@ -1716,7 +1726,9 @@ jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 chmod 600 var/run/homeproxy/known-good/sing-box-c.json
+config_load homeproxy
 chmod 600 var/run/homeproxy/known-good/sing-box-s.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 prime start rc=0
@@ -1837,6 +1849,7 @@ jsonfilter -e @['homeproxy'].instances['sing-box-s']
 jsonfilter -e @.running
 jsonfilter -e @.exit_code
 chmod 600 var/run/homeproxy/known-good/sing-box-s.json
+config_load homeproxy
 sing-box version -n
 log sing-box 1.14.0 started.
 start rc=0
@@ -1914,4 +1927,5 @@ file var/run/homeproxy/fw4_post.nft:
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file var/run/homeproxy/known-good/sing-box-s.json: {|	"log": {},|	"inbounds": [],|	"outbounds": []|}|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
 file etc/homeproxy/cache.db: 
