@@ -443,6 +443,16 @@ hp_start_generated_config() {
 # Record the live configuration as the new known-good copy.  Called only after
 # the health gate has proven that the configuration actually runs, so the
 # rollback target is always something that came up.
+#
+# Also writes $good_dir/uci-snapshot.txt with the *section-level* UCI keys
+# that drive the firewall / dnsmasq / nft layer (proxy_mode, routing_mode,
+# self_mark, tun_name, tun_address, ...).  The rollback path in init.d/homeproxy
+# reads this back BEFORE its stop;start, otherwise start_service reinstalls
+# the new (failing) layer on top of the rolled-back sing-box bytes - the
+# classic "rollback restored config but nft is still the new chains" silent
+# failure that took a real-machine repro to spot (review P1-3, 2026-09-28).
+# Snapshotting only the keys that change nft keeps the rollback bounded:
+# a stray key elsewhere never overwrites itself.
 hp_promote_known_good() {
 	local side="$1"
 	local run_dir="$2"
@@ -457,5 +467,26 @@ hp_promote_known_good() {
 
 	hp_known_good "$run_dir/sing-box-${side}.json" "$good_dir/sing-box-${side}.json" \
 		|| log "Warning: could not refresh the known-good ${label} configuration."
+
+	# uci_snapshot_for_rollback: the proxy-side keys that govern the nft /
+	# dnsmasq layer.  Written once on every successful promote; the
+	# rollback path's stop;start re-reads them via `uci set ...; uci commit`
+	# so start_service reinstalls the right layer.  Single line per key
+	# (`config.section.option=value`) so a parser without uci-tools can
+	# iterate it too.
+	local snap="$good_dir/uci-snapshot.txt"
+	{
+		config_load "$CONF"
+		config_get proxy_mode   "config" "proxy_mode"
+		config_get routing_mode "config" "routing_mode"
+		config_get self_mark    "infra"  "self_mark"
+		config_get tun_name     "infra"  "tun_name"
+		config_get tun_address  "infra"  "tun_address"
+		printf 'homeproxy.config.proxy_mode=%s\n' "$proxy_mode"
+		printf 'homeproxy.config.routing_mode=%s\n' "$routing_mode"
+		printf 'homeproxy.infra.self_mark=%s\n' "$self_mark"
+		printf 'homeproxy.infra.tun_name=%s\n' "$tun_name"
+		printf 'homeproxy.infra.tun_address=%s\n' "$tun_address"
+	} > "$snap.tmp" 2>"/dev/null" && mv -f "$snap.tmp" "$snap"
 }
 

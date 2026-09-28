@@ -98,6 +98,13 @@ hp_firewall_teardown() {
 	fi
 	: > "$run_dir/fw4_post.nft"
 
-	fw4 reload >"/dev/null" 2>&1 || log "Warning: fw4 reload failed during stop."
+	# Stop-time fw4 reload is best-effort on purpose: every homeproxy-owned
+	# chain and set has already been flushed and deleted above, so the
+	# live ruleset no longer references them. A reload that succeeds here
+	# also re-loads /etc/config/firewall; a reload that fails leaves the
+	# rest of the user's ruleset untouched, which is the safer outcome -
+	# logging a Warning used to suggest the stop had lost something when
+	# in fact nothing homeproxy-owned was left to lose.
+	fw4 reload >"/dev/null" 2>&1 || true
 	hp_restore_upnp_mappings
 }

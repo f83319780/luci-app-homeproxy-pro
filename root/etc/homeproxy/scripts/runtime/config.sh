@@ -78,3 +78,33 @@ hp_same_file() {
 	[ -s "$1" ] && [ -s "$2" ] || return 1
 	cmp -s "$1" "$2" 2>/dev/null
 }
+
+# hp_restore_known_good_uci <good-dir>
+# Re-apply the UCI snapshot written by hp_promote_known_good (the keys that
+# drive the firewall / dnsmasq / nft layer: proxy_mode, routing_mode,
+# self_mark, tun_name, tun_address).  Returns 0 on success, 1 when the
+# snapshot is missing - the rollback path logs and continues, since a
+# missing snapshot just means the install is older than the snapshot
+# feature (best-effort).
+#
+# The commit below is what makes this safe: every `uci set` is staged and
+# only becomes visible when uci commit succeeds.  A partial failure
+# leaves UCI unchanged; the rollback caller logs and the next reload
+# path will see the same failing configuration it just rolled back from,
+# so the failure mode stays bounded (no new corruption).
+hp_restore_known_good_uci() {
+	local good_dir="$1"
+	local snap="$good_dir/uci-snapshot.txt"
+
+	[ -s "$snap" ] || return 1
+
+	local key value saved=0
+	while IFS='=' read -r key value; do
+		[ -n "$key" ] || continue
+		uci set "$key=$value" || return 1
+		saved=1
+	done < "$snap"
+
+	[ "$saved" = "1" ] && uci commit homeproxy || return 1
+	return 0
+}

@@ -95,6 +95,100 @@ expect "rollback: refuses without a fallback" "$?" "1"
 hp_same_file "$LIVE" "$GOOD"
 expect "same_file: missing file is not equal" "$?" "1"
 
+# hp_restore_known_good_uci: the snapshot written by hp_promote_known_good.
+# The init.d/homeproxy rollback path reads $GOOD_DIR/uci-snapshot.txt
+# BEFORE stop;start, otherwise start_service installs the failing layer
+# on top of the rolled-back sing-box bytes (review P1-3, 2026-09-28).
+# The helper itself is a uci loop; we drive it with a stub `uci` so the
+# test does not depend on the device's uci-tools.
+echo "== UCI snapshot restore (review P1-3) =="
+
+SNAP_DIR="$WORK/run/known-good"
+mkdir -p "$SNAP_DIR"
+SNAP="$SNAP_DIR/uci-snapshot.txt"
+BIN="$WORK/bin"
+mkdir -p "$BIN"
+HP_TEST_UCI_OUT="$WORK/uci.out"
+: > "$HP_TEST_UCI_OUT"
+export HP_TEST_UCI_OUT
+
+# Stub `uci` so the helper can be driven without real uci-tools.  The
+# stub records every call into $HP_TEST_UCI_OUT (passed via env, not a
+# shell variable: the helper launches uci as a child process and shell
+# variables of the parent do not reach it).
+write_uci_stub() {
+	cat > "$BIN/uci" <<STUB
+#!/bin/sh
+echo "\$@" >> "\$HP_TEST_UCI_OUT"
+exit 0
+STUB
+	chmod +x "$BIN/uci"
+}
+
+# No snapshot at all -> 1 (best-effort caller logs and moves on).
+rm -f "$SNAP"
+PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR" >/dev/null 2>&1
+expect "uci restore: missing snapshot returns 1" "$?" "1"
+
+# Happy path: snapshot present, all keys applied, commit called.
+: > "$HP_TEST_UCI_OUT"
+write_uci_stub
+printf 'homeproxy.config.proxy_mode=tproxy\n' > "$SNAP"
+printf 'homeproxy.config.routing_mode=bypass_mainland_china\n' >> "$SNAP"
+printf 'homeproxy.infra.self_mark=100\n' >> "$SNAP"
+printf 'homeproxy.infra.tun_name=singtun0\n' >> "$SNAP"
+printf 'homeproxy.infra.tun_address=172.16.0.1/30\n' >> "$SNAP"
+PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR"
+expect "uci restore: happy path returns 0" "$?" "0"
+expect "uci restore: 5 keys applied" \
+	"$(grep -c 'homeproxy\.' "$HP_TEST_UCI_OUT")" "5"
+expect "uci restore: proxy_mode applied" \
+	"$(grep -c 'homeproxy.config.proxy_mode=tproxy$' "$HP_TEST_UCI_OUT")" "1"
+expect "uci restore: commit homeproxy called" \
+	"$(grep -c 'commit homeproxy$' "$HP_TEST_UCI_OUT")" "1"
+
+# Empty file: no sets, no commit -> 1.
+: > "$HP_TEST_UCI_OUT"
+: > "$SNAP"
+PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR"
+expect "uci restore: empty snapshot returns 1" "$?" "1"
+expect "uci restore: empty snapshot writes no writes" \
+	"$(wc -l < "$HP_TEST_UCI_OUT" | tr -d ' ')" "0"
+
+# Blank lines are skipped.
+: > "$HP_TEST_UCI_OUT"
+printf '\n# comment\n' > "$SNAP"
+printf 'homeproxy.config.proxy_mode=redirect_tproxy\n' >> "$SNAP"
+printf '\n\n' >> "$SNAP"
+PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR"
+expect "uci restore: blank lines skipped returns 0" "$?" "0"
+expect "uci restore: only the real key applied" \
+	"$(grep -c 'homeproxy\.' "$HP_TEST_UCI_OUT")" "1"
+
+# uci set succeeds, uci commit fails -> helper returns 1, no commit.
+cat > "$BIN/uci" <<STUB
+#!/bin/sh
+echo "\$@" >> "\$HP_TEST_UCI_OUT"
+case "\$1" in
+	set) exit 0 ;;
+	commit) exit 1 ;;
+esac
+STUB
+chmod +x "$BIN/uci"
+: > "$HP_TEST_UCI_OUT"
+printf 'homeproxy.config.proxy_mode=tproxy\n' > "$SNAP"
+PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR"
+expect "uci restore: failed commit returns 1" "$?" "1"
+# The stub still echoes the failed command (it writes first, then exits
+# non-zero), so what we really want to assert is "the helper did not
+# commit *despite* calling uci commit" - check that no UCI_OUT line shows
+# a successful commit pattern by looking at the helper's exit code: 1
+# already says "no commit happened".  The grep here is a sanity probe
+# for the stub itself, not the helper - leave it informational.
+expect "uci restore: stub recorded the failed commit attempt" \
+	"$(grep -c 'commit homeproxy$' "$HP_TEST_UCI_OUT")" "1"
+
+rm -f "$BIN/uci"
 echo "== health probe =="
 
 # Deterministic stubs so the probe's control flow is tested rather than the
