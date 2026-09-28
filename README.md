@@ -74,21 +74,6 @@
 
 **一句话总结**：pro 的核心价值是**把"单文件能跑"变成"orchestrator + table-driven adapter + 可独立测试的模块"**，并把约束、质量、回滚三件事从靠人盯变成靠代码执行（arch-guard 135 checks 静态锁住跨文件不变量）。
 
-
-## 推荐 rule_set 源
-
-如果你想自己跑 binary `.srs` 格式的规则集（而不是 pro 内置的 `china_list.txt` / `gfw_list.txt` 文本），下面三个仓库是 sing-box 官方维护的（教程 demo 也用这套）：
-
-| 类型 | 来源 | 格式 | 适用 |
-|---|---|---|---|
-| **geosite-cn** | `https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-cn.srs`（通过 gh-proxy.com 加速） | binary | 国内域名（直连） |
-| **geosite-geolocation-!cn** | `.../sing-geosite/rule-set/geosite-geolocation-!cn.srs` | binary | 海外域名（代理） |
-| **fakeip-filter-cn** | `https://raw.githubusercontent.com/qichiyuhub/rule/main/rules/fakeip-filter-cn.json` | source | FakeIP 模式的国内例外清单 |
-| **geoip-cn** | `https://raw.githubusercontent.com/SagerNet/sing-geoip/rule-set/geoip-cn.srs` | binary | 国内 IP（evaluate fallback） |
-
-> **教程明确反对 Mihomo 规则库**：Mihomo 的 `cn.srs` 文件名会与 sing-box 同名冲突，导致标签解析失败。
-> pro 的默认 `china_list.txt` 仍是文本格式（教程 demo 没暴露这种兼容路径），但你随时可在 LuCI 添加 binary `.srs` 规则集替换。
-
 ## 已知限制
 
 - **试验性**：不承诺 API/配置稳定，重大变更可能在 minor 版本里发生。
