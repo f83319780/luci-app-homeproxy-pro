@@ -74,60 +74,6 @@
 
 **一句话总结**：pro 的核心价值是**把"单文件能跑"变成"orchestrator + table-driven adapter + 可独立测试的模块"**，并把约束、质量、回滚三件事从靠人盯变成靠代码执行（arch-guard 135 checks 静态锁住跨文件不变量）。
 
-## 与七尺宇 demo 的对照
-
-> 教程《sing-box 1.14 配置文件精讲》(BV `B6zcuUo2bJ0`) 在 B 站放出了一份配套 `linux.json` + 9 张示意图，演示 sing-box 1.14 的新特性和底层分流逻辑。pro 在那之上做了更多工程化的工作，本节把两者的边界划清，方便后来人评估"该不该跟 demo 走"。
-
-### pro 已经做到的（demo 的全部主线字段 + 实战打磨）
-
-| demo 的字段/能力 | pro 是否实现 | 证据 / 说明 |
-|---|---|---|
-| `$schema` 顶层 | ✅ 已实现 | `attachSchema()` in `generator/common.uc` |
-| `http_clients` + `http_client` | ✅ 已实现 | `generator/ruleset.uc:build_http_clients()` 1.14 规范改写 |
-| `dns.servers` 8 类（local / https / tls / fakeip / hosts / udp / tcp / ...） | ✅ 已实现 | `generator/dns.uc` 自研 parser 覆盖全部 UCI 类型 |
-| `dns.rules` D① 拒 HTTPS/SVCB | ✅ proxy mode line 102 / ✅ custom mode 新前置 | arch-guard 38 锁顺序 |
-| `dns.rules` D② clash_mode 切换 | ⚠️ 故意没做（见下表） | — |
-| `dns.rules` D⑥ evaluate + D⑦ match_response | ⚠️ 默认 '0'；`migrate_config.uc:93-100` 注释标 v28.9.1.16 flip 计划（**未发版**） | `generator/dns.uc:142-154` + `migrate_config.uc` |
-| `dns.rules` reject + `no_drop` | ✅ 已完整 | `route.uc:295-296` |
-| `dns.servers` hosts + predefined（DoH 兜底） | ✅ auto-detect + auto-emit | `generator/dns.uc:KNOWN_ENCRYPTED_DNS_HOSTS` |
-| `route.rules` action: bypass 复合规则 | ⚠️ 故意走 `resolve + geoip-cn`（v2 路线图阶段 3 候选） | pro 注释：geosite 误判 gvt2.com 等 |
-| `route.rules` action: route-options (override_address/port) | ✅ 已完整 | `route.uc:114-118, 284-292` |
-| `route.rules` rule_set 数组化 + `{tag}` 占位符 | ✅ 已完整 | `ruleset.uc:38-87` |
-| `route.rules` sniff sniffer list + 100ms | ✅ opt-in UCI `sniffer_advanced_mode`（默认 '0' = 300ms / 默认列表）| `generator/route.uc:46-60` |
-| `route.rules` clash_mode Global → GLOBAL | ⚠️ 故意没做 | 见下表 |
-| `experimental.cache_file` + `store_dns` | ✅ UCI Flag | `dns.js:43` |
-| `experimental.reverse_mapping` | ⚠️ **故意不 emit**（见下表） | `common.uc:183-191` 注释解释 sing-box 1.14.0-r1 floor 拒字段，默认开隐式的 |
-| cn_ip_fallback flip 计划 | ⚠️ migrate 写 '0' 兜底（默认 '0' 需新装时手动开） | `migrate_config.uc:89-100` |
-| `default_domain_resolver` | ✅ 已完整 | `route.uc:65-67, 188-190` |
-| `ntp` 顶层块 | ⚠️ 故意没做（路由器已有 chrony） | — |
-
-### pro 故意没做的（demo 有，pro 不要）
-
-| 项 | 排除理由 |
-|---|---|
-| **22 个 selector 的"业务向"策略组（默认代理 / YouTube / Telegram / Netflix / Wallet / ...）** | LuCI 用户不需要这么细，pro 把"分流策略"和"具体规则"解耦（4 模式 + 用户自配 routing_rule），v2 路线图已表态 |
-| **`clash_mode` 联动 DNS rules / final** | pro 范式是"面板模式与 DNS 行为解耦"，v2 路线图批次 2 候选 |
-| **bridge outbound**（windows.json） | Windows 专属，路由器用不上 |
-| **momo 6 入站网关模式** | 路由器不当网关客户端 |
-| **sub-store 集成**（xream/template.js + URL 参数） | 外依赖风险 + 跟 pro 自研范式冲突 |
-| **providers 拉取模式**（reF1nd 风格的 use_all_providers + regex） | UCI subscription 已覆盖 90% 用户 |
-| **`services.api` + dashboard UI** | LuCI 已是 UI，不需要再加一层 |
-| **FakeIP 模式** | v2 路线图阶段 4 候选（feature flag + 隔离大议题），默认不开 |
-| **`strategy: ipv4_only` for `default_domain_resolver`** | pro 用 `prefer_ipv4` —— sing-box 默认就降级到 IPv6，对国内多数场景更友好 |
-
-### pro 超出 demo 的工程化（demo 没有，pro 必须有）
-
-| 维度 | pro 实际状态 | 证据 |
-|---|---|---|
-| 重新加载事务 + 健康门 + 自动回滚 | 生成 → check → probe → 健康门 → known-good；不健康自动 rollback | `runtime/{config,health}.sh` |
-| UCI 1.14 迁移 | 36 checks | `migrate_config.uc` |
-| sing-box 版本门 | `hp_require_singbox()` 启动显式拒绝 `<1.14` | `runtime/service.sh` |
-| arch-guard 静态锁 | **135 checks** 锁跨文件不变量 | `tests/arch-guard.sh` |
-| 测试规模 | 80 测试文件 / 135 check | `tests/print-stats.sh` 实测 |
-| Capabilities 收紧 | 仅 NET_ADMIN + NET_BIND_SERVICE（去 PTRACE / NET_RAW） | `homeproxy.json` + arch-guard 12 |
-| 路径白名单 | traversal/relative 拒绝 + 限 3 个根 | `homeproxy.uc:56/104` + `homeproxy.js:HP_CERT_PATH_ROOTS` |
-| Status 语义 | 3 态（RUNNING / **STATUS UNKNOWN 黄** / NOT RUNNING） | `homeproxy.js:statusLabel` |
-| 路由 ops 流程 | 替换文件不重启服务；`killall -HUP rpcd` 由 apk scripts 自动 | `runtime/{config,service}.sh` |
 
 ## 推荐 rule_set 源
 
