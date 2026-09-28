@@ -259,6 +259,16 @@ function append_custom_dns(config, dm, ctx) {
 		if (!cfg.enabled)
 			continue;
 
+		/* Match fields are valid for every action; action-specific fields
+		 * are emitted below per sing-box 1.14's per-action schema.  The
+		 * previous code dumped server/method/no_drop/rcode/answer/ns/extra
+		 * (and the cache / TTL / client-subnet family) onto every rule
+		 * regardless of action, and sing-box then rejected the whole
+		 * configuration with "json: unknown field" the moment a user
+		 * changed a rule's action and left the old fields in UCI -
+		 * LuCI's form value parsing does not delete the previous value
+		 * when a depends() guard hides it, the same path route.uc
+		 * already had to fix. */
 		const rule = {
 			ip_version: strToInt(cfg.ip_version),
 			query_type: parse_dnsquery(cfg.query_type),
@@ -283,21 +293,38 @@ function append_custom_dns(config, dm, ctx) {
 			invert: strToBool(cfg.invert),
 			race: strToBool(cfg.race),
 			speculative: strToBool(cfg.speculative),
-			action: cfg.action,
-			server: get_resolver(cfg.server, dm),
-			disable_cache: strToBool(cfg.dns_disable_cache),
-			disable_optimistic_cache: strToBool(cfg.disable_optimistic_cache),
-			rewrite_ttl: strToInt(cfg.rewrite_ttl),
-			timeout: strToTime(cfg.dns_timeout),
-			client_subnet: cfg.client_subnet,
-			remove_client_subnet: strToBool(cfg.remove_client_subnet),
-			method: cfg.reject_method,
-			no_drop: strToBool(cfg.reject_no_drop),
-			rcode: cfg.predefined_rcode,
-			answer: cfg.predefined_answer,
-			ns: cfg.predefined_ns,
-			extra: cfg.predefined_extra
+			action: cfg.action
 		};
+
+		/* `route` (and `evaluate`, which needs a server for the eval step).
+		 * `resolve` is also a possibility but is not currently exposed in
+		 * the UI; if it ever is, this branch is where it lands. */
+		if (cfg.action === 'route' || cfg.action === 'evaluate' || cfg.action === 'resolve') {
+			rule.server = get_resolver(cfg.server, dm);
+			rule.disable_cache = strToBool(cfg.dns_disable_cache);
+			rule.disable_optimistic_cache = strToBool(cfg.disable_optimistic_cache);
+			rule.rewrite_ttl = strToInt(cfg.rewrite_ttl);
+			rule.client_subnet = cfg.client_subnet;
+			rule.remove_client_subnet = strToBool(cfg.remove_client_subnet);
+		}
+
+		if (cfg.action === 'route' || cfg.action === 'resolve')
+			rule.timeout = strToTime(cfg.dns_timeout);
+
+		/* `reject` only accepts method + no_drop.  Anything else here is
+		 * an unknown field for the action and the whole config fails. */
+		if (cfg.action === 'reject') {
+			rule.method = cfg.reject_method;
+			rule.no_drop = strToBool(cfg.reject_no_drop);
+		}
+
+		/* `predefined` only accepts rcode + answer + ns + extra. */
+		if (cfg.action === 'predefined') {
+			rule.rcode = cfg.predefined_rcode;
+			rule.answer = cfg.predefined_answer;
+			rule.ns = cfg.predefined_ns;
+			rule.extra = cfg.predefined_extra;
+		}
 
 		if (cfg.action === 'evaluate')
 			rule.tag = cfg.evaluate_tag || null;

@@ -42,7 +42,7 @@
 | 维度 | upstream 形态 | pro 形态 | 证据 |
 |---|---|---|---|
 | capabilities | `CAP_SYS_PTRACE` + `CAP_NET_RAW` + `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`（4 个） | 仅 `CAP_NET_ADMIN` + `CAP_NET_BIND_SERVICE`（2 个） | `root/etc/capabilities/homeproxy.json` + arch-guard guard 12 |
-| 路径白名单（cert / rule） | 仅前端 UI 校验 | `validateHomeProxyPath()` 拒 traversal + relative，限 `/etc/homeproxy/` 与 `/tmp/homeproxy_*`；`validateCertificatePath()` 限 `/etc/homeproxy/certs/` `/etc/acme/` `/etc/ssl/`；前后端列表 arch-guard 29 锁同步 | `homeproxy.uc:48 / :99` + `homeproxy.js:HP_CERT_PATH_ROOTS` |
+| 路径白名单（cert / rule） | 仅前端 UI 校验 | `validateHomeProxyPath()` 拒 traversal + relative，限 `/etc/homeproxy/` 与 `/tmp/homeproxy_*`；`validateCertificatePath()` 限 `/etc/homeproxy/certs/` `/etc/acme/` `/etc/ssl/`；前后端列表 arch-guard 29 锁同步 | `homeproxy.uc:56 / :104` + `homeproxy.js:HP_CERT_PATH_ROOTS` |
 | 订阅 token 脱敏 | 调用点各自脱敏 | `wGETVerbose()` 内部脱敏（scheme/host/port 保留，userinfo / path / query 全脱；mock 与生产 `redactUrl` 由 arch-guard 35 锁一致） | `homeproxy.uc:226 (redactUrl)` + arch-guard 14 / 35 |
 | crontab 权限 | `sed -i`（GNU-only）+ mv 后留给 0644 | `sed + mv` 跨 busybox / GNU / BSD + `chmod 600` 修 root crontab 0644 → 0600 | `runtime/service.sh:hp_crontab_drop` |
 | procd jail mount | 默认未对所有模式 mount | tun/wireguard 自动 unjail（要 host netns），其他模式 mount HP_DIR + /etc/acme + /etc/ssl + /tmp/dhcp.leases + /etc/localtime + /etc/TZ | `runtime/service.sh:hp_procd_client_instance` |
@@ -53,10 +53,10 @@
 
 | 维度 | upstream 形态 | pro 形态 | 证据 |
 |---|---|---|---|
-| 架构守卫 | 无 | `tests/arch-guard.sh` **36 个 guard / 131 个 check** 锁跨文件一致性（UCICONFIG_DIR / ACL / capabilities / conffiles / CERT_PATH_ROOTS / `redactUrl` mock / uCode 语法 / sing-box floor / adapter 共享表 / …） | `tests/arch-guard.sh` (guards 1-19, 21-37) |
-| 测试规模 | 7 个脚本 / 约 27 个 check | `tests/` 下 78 个文件：ucode 套件 + 7 个 frontend 验证器 + golden snapshot + mocks + 离线 runtime 测试；arch-guard 单跑 131 个 check | `tests/print-stats.sh` 实测 |
+| 架构守卫 | 无 | `tests/arch-guard.sh` **38 个 guard / 135 个 check** 锁跨文件一致性（UCICONFIG_DIR / ACL / capabilities / conffiles / CERT_PATH_ROOTS / `redactUrl` mock / uCode 语法 / sing-box floor / adapter 共享表 / …） | `tests/arch-guard.sh` (guards 1-19, 21-39) |
+| 测试规模 | 7 个脚本 / 约 27 个 check | `tests/` 下 80 个文件：ucode 套件 + 8 个 frontend 验证器 + golden snapshot + mocks + 离线 runtime 测试；arch-guard 单跑 135 个 check | `tests/print-stats.sh` 实测 |
 | CI | `build` + `i18n` 两条平行 workflow | `build` 用 `workflow_call` 依赖 `arch-test`；`arch-test` 8 步（翻译 fast gate → toolchain cache → toolchain 校验 → `tests/run.sh` 唯一套件入口 → 模板检查）；`on-target` 手动 ssh + 不安装 | `.github/workflows/{arch-test,build,on-target}.yml` |
-| uCode dialect pin | 跟随 upstream HEAD（已放宽） | pin `UCODE_REV=2026.01.16~85922056` + `test_ucode_grammar.sh` canary 锁 strict 语法（拒 `export function … }` 无 `;`、对象/数组解构） | `tests/toolchain/build-ucode-linux.sh:UCODE_REV` + `tests/ucode/test_ucode_grammar.sh` |
+| uCode dialect pin | 跟随 upstream HEAD（已放宽） | pin `UCODE_REV=85922056ef7abeace3cca3ab28bc1ac2d88e31b1`（完整 40 位 commit）+ `test_ucode_grammar.sh` canary 锁 strict 语法（拒 `export function … }` 无 `;`、对象/数组解构） | `tests/toolchain/build-ucode-linux.sh:UCODE_REV` + `tests/ucode/test_ucode_grammar.sh` |
 | MD5 实现 | 388 行 minified snippet；vmess 分支漏 `vmess_global_padding` | RFC 1321 完整实现 + `tests/frontend-md5.js` 锁 RFC 向量 + 与 Node `crypto.createHash('md5')` 双向 cross-check（44 / 44 PASS） | `homeproxy.js:calcStringMD5` + `tests/frontend-md5.js` |
 
 ### UX / Ops
@@ -64,15 +64,15 @@
 | 维度 | upstream 形态 | pro 形态 | 证据 |
 |---|---|---|---|
 | Status 语义 | 2 态（RUNNING / NOT RUNNING） | 3 态（+ **STATUS UNKNOWN** 黄），区分 "rpc 没回" vs "service 死了" | `homeproxy.js:statusLabel` + `client.js:renderStatus` |
-| 前端特异性 bug 修复 | `stubValidator` 缺 `factory` 致 ip6addr TypeError；`L.bind(hp.renderSectionAdd, …)` 把 factory 塞 `extra_class` 槽致 `InvalidCharacterError` | 已修：`stubValidator` 持 `factory: validation`；`renderSectionAdd` 改薄 wrap（arch-guard 22 / 23 锁 binding 形态） | `view/homeproxy/client.js:73` + `homeproxy.js:999` |
+| 前端特异性 bug 修复 | `stubValidator` 缺 `factory` 致 ip6addr TypeError；`L.bind(hp.renderSectionAdd, …)` 把 factory 塞 `extra_class` 槽致 `InvalidCharacterError` | 已修：`stubValidator` 持 `factory: validation`；`renderSectionAdd` 改薄 wrap（arch-guard 22 / 23 锁 binding 形态） | `view/homeproxy/client.js:73` + `homeproxy.js:1018-1026` |
 | 协议增改成本 | 改 110 行 ternary（README 旧行） | 改 5 个表行：`model.uc CREDENTIALS` + `loader.uc PROTOCOL_OPTIONS` + `adapter.uc OPTION_FIELDS` + `fixtures/` + golden snapshot；arch-guard 5 强制 fixtures 同步 | `config/{model,loader,adapter}.uc` + `tests/fixtures/generators/` |
 | 资源更新 | jsdelivr 单一镜像 | 4 镜像 fallback（`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `cdn.jsdelivr.net` / `raw.githubusercontent.com`）+ UI「上次成功时间」（arch-guard 17 / 18 锁） | `runtime/dns.sh` + arch-guard 17 / 18 |
 | ECH 上传 | 后端 case 缺失 | 补齐 `client_ech_conf` 标签 + `isValidECHConfig()` PEM 校验；ACL 显式列 4 个 tmp 路径 | `homeproxy.uc:isValidECHConfig` + `luci.homeproxy:certificate_write` |
-| 默认测试主机 | 硬编码作者内网 IP | `HP_TEST_HOST` 注入，未设时 fail-fast；`on-target.yml` ；ssh 前 `ssh -o ConnectTimeout=5` 先确认可达（不要从记忆里写地址） | `tests/run.sh` + `.github/workflows/on-target.yml` |
+| 默认测试主机 | 硬编码作者内网 IP | `HP_TEST_HOST` 注入，未设时 fail-fast；`on-target.yml` ；ssh 前 `ssh -o ConnectTimeout=10` 先确认可达（不要从记忆里写地址） | `tests/run.sh` + `.github/workflows/on-target.yml` |
 | 文档 | 标准（README + CONTRIBUTING + SECURITY） | 精简（README only），`docs/` 自 2026-09-16 起只留本地（untrack + `.gitignore`），远端公开仓库不再发布 | `README.md` + `docs/`（本地） |
 | 路由 ops | — | 替换文件只动 JS / menu / acl / rpcd ucode（reload 不影响网络）；更深层改动前 `cp /etc/config/homeproxy /tmp/hp-r<NN>-preflight-<DATE>/`，保留上一发版 .apk 24h；`killall -HUP rpcd` 由 apk scripts 自动做 | `runtime/{config,service}.sh` |
 
-**一句话总结**：pro 的核心价值是**把"单文件能跑"变成"orchestrator + table-driven adapter + 可独立测试的模块"**，并把约束、质量、回滚三件事从靠人盯变成靠代码执行（arch-guard 131 checks 静态锁住跨文件不变量）。
+**一句话总结**：pro 的核心价值是**把"单文件能跑"变成"orchestrator + table-driven adapter + 可独立测试的模块"**，并把约束、质量、回滚三件事从靠人盯变成靠代码执行（arch-guard 135 checks 静态锁住跨文件不变量）。
 
 ## 与七尺宇 demo 的对照
 
@@ -87,8 +87,8 @@
 | `dns.servers` 8 类（local / https / tls / fakeip / hosts / udp / tcp / ...） | ✅ 已实现 | `generator/dns.uc` 自研 parser 覆盖全部 UCI 类型 |
 | `dns.rules` D① 拒 HTTPS/SVCB | ✅ proxy mode line 102 / ✅ custom mode 新前置 | arch-guard 38 锁顺序 |
 | `dns.rules` D② clash_mode 切换 | ⚠️ 故意没做（见下表） | — |
-| `dns.rules` D⑥ evaluate + D⑦ match_response | ✅ **v28.9.1.16 默认 '1'** (新装);存量用户由 `migrate_config.uc` 写 '0' 锁住 | `generator/dns.uc:142-154` + `migrate_config.uc` |
-| `dns.rules` reject + `no_drop` | ✅ 已完整 | `route.uc:279` |
+| `dns.rules` D⑥ evaluate + D⑦ match_response | ⚠️ 默认 '0'；`migrate_config.uc:93-100` 注释标 v28.9.1.16 flip 计划（**未发版**） | `generator/dns.uc:142-154` + `migrate_config.uc` |
+| `dns.rules` reject + `no_drop` | ✅ 已完整 | `route.uc:295-296` |
 | `dns.servers` hosts + predefined（DoH 兜底） | ✅ auto-detect + auto-emit | `generator/dns.uc:KNOWN_ENCRYPTED_DNS_HOSTS` |
 | `route.rules` action: bypass 复合规则 | ⚠️ 故意走 `resolve + geoip-cn`（v2 路线图阶段 3 候选） | pro 注释：geosite 误判 gvt2.com 等 |
 | `route.rules` action: route-options (override_address/port) | ✅ 已完整 | `route.uc:114-118, 284-292` |
@@ -96,8 +96,8 @@
 | `route.rules` sniff sniffer list + 100ms | ✅ opt-in UCI `sniffer_advanced_mode`（默认 '0' = 300ms / 默认列表）| `generator/route.uc:46-60` |
 | `route.rules` clash_mode Global → GLOBAL | ⚠️ 故意没做 | 见下表 |
 | `experimental.cache_file` + `store_dns` | ✅ UCI Flag | `dns.js:43` |
-| `experimental.reverse_mapping` | ✅ **v28.9.1.15 起显式 emit** | `common.uc:198`,arch-guard 39 |
-| **v28.9.1.16 迁移安全**:cn_ip_fallback 默认 '1' + migrate 写 '0' 锁存量 | ✅ 默认开 + 升级不感知 | `context.uc:184` + `migrate_config.uc` log_level 旁 |
+| `experimental.reverse_mapping` | ⚠️ **故意不 emit**（见下表） | `common.uc:183-191` 注释解释 sing-box 1.14.0-r1 floor 拒字段，默认开隐式的 |
+| cn_ip_fallback flip 计划 | ⚠️ migrate 写 '0' 兜底（默认 '0' 需新装时手动开） | `migrate_config.uc:89-100` |
 | `default_domain_resolver` | ✅ 已完整 | `route.uc:65-67, 188-190` |
 | `ntp` 顶层块 | ⚠️ 故意没做（路由器已有 chrony） | — |
 
@@ -122,10 +122,10 @@
 | 重新加载事务 + 健康门 + 自动回滚 | 生成 → check → probe → 健康门 → known-good；不健康自动 rollback | `runtime/{config,health}.sh` |
 | UCI 1.14 迁移 | 36 checks | `migrate_config.uc` |
 | sing-box 版本门 | `hp_require_singbox()` 启动显式拒绝 `<1.14` | `runtime/service.sh` |
-| arch-guard 静态锁 | **131+ checks** 锁跨文件不变量 | `tests/arch-guard.sh` |
-| 测试规模 | 78 测试文件 / 131 check | `tests/print-stats.sh` 实测 |
+| arch-guard 静态锁 | **135 checks** 锁跨文件不变量 | `tests/arch-guard.sh` |
+| 测试规模 | 80 测试文件 / 135 check | `tests/print-stats.sh` 实测 |
 | Capabilities 收紧 | 仅 NET_ADMIN + NET_BIND_SERVICE（去 PTRACE / NET_RAW） | `homeproxy.json` + arch-guard 12 |
-| 路径白名单 | traversal/relative 拒绝 + 限 3 个根 | `homeproxy.uc:48/99` + `homeproxy.js:HP_CERT_PATH_ROOTS` |
+| 路径白名单 | traversal/relative 拒绝 + 限 3 个根 | `homeproxy.uc:56/104` + `homeproxy.js:HP_CERT_PATH_ROOTS` |
 | Status 语义 | 3 态（RUNNING / **STATUS UNKNOWN 黄** / NOT RUNNING） | `homeproxy.js:statusLabel` |
 | 路由 ops 流程 | 替换文件不重启服务；`killall -HUP rpcd` 由 apk scripts 自动 | `runtime/{config,service}.sh` |
 

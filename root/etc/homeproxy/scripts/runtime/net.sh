@@ -151,6 +151,16 @@ hp_net_teardown() {
 # hp_net_remove_tun
 # service_stopped() hook: procd calls it after the instances are gone, so the
 # TUN device can be removed.  Requires config_load.
+#
+# TODO(tun-leak, 2026-09-28 review P2): procd calls service_stopped() on
+# EVERY stop, including a reload that is supposed to be transparent.
+# Removing the tun interface here pulls the default route out of table
+# 100, so marked traffic falls back to the main table while the new
+# sing-box is starting up - LAN hits the WAN with the real IP.  The fix
+# is to skip the tuntap del unless proxy_mode is genuinely leaving TUN,
+# but the right policy needs real-machine reproduction: confirm that a
+# tproxy<->tun reload actually drops table 100 mid-stop, then add the
+# mode-aware gate.
 hp_net_remove_tun() {
 	local tun_name
 
