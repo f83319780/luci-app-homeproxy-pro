@@ -1983,7 +1983,7 @@
 						"inputstyle": "action",
 						"inputtitle": "Upload...",
 						"modalonly": true,
-						"onclick": "bind(665:a64e0e63d165;\"certificate\",\"server_publickey\")"
+						"onclick": "bind(669:b8158c6e93e5;\"certificate\",\"server_publickey\")"
 					}
 				},
 				{
@@ -2043,7 +2043,7 @@
 						"inputstyle": "action",
 						"inputtitle": "Upload...",
 						"modalonly": true,
-						"onclick": "bind(665:a64e0e63d165;\"private key\",\"server_privatekey\")"
+						"onclick": "bind(669:b8158c6e93e5;\"private key\",\"server_privatekey\")"
 					}
 				},
 				{

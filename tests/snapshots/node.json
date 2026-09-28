@@ -2296,7 +2296,7 @@
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
 									"modalonly": true,
-									"onclick": "bind(665:a64e0e63d165;\"certificate\",\"client_ca\")"
+									"onclick": "bind(669:b8158c6e93e5;\"certificate\",\"client_ca\")"
 								}
 							},
 							{
@@ -2356,7 +2356,7 @@
 									"inputstyle": "action",
 									"inputtitle": "Upload...",
 									"modalonly": true,
-									"onclick": "bind(665:a64e0e63d165;\"ECH config\",\"client_ech_conf\")"
+									"onclick": "bind(669:b8158c6e93e5;\"ECH config\",\"client_ech_conf\")"
 								}
 							},
 							{
@@ -2835,7 +2835,7 @@
 					"props": {
 						"inputstyle": "apply",
 						"inputtitle": "fn(255:dcc5d87fa8b8)",
-						"onclick": "fn(1670:f62ed3d8e089)"
+						"onclick": "fn(1672:85e63dc073da)"
 					}
 				},
 				{

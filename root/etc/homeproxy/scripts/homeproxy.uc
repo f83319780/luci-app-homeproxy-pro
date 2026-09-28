@@ -491,13 +491,13 @@ export function isValidCIDR(addr, family) {
 		 * `1.2.3.4/24;}` sailed past this check and ended up verbatim
 		 * in the fw4 ruleset fw4 then loaded as root.
 		 *
-		 * Guard the gate on explicit presence (not just truthiness):
+		 * ucode has no `undefined` (an absent index reads as null), and
 		 * `if (prefix)` is also false for the empty string, so a
-		 * trailing-slash entry like `1.2.3.4/` would slip past the gate
-		 * and pass overall.  The regex naturally rejects `''` (zero
-		 * digits) - the presence guard is just to avoid claiming "no
-		 * prefix" when one was explicitly started. */
-		if (prefix !== null && prefix !== undefined) {
+		 * trailing-slash entry like `1.2.3.4/` would slip past a plain
+		 * `if (prefix)` gate and pass overall.  Gate on null, which
+		 * keeps `''` from sneaking in; the regex naturally rejects the
+		 * empty string and any non-digit. */
+		if (prefix !== null) {
 			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 32)
 				return false;
 		}
@@ -538,8 +538,8 @@ export function isValidCIDR(addr, family) {
 
 		/* Same anchor as the IPv4 branch: `1.2.3.4/24;}` would let
 		 * `int('24;}')` slip through unanchored and end up in fw4.  Same
-		 * explicit-presence guard for `::1/` (empty prefix). */
-		if (prefix !== null && prefix !== undefined) {
+		 * null-presence guard for `::1/` (empty prefix). */
+		if (prefix !== null) {
 			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 128)
 				return false;
 		}
