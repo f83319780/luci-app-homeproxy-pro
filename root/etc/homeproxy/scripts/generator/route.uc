@@ -258,14 +258,14 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 			source_hostname: cfg.source_hostname
 		};
 
-		/* Route-option fields belong to the actions that dial out (`route` and
-		 * `route-options`).  They used to be assigned unconditionally, which
-		 * stayed invisible as long as the UI kept them hidden per action - but
-		 * changing a rule's action leaves the previous values in UCI, and
-		 * sing-box then refuses the whole configuration with "unknown field" on
-		 * the first one the new action does not take. */
-		if (cfg.action !== 'resolve' && cfg.action !== 'reject') {
-			rule.outbound = rule_outbound;
+		/* `route-options` only takes the override_* fields; `outbound` is the
+		 * `route` action's field.  The two used to share one branch and
+		 * `route-options` ended up carrying an `outbound` sing-box then
+		 * refused as "unknown field" - the configuration as a whole was
+		 * rejected and the user only saw "setting did not take".
+		 * Match fields above are valid for every action, so the gates below
+		 * cover the action-specific payload only. */
+		if (cfg.action === 'route' || cfg.action === 'route-options') {
 			rule.override_address = rule_override_address;
 			rule.override_port = rule_override_port;
 			rule.udp_disable_domain_unmapping = strToBool(cfg.udp_disable_domain_unmapping);
@@ -277,6 +277,10 @@ function build_route_custom(config, dm, ctx, direct_overrides) {
 			rule.tls_spoof = cfg.tls_spoof || null;
 			rule.tls_spoof_method = cfg.tls_spoof_method || null;
 		}
+		/* `route` alone is the action that picks a destination - `route-options`
+		 * adjusts the existing connection, so it does not take `outbound`. */
+		if (cfg.action === 'route')
+			rule.outbound = rule_outbound;
 
 		if (cfg.action === 'resolve') {
 			rule.server = get_resolver(cfg.resolve_server, dm);

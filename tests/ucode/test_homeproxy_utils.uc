@@ -12,7 +12,7 @@
 'use strict';
 
 import { lsdir } from 'fs';
-import { executeCommand, isValidPEM, redactReason, redactUrl, shellQuote, wGETVerbose } from 'homeproxy';
+import { executeCommand, isValidCIDR, isValidPEM, redactReason, redactUrl, shellQuote, wGETVerbose } from 'homeproxy';
 
 let failures = 0,
     checks = 0;
@@ -138,6 +138,42 @@ expect('wget.token-not-in-error',
 	expect('redactReason.port-query-redacted',
 		match(r3, /token=secret/) == null, true);
 }
+
+/* isValidCIDR(): reject injection through the /boundary.  Previously the
+ * prefix was checked with `int(prefix) < 0 || int(prefix) > 32`, which
+ * let `int('24;}')` parse as 24 (strtoll stops at the first non-digit),
+ * so a poisoned china_ip4.txt line like `1.2.3.4/24;}` sailed through
+ * and ended up verbatim in the fw4 ruleset.  These cases pin both the
+ * unanchored-injection reject and the basic shape coverage. */
+expect('cidr4.basic',           isValidCIDR('1.2.3.4', 4),         true);
+expect('cidr4.with-prefix',     isValidCIDR('1.2.3.4/24', 4),      true);
+expect('cidr4.boundary-0',      isValidCIDR('0.0.0.0/0', 4),       true);
+expect('cidr4.boundary-32',     isValidCIDR('255.255.255.255/32', 4), true);
+expect('cidr4.octet-overflow',  isValidCIDR('1.2.3.999', 4),       false);
+expect('cidr4.empty',           isValidCIDR('', 4),                false);
+expect('cidr4.whitespace',      isValidCIDR('   ', 4),             false);
+expect('cidr4.leading-space',   isValidCIDR(' 1.2.3.4', 4),        true);
+expect('cidr4.bad-family',      isValidCIDR('1.2.3.4', 99),        false);
+/* Injection vectors - the actual bug shape. */
+expect('cidr4.prefix-injection',     isValidCIDR('1.2.3.4/24;}', 4),    false);
+expect('cidr4.prefix-comment',       isValidCIDR('1.2.3.4/24 #evil', 4), false);
+expect('cidr4.prefix-non-digit',     isValidCIDR('1.2.3.4/abc', 4),     false);
+expect('cidr4.prefix-overflow',      isValidCIDR('1.2.3.4/33', 4),      false);
+expect('cidr4.prefix-negative',      isValidCIDR('1.2.3.4/-1', 4),      false);
+expect('cidr4.prefix-too-many',      isValidCIDR('1.2.3.4/12345', 4),   false);
+expect('cidr4.two-slashes',          isValidCIDR('1.2.3.4/24/32', 4),   false);
+expect('cidr4.empty-prefix',         isValidCIDR('1.2.3.4/', 4),        false);
+expect('cidr4.tail-after-ip',        isValidCIDR('1.2.3.4 garbage', 4),  false);
+
+/* IPv6: same anchor logic.  Compressed / uncompressed / invalid shapes. */
+expect('cidr6.basic',           isValidCIDR('::1', 6),                 true);
+expect('cidr6.uncompressed',    isValidCIDR('2001:db8::1', 6),         true);
+expect('cidr6.full',            isValidCIDR('fe80::1/64', 6),          true);
+expect('cidr6.boundary-128',    isValidCIDR('::1/128', 6),             true);
+expect('cidr6.prefix-overflow', isValidCIDR('::1/129', 6),             false);
+expect('cidr6.prefix-injection',isValidCIDR('::1/64;}', 6),            false);
+expect('cidr6.two-colons',      isValidCIDR('1::2::3', 6),             false);
+expect('cidr6.empty',           isValidCIDR('', 6),                    false);
 
 /* descriptors must not leak across calls */
 const before = fd_count();

@@ -28,7 +28,8 @@
 # production reads a different place.  These guards compare the layers to each
 # other instead of comparing each layer to a fixture.
 #
-# POSIX sh only - no ucode, no node, no python.  Run:
+# POSIX sh + python3 for the scanners python is better at.  No ucode,
+# no node.  Run:
 #   sh tests/arch-guard.sh [repo-root]
 
 set -u
@@ -40,6 +41,21 @@ ACL="$ROOT/root/usr/share/rpcd/acl.d/luci-app-homeproxy.json"
 VIEWS="$ROOT/htdocs/luci-static/resources"
 RUNTIME="$SCRIPTS/runtime"
 
+# assert_empty treats "no stdout" as a pass, which makes the suite
+# green on an unrelated /etc tree or any path that exists but is not
+# this repo.  Bail out loudly before any of that happens: a guard
+# that says PASS while scanning nothing is worse than a guard that
+# says FAIL, because nothing else in the report can tell them apart.
+if [ ! -d "$SCRIPTS" ] || [ ! -f "$RPC" ] || [ ! -f "$ACL" ] || [ ! -d "$VIEWS" ]; then
+	printf 'FATAL: arch-guard.sh needs the full repo tree under %s\n' "$ROOT" >&2
+	printf '       (missing %s%s%s%s)\n' \
+		"$([ -d "$SCRIPTS" ] || printf '%s ' "$SCRIPTS")" \
+		"$([ -f "$RPC" ]     || printf '%s ' "$RPC")" \
+		"$([ -f "$ACL" ]     || printf '%s ' "$ACL")" \
+		"$([ -d "$VIEWS" ]   || printf '%s ' "$VIEWS")" >&2
+	exit 2
+fi
+
 FAILED=0
 checks=0
 
@@ -47,9 +63,22 @@ pass() { checks=$((checks + 1)); printf 'PASS: %s\n' "$1"; }
 fail() { checks=$((checks + 1)); FAILED=1; printf 'FAIL: %s\n' "$1"; }
 
 # assert_empty <description> <command...>
+#
+# Empty stdout is a pass only when the scan actually ran.  "Actually ran"
+# means: the command existed (rc != 127) and could read its target (rc
+# != 126, "cannot execute").  A grep that finds nothing exits 1 with
+# empty stdout - the legitimate "nothing to report" answer - and stays
+# a pass.  A grep on a path that does not exist exits 2 ("No such
+# file"), which we DO want to flag: the previous behaviour silently
+# produced green checks for nonexistent repos.
 assert_empty() {
 	desc="$1"; shift
 	out="$("$@" 2>/dev/null)"
+	rc=$?
+	if [ "$rc" -ge 126 ]; then
+		fail "$desc (scanner exited $rc - the command or the target is missing)"
+		return
+	fi
 	if [ -z "$out" ]; then
 		pass "$desc"
 	else
@@ -850,7 +879,7 @@ for raw in sys.stdin:
         continue
     if not quote.search(body):
         print(line)
-')"
+')" || UNQUOTED="__SCAN_FAILED__"
 
 # Two exclusions the rule has to live with:
 #   - update_subscriptions.uc uses sprintf() with shellQuote() arguments,
@@ -862,7 +891,9 @@ for raw in sys.stdin:
 #   - firewall_pre.uc writes nft fragments to disk rather than passing
 #     them to a shell, so its system() calls only see literal commands.
 
-if [ -z "$UNQUOTED" ]; then
+if [ "$UNQUOTED" = "__SCAN_FAILED__" ]; then
+	fail "the shellQuote() coverage scan could not run - fix the guard before trusting a pass"
+elif [ -z "$UNQUOTED" ]; then
 	pass "every shell arg with \${...} interpolation goes through shellQuote()"
 else
 	fail "shell args with \${...} interpolation bypass shellQuote():"
@@ -1109,8 +1140,10 @@ for f in sorted((root / 'htdocs').rglob('*.js')):
                 bad.append(f'{f.relative_to(root)}:{n}: L.bind(hp.{meth}, {recv}, ...)')
 print('\n'.join(bad))
 PY
-)"
-if [ -z "$BOUND_WRONG" ]; then
+)" || BOUND_WRONG="__SCAN_FAILED__"
+if [ "$BOUND_WRONG" = "__SCAN_FAILED__" ]; then
+	fail "the bound-receiver scan could not run - fix the guard before trusting a pass"
+elif [ -z "$BOUND_WRONG" ]; then
 	pass "every receiver-dependent hp method is bound to hp"
 else
 	fail "an hp method that reads \`this\` is bound to a foreign receiver:"
@@ -1161,8 +1194,10 @@ for f in sorted(pathlib.Path(sys.argv[1]).rglob('*.uc')):
             bad.append(f'{f.name}:{n}: ${{{e}}}')
 print('\n'.join(bad))
 PY
-)"
-if [ -z "$EXEC_UNQUOTED" ]; then
+)" || EXEC_UNQUOTED="__SCAN_FAILED__"
+if [ "$EXEC_UNQUOTED" = "__SCAN_FAILED__" ]; then
+	fail "the executeCommand() interpolation scan could not run - fix the guard before trusting a pass"
+elif [ -z "$EXEC_UNQUOTED" ]; then
 	pass "every executeCommand() interpolation is shellQuote()d or numeric"
 else
 	fail "an executeCommand() argument reaches the shell unquoted:"
@@ -1246,8 +1281,10 @@ elif lock is not None and lls < lock:
     problems.append('load_locked_state() at line %d runs before the lock at line %d' % (lls, lock))
 print('\n'.join(problems))
 PY
-)"
-if [ -z "$SNAP_ORDER" ]; then
+)" || SNAP_ORDER="__SCAN_FAILED__"
+if [ "$SNAP_ORDER" = "__SCAN_FAILED__" ]; then
+	fail "the lock-ordering scan could not run - fix the guard before trusting a pass"
+elif [ -z "$SNAP_ORDER" ]; then
 	pass "the domain model and the recovery snapshot are read after the lock"
 else
 	fail "the subscription run reads state outside the lock:"
@@ -1284,8 +1321,10 @@ if not problems and backend != frontend:
     problems.append('homeproxy.uc %s != homeproxy.js %s' % (backend, frontend))
 print('\n'.join(problems))
 PY
-)"
-if [ -z "$CERT_ROOTS" ]; then
+)" || CERT_ROOTS="__SCAN_FAILED__"
+if [ "$CERT_ROOTS" = "__SCAN_FAILED__" ]; then
+	fail "the cert-roots scan could not run - fix the guard before trusting a pass"
+elif [ -z "$CERT_ROOTS" ]; then
 	pass "the frontend and backend certificate path roots agree"
 else
 	fail "the certificate path policy differs between the layers:"
@@ -1322,8 +1361,10 @@ for f in sorted(pathlib.Path(sys.argv[1]).rglob('*.js')):
             bad.append('%s:%d: %s' % (f.relative_to(sys.argv[1]), n, line.strip()))
 print('\n'.join(bad))
 PY
-)"
-if [ -z "$EXEC_DIRECT" ]; then
+)" || EXEC_DIRECT="__SCAN_FAILED__"
+if [ "$EXEC_DIRECT" = "__SCAN_FAILED__" ]; then
+	fail "the fs.exec_direct scan could not run - fix the guard before trusting a pass"
+elif [ -z "$EXEC_DIRECT" ]; then
 	pass "no view runs a file directly (the ACL grants no exec right)"
 else
 	fail "a view still calls fs.exec_direct, which needs the exec grant this ACL no longer has:"

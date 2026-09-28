@@ -557,12 +557,26 @@ return view.extend({
 		 * fallback and the escaping of the fragment, all three of which used
 		 * to be inline here: decodeURIComponent threw on a fragment like
 		 * '#100%' and took the whole page render down with it, and the decoded
-		 * fragment went unescaped into a tab title. */
+		 * fragment went unescaped into a tab title.
+		 *
+		 * Dedupe by hash: subscriptionInfo() drops the fragment before the
+		 * md5 so two entries whose URL only differs by their fragment (e.g.
+		 * a user-added entry and a fragment-labelled alias) used to push
+		 * the same `info.hash` twice and the second s.tab() call threw
+		 * "Tab already declared", taking the entire Node Settings render
+		 * down with it.  The backend dedupes the same way (update_subscriptions.uc
+		 * also strips the fragment before computing the groupHash), so the
+		 * first-seen entry is the one both sides agree on. */
 		let subinfo = [];
+		const seen_hashes = {};
 		for (let suburl of (uci.get('homeproxy', 'subscription', 'subscription_url') || [])) {
 			const info = hp.subscriptionInfo(suburl);
-			if (info)
-				subinfo.push(info);
+			if (!info)
+				continue;
+			if (seen_hashes[info.hash])
+				continue;
+			seen_hashes[info.hash] = true;
+			subinfo.push(info);
 		}
 
 		m = new form.Map('homeproxy', _('Edit nodes'));
@@ -855,7 +869,7 @@ return view.extend({
 								return finish(() => location.reload());
 							return finish(() => ui.addNotification(null, E('p', [
 								_('Subscription update did not complete cleanly. Last log:'),
-								E('pre', {}, s && s.log_tail ? s.log_tail : _('(empty)'))
+								E('pre', {}, [s && s.log_tail ? s.log_tail : _('(empty)')])
 							])));
 						});
 					}

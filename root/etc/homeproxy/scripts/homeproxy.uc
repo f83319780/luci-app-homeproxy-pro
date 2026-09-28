@@ -464,8 +464,15 @@ export function isValidCIDR(addr, family) {
 	if (!addr)
 		return false;
 
-	/* Split address and optional prefix */
+	/* Split address and optional prefix. Reject a second '/' outright:
+	 * the only legal form is "ip" or "ip/prefix", and a resource-list
+	 * entry like "1.2.3.4/24/32" or "1.2.3.4/;}" would otherwise split
+	 * into a benign-looking ip and a prefix the next checks would then
+	 * have to defend.  Drop it here so all the following regexes only have
+	 * to police a one-or-zero-slash input. */
 	const parts = split(addr, '/');
+	if (length(parts) > 2)
+		return false;
 	const ip = parts[0];
 	const prefix = parts[1];
 
@@ -478,9 +485,15 @@ export function isValidCIDR(addr, family) {
 		for (let o in octets)
 			if (int(o) > 255)
 				return false;
-		/* Validate prefix if present */
-		if (prefix && (int(prefix) < 0 || int(prefix) > 32))
-			return false;
+		/* Validate prefix if present.  Anchor with a digit-only regex:
+		 * without it, `int(prefix)` happily parses `24;}` as 24 (strtoll
+		 * stops at the first non-digit), so a poisoned china_ip4.txt line
+		 * `1.2.3.4/24;}` sailed past this check and ended up verbatim
+		 * in the fw4 ruleset fw4 then loaded as root. */
+		if (prefix) {
+			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 32)
+				return false;
+		}
 	} else if (family === 6) {
 		/* Only hex digits and colons */
 		if (!match(ip, /^[0-9a-fA-F:]+$/))
@@ -516,8 +529,12 @@ export function isValidCIDR(addr, family) {
 				return false;
 		}
 
-		if (prefix && (int(prefix) < 0 || int(prefix) > 128))
-			return false;
+		/* Same anchor as the IPv4 branch: `1.2.3.4/24;}` would let
+		 * `int('24;}')` slip through unanchored and end up in fw4. */
+		if (prefix) {
+			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 128)
+				return false;
+		}
 	} else {
 		return false;
 	}

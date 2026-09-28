@@ -267,6 +267,39 @@ expect('main_node_refs: log line emitted for the prune',
 	length(filter(seen, (l) => match(l, /removing from urltest/))),
 	1);
 
+/* "main_node points at a live section": the user's choice must be kept.
+ *
+ * Regression: switchMainNodeOffDanglingRef used to ask
+ *   uci.get(uciconfig, field)
+ * where field is the *option name* ('main_node'), not the option's
+ * current value.  That question is "does a section literally named
+ * 'main_node' exist?" - the answer is always false, so the function
+ * silently overwrote the user's pick with first_server on every
+ * subscription update.  This test pins the new behaviour: same value in,
+ * same value out, no UCI mutation, no "switching to" log line. */
+uci2.set(CFG, 'config', 'main_node', n_alive);
+uci2.commit(CFG);
+uci2.load(CFG);
+
+const disk_before_keep = readfile(CONFIG_PATH);
+const switches_before = length(filter(seen, (l) => match(l, /switching to/)));
+const main_refs_keep = Repository.apply_main_node_refs(
+	uci2, CFG, 'config', TYPE,
+	{ main_node: n_alive, main_udp_node: 'nil', has_nodes: true },
+	LOG
+);
+expect('main_node_refs: live target kept verbatim',
+	main_refs_keep.main_node, n_alive);
+expect('main_node_refs: live target left UCI untouched',
+	readfile(CONFIG_PATH), disk_before_keep);
+expect('main_node_refs: live target emitted no switch log line',
+	length(filter(seen, (l) => match(l, /switching to/))),
+	switches_before);
+uci2.commit(CFG);
+uci2.load(CFG);
+expect('main_node_refs: live target still in UCI after commit',
+	uci2.get(CFG, 'config', 'main_node'), n_alive);
+
 /* "main_node target is gone": point main_node at a section that does not
  * exist. The Repository must switch to the first node in the file. */
 uci2.set(CFG, 'config', 'main_node', 'cfgNOPEEEEEE');

@@ -847,8 +847,8 @@ return baseclass.extend({
 
 			if (!rpc_warned.has(key)) {
 				rpc_warned.add(key);
-				ui.addNotification(null, E('p', _('The request %s failed: %s.').format(
-					key, (err && err.message) || String(err))));
+				ui.addNotification(null, E('p', [_('The request %s failed: %s.').format(
+					key, (err && err.message) || String(err))]));
 			}
 
 			return options.fallback !== undefined ? options.fallback : {};
@@ -868,10 +868,18 @@ return baseclass.extend({
 	 * that had already drifted (its vmess branch lost vmess_global_padding)
 	 * and that validated nothing before writing the node into UCI. */
 	parseShareLink(uri) {
-		/* fallback null: a failed call and a rejected link both mean "no node",
-		   and the caller already tells the user which links were dropped. */
+		/* Backend (luci.homeproxy node_parse) returns one of
+		 *   { config: {...the-node-fields}, error: '' }      on success
+		 *   { config: null,               error: '...' }   on failure
+		 * (rpcParse's `expect` would unpack-and-type-check, which the
+		 *  earlier { config: null } got wrong: it coerced the parsed
+		 *  config object to null and dropped the whole import.  Leave
+		 *  the value alone and pick .config in the then-callback.)
+		 * fallback null: a failed call and a rejected link both mean
+		 * "no node", and the caller already tells the user which
+		 * links were dropped. */
 		return this.rpcCall('node_parse', [uri],
-				{ params: ['uri'], expect: { config: null }, fallback: null })
+				{ params: ['uri'], fallback: null })
 			.then((res) => (res && res.config) ? res.config : null);
 	},
 
@@ -1072,10 +1080,10 @@ return baseclass.extend({
 				if (ret && ret.result === true)
 					ui.addNotification(null, E('p', _('Your %s was successfully uploaded. Size: %sB.').format(type, res.size)));
 				else
-					ui.addNotification(null, E('p', _('Failed to upload %s, error: %s.').format(type, (ret && ret.error) || 'unknown error')));
+					ui.addNotification(null, E('p', [_('Failed to upload %s, error: %s.').format(type, (ret && ret.error) || 'unknown error')]));
 			});
 		}, this, ev.target))
-		.catch((e) => { ui.addNotification(null, E('p', e.message || 'upload failed')) });
+		.catch((e) => { ui.addNotification(null, E('p', [e.message || 'upload failed'])) });
 	},
 
 	validateBase64Key(length, section_id, value) {

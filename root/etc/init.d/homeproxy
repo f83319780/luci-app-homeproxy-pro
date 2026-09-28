@@ -569,12 +569,33 @@ reload_service() {
 
 	log "Error: $failed did not come up with the new configuration, rolling back."
 
+	# TODO(rollback-layer, 2026-09-28 review P1-3): `hp_rollback` + `stop; start`
+	# below restores the sing-box bytes but start_service() reinstalls the
+	# nft / dnsmasq layer from CURRENT UCI, which is the failing (new)
+	# configuration.  proxy_mode tproxy -> tun that fails -> rollback gives
+	# back sing-box's tproxy config but nft still has the tun chains, so the
+	# LAN is not proxied.  Fix needs to snapshot proxy_mode / routing_mode
+	# BEFORE the failed start and feed the rolled-back values into
+	# start_service.  Requires real-machine reproduction before changing
+	# behaviour; the health gate alone cannot catch the mismatch.
+
 	local good="$GOOD_DIR/$failed.json"
 	local live="$RUN_DIR/$failed.json"
 	local rolled_back=0
 
 	if hp_same_file "$live" "$good"; then
 		log "Error: the failing configuration is already the known-good one; nothing to roll back to."
+		# TODO(intercept-released-rearm, 2026-09-28 review P1-4): when the
+		# failing candidate is byte-equal to the known-good, this branch
+		# returns 1 below without ever clearing $RUN_DIR/intercept-released.
+		# The marker was set by hp_release_intercept() during the failed
+		# start, but the file-equal branch skips the stop;start below, so
+		# nothing reinstalls the nft / dnsmasq layer, and the router
+		# reports running while LAN traffic is not proxied.  Add a
+		# rearm-or-clear on this path.  Requires real-machine reproduction
+		# first: the bug only fires if the failing start went through
+		# hp_release_intercept AND the failing candidate byte-equals
+		# known-good, which we have not yet exercised.
 	elif hp_rollback "$live" "$good"; then
 		rolled_back=1
 	else

@@ -204,12 +204,21 @@ function maybeScrubUrltestNodes(uci, uciconfig, ucimain, listOption, log) {
  * name (`main_node` vs `main_udp_node`) and the user-facing log line,
  * so this is what made the pre-refactor code mirror itself.
  *
+ * `current_value` is what the field currently points at (the user-chosen
+ * section name, the literal 'urltest', or 'same' / 'nil').  We only
+ * overwrite the field when the section named by `current_value` no
+ * longer exists in UCI; the previous version asked `uci.get(uciconfig,
+ * field)` which is "does a section literally named `field` exist" - the
+ * config has cfg0xxxx names, never one named `main_node`, so the check
+ * was always false and the user's pick got silently replaced with
+ * first_server on every subscription update.
+ *
  * The new value is also pushed onto `result.log` so the orchestrator
  * can replay it (it uses `result.log` to log the same lines verbatim;
  * the homeproxy.log capture goes through the separate `log` arg). */
-function switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, field, first_server, result, log) {
-	if (uci.get(uciconfig, field))
-		return field;
+function switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, field, current_value, first_server, result, log) {
+	if (uci.get(uciconfig, current_value))
+		return current_value;
 	uci.set(uciconfig, ucimain, field, first_server);
 	const msg = sprintf('Main%s node is gone, switching to the first node.',
 		field === 'main_udp_node' ? ' UDP' : '');
@@ -269,9 +278,9 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 		const cleaned = maybeScrubUrltestNodes(uci, uciconfig, ucimain, 'main_urltest_nodes', log);
 
 		if (!length(cleaned))
-			result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', first_server, result, log);
+			result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', main_node, first_server, result, log);
 	} else {
-		result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', first_server, result, log);
+		result.main_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_node', main_node, first_server, result, log);
 	}
 
 	if (!isEmpty(main_udp_node) && main_udp_node !== 'same') {
@@ -279,9 +288,9 @@ function apply_main_node_refs(uci, uciconfig, ucimain, ucinode, ctx, log) {
 			const cleaned = maybeScrubUrltestNodes(uci, uciconfig, ucimain, 'main_udp_urltest_nodes', log);
 
 			if (!length(cleaned))
-				result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', first_server, result, log);
+				result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', main_udp_node, first_server, result, log);
 		} else {
-			result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', first_server, result, log);
+			result.main_udp_node = switchMainNodeOffDanglingRef(uci, uciconfig, ucimain, 'main_udp_node', main_udp_node, first_server, result, log);
 		}
 	}
 
