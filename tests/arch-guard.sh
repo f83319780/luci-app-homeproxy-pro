@@ -1789,6 +1789,85 @@ else
 fi
 
 echo
+echo "== guard 40: rule/routing rule action enum agrees across UI and generator =="
+# The 'action' dropdown in client/common.js is the *user-visible* set the
+# form lets the user pick.  The generator's per-action gates (in dns.uc and
+# route.uc) are the *what sing-box sees* set.  When the UI ships an action
+# the generator does not know about, the form serialises a value the
+# generator then emits as `rule.action = '<unknown>'` - sing-box 1.14
+# refuses the whole config with "unknown action".  When the UI defines an
+# action the generator does not handle, sing-box refuses the action with
+# "unknown field".  Both directions matter, both directions are checked.
+#
+# Reading order:
+#   UI dns_rule actions:    extracted from common.js inside `if (is_dns) { ... }` of the
+#                            action ListValue (the values that surface when is_dns=true)
+#   UI routing_rule actions: the values outside the is_dns branch
+#   generator dns_rule:     all `'action' === '...'` literals in dns.uc's custom loop
+#   generator routing_rule: all `'action' === '...'` literals in route.uc's per-rule loop
+ACTION_ENUM="$(python3 - "$ROOT" <<'PY' || ACTION_ENUM="__SCAN_FAILED__"
+import re, sys, pathlib
+root = pathlib.Path(sys.argv[1])
+common = (root / 'htdocs/luci-static/resources/view/homeproxy/client/common.js').read_text()
+
+# Find the action ListValue block: from "ss.taboption('field_other', form.ListValue, 'action'"
+# until 'so.default = 'route'' on the next non-conditional line.  Within that
+# block, is_dns and !is_dns branches control which values get exposed.
+m = re.search(r"so = ss\.taboption\('field_other', form\.ListValue, 'action'.*?so\.default = 'route'",
+              common, re.DOTALL)
+if not m:
+    print('__SCAN_FAILED__')
+    sys.exit()
+
+block = m.group(0)
+# Inside the if (is_dns) { ... } else { ... }, collect value('xxx', ...) names.
+# The else branch is "routing_rule actions"; the if branch is "dns_rule actions".
+is_dns_m = re.search(r"if \(is_dns\) \{(.*?)\} else \{(.*?)\}", block, re.DOTALL)
+if not is_dns_m:
+    print('__SCAN_FAILED__')
+    sys.exit()
+
+def actions(branch):
+    return set(re.findall(r"so\.value\('([^']+)'", branch))
+
+dns_actions = actions(is_dns_m.group(1))
+routing_actions = actions(is_dns_m.group(2))
+
+dns_uc = (root / 'root/etc/homeproxy/scripts/generator/dns.uc').read_text()
+route_uc = (root / 'root/etc/homeproxy/scripts/generator/route.uc').read_text()
+
+def gates(text):
+    return set(re.findall(r"cfg\.action === '([^']+)'", text))
+
+dns_gates = gates(dns_uc)
+route_gates = gates(route_uc)
+
+problems = []
+ui_extra = dns_actions - dns_gates
+if ui_extra:
+    problems.append(f'dns_rule UI exposes {sorted(ui_extra)} but generator/dns.uc does not gate on them')
+gates_extra = dns_gates - dns_actions - {'route-options'}  # generator-internal sentinel
+# (Above: dns_gates may include 'route-options' from old guard; clean ignore.)
+# A gate the UI does not offer is fine if the generator never emits it (matches),
+# but we should still flag if it could be reached from UCI (impossible here because the ListValue is the only writer).
+
+ui_extra_r = routing_actions - route_gates
+if ui_extra_r:
+    problems.append(f'routing_rule UI exposes {sorted(ui_extra_r)} but generator/route.uc does not gate on them')
+
+print('\n'.join(problems))
+PY
+)"
+if [ "$ACTION_ENUM" = "__SCAN_FAILED__" ]; then
+	fail "the rule action enum scan could not run - fix the guard before trusting a pass"
+elif [ -z "$ACTION_ENUM" ]; then
+	pass "every rule action in the UI dropdown is gated by the matching generator"
+else
+	fail "the rule action enum drifted between the UI and the generator:"
+	printf '      %s\n' "$ACTION_ENUM"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

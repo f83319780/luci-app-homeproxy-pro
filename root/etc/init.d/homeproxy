@@ -159,8 +159,19 @@ hp_rearm_intercept() {
 	log "Client is up again; reinstalling the intercept layer."
 	hp_dnsmasq_write_snippets "$DNSMASQ_DIR" "$HP_DIR" "$2"
 	hp_net_setup "$1" "$2"
-	hp_firewall_apply "$HP_DIR" "$RUN_DIR" "1" \
-		|| log "Error: the firewall rules could not be reinstalled; the proxy may not be enforced."
+	# hp_firewall_apply already writes $RUN_DIR/failed-firewall on its own
+	# failure, but the helper's caller is service_started, which only reads
+	# that marker when it comes from the candidate path.  A failed rearm
+	# must surface the same way: writing the file here makes the run a
+	# "firewall did not come up" candidate, the health gate will not pass,
+	# and the user sees a definite failure rather than "running but LAN
+	# not proxied".  The marker is cleared by service_started once the run
+	# is otherwise healthy (see the rm -f near $RUN_DIR/failed-firewall below).
+	if ! hp_firewall_apply "$HP_DIR" "$RUN_DIR" "1"; then
+		log "Error: the firewall rules could not be reinstalled; the proxy may not be enforced."
+		printf '%s\n' "firewall" > "$RUN_DIR/failed-firewall"
+		return 1
+	fi
 }
 
 # hp_release_stale_intercept
@@ -456,7 +467,23 @@ stop_service() {
 service_stopped() {
 	config_load "$CONF"
 
-	hp_net_remove_tun
+	# Review P2 (2026-09-28): a reload stops then starts the service
+	# inside the same procd invocation, and HP_RELOAD_IN_PROGRESS is set
+	# during that window (set by reload_service just before the
+	# `stop; start`).  When the reload is a tun -> tun reload, removing
+	# the tun device here pulls the default route out of table 100, so
+	# marked traffic falls back to the main table while the new sing-box
+	# is starting up - the LAN hits the WAN with the real IP.  Skip the
+	# tuntap del on the reload path; the next start will reuse the
+	# existing device if its name and address match (hp_net_setup checks).
+	# A genuine stop (HP_RELOAD_IN_PROGRESS=0) keeps the original
+	# behaviour: the device is torn down so a subsequent start can
+	# create a fresh one with whatever the new UCI asked for.
+	if [ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ]; then
+		:
+	else
+		hp_net_remove_tun
+	fi
 }
 
 reload_service() {
@@ -569,15 +596,15 @@ reload_service() {
 
 	log "Error: $failed did not come up with the new configuration, rolling back."
 
-	# TODO(rollback-layer, 2026-09-28 review P1-3): `hp_rollback` + `stop; start`
-	# below restores the sing-box bytes but start_service() reinstalls the
-	# nft / dnsmasq layer from CURRENT UCI, which is the failing (new)
-	# configuration.  proxy_mode tproxy -> tun that fails -> rollback gives
-	# back sing-box's tproxy config but nft still has the tun chains, so the
-	# LAN is not proxied.  Fix needs to snapshot proxy_mode / routing_mode
-	# BEFORE the failed start and feed the rolled-back values into
-	# start_service.  Requires real-machine reproduction before changing
-	# behaviour; the health gate alone cannot catch the mismatch.
+	# Review P1-3 (2026-09-28): restore the nft-layer-driving UCI keys
+	# *before* the rolled-back stop;start.  Without this, start_service()
+	# re-reads CURRENT UCI (the failing, new configuration) and installs
+	# the wrong layer - the classic "rollback worked but LAN still not
+	# proxied" symptom.  hp_promote_known_good snapshots these keys when
+	# the candidate is healthy; this is the symmetric restore.
+	if ! hp_restore_known_good_uci "$GOOD_DIR"; then
+		log "Warning: no uci-snapshot alongside the known-good copy; the firewall/dnsmasq layer will be reinstalled from the failing UCI on the rollback restart.  This snapshot exists from r27 onwards; older installs fall back to the previous behaviour."
+	fi
 
 	local good="$GOOD_DIR/$failed.json"
 	local live="$RUN_DIR/$failed.json"
@@ -585,17 +612,14 @@ reload_service() {
 
 	if hp_same_file "$live" "$good"; then
 		log "Error: the failing configuration is already the known-good one; nothing to roll back to."
-		# TODO(intercept-released-rearm, 2026-09-28 review P1-4): when the
-		# failing candidate is byte-equal to the known-good, this branch
-		# returns 1 below without ever clearing $RUN_DIR/intercept-released.
-		# The marker was set by hp_release_intercept() during the failed
-		# start, but the file-equal branch skips the stop;start below, so
-		# nothing reinstalls the nft / dnsmasq layer, and the router
-		# reports running while LAN traffic is not proxied.  Add a
-		# rearm-or-clear on this path.  Requires real-machine reproduction
-		# first: the bug only fires if the failing start went through
-		# hp_release_intercept AND the failing candidate byte-equals
-		# known-good, which we have not yet exercised.
+		# Review P1-4 (2026-09-28): the failing candidate is byte-equal to
+		# known-good and we are skipping stop;start, so the
+		# intercept-released marker set by hp_release_intercept during
+		# the failed start would otherwise survive until a manual reload.
+		# Clear it here and let the next reload or stop:start rearm the
+		# intercept layer; the proxy still does not work in this exact
+		# moment, but at least no marker lies about its state.
+		[ -f "$RUN_DIR/intercept-released" ] && rm -f "$RUN_DIR/intercept-released"
 	elif hp_rollback "$live" "$good"; then
 		rolled_back=1
 	else

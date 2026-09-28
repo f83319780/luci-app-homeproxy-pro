@@ -161,14 +161,26 @@ function renderRuleSection(s, kind, self) {
 		_('Invert match result.'));
 	so.modalonly = true;
 
+	/* Action options are split by which schema they belong to:
+	 *   dns_rule actions:    route, reject, predefined, evaluate (1.14 only)
+	 *   routing_rule actions: route, route-options, reject, resolve, hijack/sniff
+	 *                         (sniff/hijack are emitted by the proxy-mode builder,
+	 *                          not exposed in the form).
+	 *
+	 * `route-options` is a routing_rule-only action: sing-box 1.14's dns_rule
+	 * schema has no such action, and emitting it would make the whole dns block
+	 * fail with "unknown action".  Earlier code added it to both branches and
+	 * the depends() guards for dns_disable_cache / rewrite_ttl / client_subnet
+	 * pinned a stale 'route-options' in the UCI that resurfaced as "unknown
+	 * field" the next time the user flipped back to 'route'. */
 	so = ss.taboption('field_other', form.ListValue, 'action', _('Action'));
 	so.value('route', _('Route'));
-	so.value('route-options', _('Route options'));
 	so.value('reject', _('Reject'));
 	if (is_dns) {
 		so.value('predefined', _('Predefined'));
 		so.value('evaluate', _('Evaluate (1.14)'));
 	} else {
+		so.value('route-options', _('Route options'));
 		so.value('resolve', _('Resolve'));
 	}
 	so.default = 'route';
@@ -199,14 +211,12 @@ function renderRuleSection(s, kind, self) {
 			so = ss.taboption('field_other', form.Flag, 'dns_disable_cache', _('Disable dns cache'),
 				_('Disable cache and save cache in this query.'));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'rewrite_ttl', _('Rewrite TTL'),
 				_('Rewrite TTL in DNS responses.'));
 			so.datatype = 'uinteger';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'client_subnet', _('EDNS Client subnet'),
@@ -214,7 +224,6 @@ function renderRuleSection(s, kind, self) {
 				'If value is an IP address instead of prefix, <code>/32</code> or <code>/128</code> will be appended automatically.'));
 			so.datatype = 'or(cidr, ipaddr)';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'match_response', _('Match response'),
@@ -339,46 +348,39 @@ function renderRuleSection(s, kind, self) {
 				_('Override the connection destination address.'));
 			so.datatype = 'ipaddr';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'override_port', _('Override port'),
 				_('Override the connection destination port.'));
 			so.datatype = 'port';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Flag, 'udp_disable_domain_unmapping', _('Disable UDP domain unmapping'),
 				_('If enabled, for UDP proxy requests addressed to a domain, the original packet address will be sent in the response instead of the mapped domain.'));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Flag, 'udp_connect', _('connect UDP connections'),
 				_('If enabled, attempts to connect UDP connection to the destination instead of listen.'));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'udp_timeout', _('UDP timeout'),
 				_('Timeout for UDP connections.<br/>Setting a larger value than the UDP timeout in inbounds will have no effect.'));
 			so.datatype = 'uinteger';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Flag, 'tls_record_fragment', _('TLS record fragment'),
 				_('Fragment TLS handshake into multiple TLS records.'));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Flag, 'tls_fragment', _('TLS fragment'),
 				_('Fragment TLS handshakes. Due to poor performance, try <code>%s</code> first.').format(
 					_('TLS record fragment')));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.Value, 'tls_fragment_fallback_delay', _('Fragment fallback delay'),
@@ -392,7 +394,6 @@ function renderRuleSection(s, kind, self) {
 				_('Inject a forged TLS ClientHello carrying this SNI before the real one to fool SNI-filtering middleboxes. Requires elevated privileges.'));
 			so.datatype = 'hostname';
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.modalonly = true;
 
 			so = ss.taboption('field_other', form.ListValue, 'tls_spoof_method', _('TLS spoof method (1.14)'),
@@ -403,7 +404,6 @@ function renderRuleSection(s, kind, self) {
 			so.value('wrong-md5', _('wrong-md5'));
 			so.value('wrong-timestamp', _('wrong-timestamp'));
 			so.depends('action', 'route');
-			so.depends('action', 'route-options');
 			so.depends('tls_spoof', /[\s\S]/);
 			so.modalonly = true;
 

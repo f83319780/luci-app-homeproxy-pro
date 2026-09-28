@@ -1068,12 +1068,12 @@
 										"Route"
 									],
 									[
-										"route-options",
-										"Route options"
-									],
-									[
 										"reject",
 										"Reject"
+									],
+									[
+										"route-options",
+										"Route options"
 									],
 									[
 										"resolve",
@@ -1115,10 +1115,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1137,10 +1133,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1159,10 +1151,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1180,10 +1168,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1201,10 +1185,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1223,10 +1203,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1244,10 +1220,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1284,10 +1256,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -1306,10 +1274,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									],
 									[
 										"tls_spoof",
@@ -2408,10 +2372,6 @@
 										"Route"
 									],
 									[
-										"route-options",
-										"Route options"
-									],
-									[
 										"reject",
 										"Reject"
 									],
@@ -2463,10 +2423,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -2484,10 +2440,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
@@ -2506,10 +2458,6 @@
 									[
 										"action",
 										"route"
-									],
-									[
-										"action",
-										"route-options"
 									]
 								],
 								"values": [],
