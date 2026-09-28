@@ -489,8 +489,15 @@ export function isValidCIDR(addr, family) {
 		 * without it, `int(prefix)` happily parses `24;}` as 24 (strtoll
 		 * stops at the first non-digit), so a poisoned china_ip4.txt line
 		 * `1.2.3.4/24;}` sailed past this check and ended up verbatim
-		 * in the fw4 ruleset fw4 then loaded as root. */
-		if (prefix) {
+		 * in the fw4 ruleset fw4 then loaded as root.
+		 *
+		 * Guard the gate on explicit presence (not just truthiness):
+		 * `if (prefix)` is also false for the empty string, so a
+		 * trailing-slash entry like `1.2.3.4/` would slip past the gate
+		 * and pass overall.  The regex naturally rejects `''` (zero
+		 * digits) - the presence guard is just to avoid claiming "no
+		 * prefix" when one was explicitly started. */
+		if (prefix !== null && prefix !== undefined) {
 			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 32)
 				return false;
 		}
@@ -530,8 +537,9 @@ export function isValidCIDR(addr, family) {
 		}
 
 		/* Same anchor as the IPv4 branch: `1.2.3.4/24;}` would let
-		 * `int('24;}')` slip through unanchored and end up in fw4. */
-		if (prefix) {
+		 * `int('24;}')` slip through unanchored and end up in fw4.  Same
+		 * explicit-presence guard for `::1/` (empty prefix). */
+		if (prefix !== null && prefix !== undefined) {
 			if (!match(prefix, /^\d{1,3}$/) || int(prefix) > 128)
 				return false;
 		}
