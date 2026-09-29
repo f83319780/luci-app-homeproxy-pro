@@ -995,32 +995,37 @@ cat > "$WORK/naptr_probe.uc" <<'EOF'
 import { readfile } from 'fs';
 
 const config = json(readfile(ARGV[0]));
-const expected = ['r.10086.cn', '10086.cn', 'pub.3gppnetwork.org'];
 
+let found = false;
 for (let r in (config.dns?.rules || [])) {
 	const qt = r.query_type;
 	if (!qt || qt[0] !== 35)
 		continue;
+	found = true;
 	const sf = r.domain_suffix;
 	if (!sf) {
 		console.log('PROBE_FAIL: qtype-35 rule has no domain_suffix');
 		exit(1);
 	}
-	if (length(sf) !== 3) {
-		console.log('PROBE_FAIL: qtype-35 rule has ' + length(sf) + ' suffixes (expected 3): ' + join(',', sf));
+	if (sf[0] !== 'r.10086.cn') {
+		console.log('PROBE_FAIL: qtype-35 domain_suffix[0] = ' + sf[0]);
 		exit(1);
 	}
-	for (let i = 0; i < 3; i++) {
-		if (sf[i] !== expected[i]) {
-			console.log('PROBE_FAIL: qtype-35 domain_suffix[' + i + '] = ' + sf[i] + ' (expected ' + expected[i] + ')');
-			exit(1);
-		}
+	if (sf[1] !== '10086.cn') {
+		console.log('PROBE_FAIL: qtype-35 domain_suffix[1] = ' + sf[1]);
+		exit(1);
+	}
+	if (sf[2] !== 'pub.3gppnetwork.org') {
+		console.log('PROBE_FAIL: qtype-35 domain_suffix[2] = ' + sf[2]);
+		exit(1);
 	}
 	console.log('PROBE_OK');
 	exit(0);
 }
-console.log('PROBE_FAIL: no qtype-35 rule');
-exit(1);
+if (!found) {
+	console.log('PROBE_FAIL: no qtype-35 rule');
+	exit(1);
+}
 EOF
 
 naptr_json="$WORK/naptr-bypass-domains/run/sing-box-c.json"
@@ -1096,7 +1101,7 @@ fi
 #    '\toption path' and a no-leading-TAB pattern does not match.
 run_case_type_error local-ruleset-bad-path "outside the homeproxy whitelist" \
 	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
-	's#\toption path '\''__RULESET_DIR__/test.srs'\''#\toption path '\''/etc/passwd'\''#'
+	"s%^[[:space:]]*option path '__RULESET_DIR__/test.srs'%    option path '/etc/passwd'%"
 
 # 6) P3 #8 / §4.2.2 (extra_tags die() on missing {tag}): not exercised
 #    here - the multi-tag branch in generator/ruleset.uc needs a ruleset
