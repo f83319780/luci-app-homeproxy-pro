@@ -146,7 +146,7 @@ file var/run/homeproxy/fw4_input.nft:
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.main_node=n1|homeproxy.config.main_udp_node=nil|homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.config.routing_port=|homeproxy.config.ipv6_support=0|homeproxy.config.china_dns_server=|homeproxy.infra.self_mark=|homeproxy.infra.redirect_port=|homeproxy.infra.tproxy_port=|homeproxy.infra.tproxy_mark=101|homeproxy.infra.tun_mark=102|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_addr4=|homeproxy.infra.tun_addr6=|homeproxy.infra.dns_redirect=|homeproxy.infra.dns_port=5333|homeproxy.infra.common_port=|homeproxy.infra.table_mark=100|homeproxy.routing.bypass_cn_traffic=|homeproxy.routing.default_outbound=direct-out|homeproxy.server.enabled=0|homeproxy.control.lan_proxy_mode=|list homeproxy.control.listen_interfaces=|list homeproxy.control.lan_direct_ipv4_ips=|list homeproxy.control.lan_direct_ipv6_ips=|list homeproxy.control.lan_direct_mac_addrs=|list homeproxy.control.lan_proxy_ipv4_ips=|list homeproxy.control.lan_proxy_ipv6_ips=|list homeproxy.control.lan_proxy_mac_addrs=|list homeproxy.control.lan_gaming_mode_ipv4_ips=|list homeproxy.control.lan_gaming_mode_ipv6_ips=|list homeproxy.control.lan_gaming_mode_mac_addrs=|list homeproxy.control.lan_global_proxy_ipv4_ips=|list homeproxy.control.lan_global_proxy_ipv6_ips=|list homeproxy.control.lan_global_proxy_mac_addrs=|list homeproxy.control.wan_proxy_ipv4_ips=|list homeproxy.control.wan_proxy_ipv6_ips=|list homeproxy.control.wan_direct_ipv4_ips=|list homeproxy.control.wan_direct_ipv6_ips=|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: B-tproxy-gfwlist-ipv6-with-server (start) =====
@@ -338,7 +338,7 @@ file var/run/homeproxy/fw4_post.nft:
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file var/run/homeproxy/known-good/sing-box-s.json: {|	"log": {},|	"inbounds": [],|	"outbounds": []|}|
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=gfwlist|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.main_node=n1|homeproxy.config.main_udp_node=u1|homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=gfwlist|homeproxy.config.routing_port=|homeproxy.config.ipv6_support=1|homeproxy.config.china_dns_server=|homeproxy.infra.self_mark=|homeproxy.infra.redirect_port=|homeproxy.infra.tproxy_port=|homeproxy.infra.tproxy_mark=101|homeproxy.infra.tun_mark=102|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_addr4=|homeproxy.infra.tun_addr6=|homeproxy.infra.dns_redirect=|homeproxy.infra.dns_port=5333|homeproxy.infra.common_port=|homeproxy.infra.table_mark=100|homeproxy.routing.bypass_cn_traffic=|homeproxy.routing.default_outbound=direct-out|homeproxy.server.enabled=1|homeproxy.control.lan_proxy_mode=|list homeproxy.control.listen_interfaces=|list homeproxy.control.lan_direct_ipv4_ips=|list homeproxy.control.lan_direct_ipv6_ips=|list homeproxy.control.lan_direct_mac_addrs=|list homeproxy.control.lan_proxy_ipv4_ips=|list homeproxy.control.lan_proxy_ipv6_ips=|list homeproxy.control.lan_proxy_mac_addrs=|list homeproxy.control.lan_gaming_mode_ipv4_ips=|list homeproxy.control.lan_gaming_mode_ipv6_ips=|list homeproxy.control.lan_gaming_mode_mac_addrs=|list homeproxy.control.lan_global_proxy_ipv4_ips=|list homeproxy.control.lan_global_proxy_ipv6_ips=|list homeproxy.control.lan_global_proxy_mac_addrs=|list homeproxy.control.wan_proxy_ipv4_ips=|list homeproxy.control.wan_proxy_ipv6_ips=|list homeproxy.control.wan_direct_ipv4_ips=|list homeproxy.control.wan_direct_ipv6_ips=|
 
 ===== scenario: C-nothing-configured (start) =====
 uci -q show dhcp.@dnsmasq[0]
@@ -756,11 +756,46 @@ init.d/miniupnpd running
 init.d/miniupnpd restart
 init.d/dnsmasq restart
 log Error: sing-box-c did not come up with the new configuration, rolling back.
+uci set homeproxy.config.main_node=n1
+uci set homeproxy.config.main_udp_node=nil
 uci set homeproxy.config.proxy_mode=tun
 uci set homeproxy.config.routing_mode=bypass_mainland_china
+uci set homeproxy.config.routing_port=
+uci set homeproxy.config.ipv6_support=0
+uci set homeproxy.config.china_dns_server=
 uci set homeproxy.infra.self_mark=
+uci set homeproxy.infra.redirect_port=
+uci set homeproxy.infra.tproxy_port=
+uci set homeproxy.infra.tproxy_mark=101
+uci set homeproxy.infra.tun_mark=102
 uci set homeproxy.infra.tun_name=singtun0
-uci set homeproxy.infra.tun_address=
+uci set homeproxy.infra.tun_addr4=
+uci set homeproxy.infra.tun_addr6=
+uci set homeproxy.infra.dns_redirect=
+uci set homeproxy.infra.dns_port=5333
+uci set homeproxy.infra.common_port=
+uci set homeproxy.infra.table_mark=100
+uci set homeproxy.routing.bypass_cn_traffic=
+uci set homeproxy.routing.default_outbound=direct-out
+uci set homeproxy.server.enabled=0
+uci set homeproxy.control.lan_proxy_mode=
+uci delete homeproxy.control.listen_interfaces
+uci delete homeproxy.control.lan_direct_ipv4_ips
+uci delete homeproxy.control.lan_direct_ipv6_ips
+uci delete homeproxy.control.lan_direct_mac_addrs
+uci delete homeproxy.control.lan_proxy_ipv4_ips
+uci delete homeproxy.control.lan_proxy_ipv6_ips
+uci delete homeproxy.control.lan_proxy_mac_addrs
+uci delete homeproxy.control.lan_gaming_mode_ipv4_ips
+uci delete homeproxy.control.lan_gaming_mode_ipv6_ips
+uci delete homeproxy.control.lan_gaming_mode_mac_addrs
+uci delete homeproxy.control.lan_global_proxy_ipv4_ips
+uci delete homeproxy.control.lan_global_proxy_ipv6_ips
+uci delete homeproxy.control.lan_global_proxy_mac_addrs
+uci delete homeproxy.control.wan_proxy_ipv4_ips
+uci delete homeproxy.control.wan_proxy_ipv6_ips
+uci delete homeproxy.control.wan_direct_ipv4_ips
+uci delete homeproxy.control.wan_direct_ipv6_ips
 uci commit homeproxy
 chmod 600 etc/crontabs/root
 init.d/cron restart
@@ -967,7 +1002,7 @@ file var/run/homeproxy/fw4_input.nft:
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.main_node=n1|homeproxy.config.main_udp_node=nil|homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.config.routing_port=|homeproxy.config.ipv6_support=0|homeproxy.config.china_dns_server=|homeproxy.infra.self_mark=|homeproxy.infra.redirect_port=|homeproxy.infra.tproxy_port=|homeproxy.infra.tproxy_mark=101|homeproxy.infra.tun_mark=102|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_addr4=|homeproxy.infra.tun_addr6=|homeproxy.infra.dns_redirect=|homeproxy.infra.dns_port=5333|homeproxy.infra.common_port=|homeproxy.infra.table_mark=100|homeproxy.routing.bypass_cn_traffic=|homeproxy.routing.default_outbound=direct-out|homeproxy.server.enabled=0|homeproxy.control.lan_proxy_mode=|list homeproxy.control.listen_interfaces=|list homeproxy.control.lan_direct_ipv4_ips=|list homeproxy.control.lan_direct_ipv6_ips=|list homeproxy.control.lan_direct_mac_addrs=|list homeproxy.control.lan_proxy_ipv4_ips=|list homeproxy.control.lan_proxy_ipv6_ips=|list homeproxy.control.lan_proxy_mac_addrs=|list homeproxy.control.lan_gaming_mode_ipv4_ips=|list homeproxy.control.lan_gaming_mode_ipv6_ips=|list homeproxy.control.lan_gaming_mode_mac_addrs=|list homeproxy.control.lan_global_proxy_ipv4_ips=|list homeproxy.control.lan_global_proxy_ipv6_ips=|list homeproxy.control.lan_global_proxy_mac_addrs=|list homeproxy.control.wan_proxy_ipv4_ips=|list homeproxy.control.wan_proxy_ipv6_ips=|list homeproxy.control.wan_direct_ipv4_ips=|list homeproxy.control.wan_direct_ipv6_ips=|
 file etc/homeproxy/cache.db: 
 file dnsmasq/dnsmasq-homeproxy.conf: conf-dir=dnsmasq/dnsmasq-homeproxy.d|
 file dnsmasq/dnsmasq-homeproxy.d/proxy_list.conf: server=/proxy.example.net/127.0.0.1#5333|nftset=/proxy.example.net/4#inet#fw4#homeproxy_wan_proxy_addr_v4|
@@ -1121,7 +1156,7 @@ file var/run/homeproxy/fw4_input.nft:
 file var/run/homeproxy/fw4_post.nft: 
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=custom|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.main_node=n1|homeproxy.config.main_udp_node=nil|homeproxy.config.proxy_mode=tun|homeproxy.config.routing_mode=custom|homeproxy.config.routing_port=|homeproxy.config.ipv6_support=0|homeproxy.config.china_dns_server=|homeproxy.infra.self_mark=|homeproxy.infra.redirect_port=|homeproxy.infra.tproxy_port=|homeproxy.infra.tproxy_mark=101|homeproxy.infra.tun_mark=102|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_addr4=|homeproxy.infra.tun_addr6=|homeproxy.infra.dns_redirect=|homeproxy.infra.dns_port=5333|homeproxy.infra.common_port=|homeproxy.infra.table_mark=100|homeproxy.routing.bypass_cn_traffic=|homeproxy.routing.default_outbound=direct-out|homeproxy.server.enabled=0|homeproxy.control.lan_proxy_mode=|list homeproxy.control.listen_interfaces=|list homeproxy.control.lan_direct_ipv4_ips=|list homeproxy.control.lan_direct_ipv6_ips=|list homeproxy.control.lan_direct_mac_addrs=|list homeproxy.control.lan_proxy_ipv4_ips=|list homeproxy.control.lan_proxy_ipv6_ips=|list homeproxy.control.lan_proxy_mac_addrs=|list homeproxy.control.lan_gaming_mode_ipv4_ips=|list homeproxy.control.lan_gaming_mode_ipv6_ips=|list homeproxy.control.lan_gaming_mode_mac_addrs=|list homeproxy.control.lan_global_proxy_ipv4_ips=|list homeproxy.control.lan_global_proxy_ipv6_ips=|list homeproxy.control.lan_global_proxy_mac_addrs=|list homeproxy.control.wan_proxy_ipv4_ips=|list homeproxy.control.wan_proxy_ipv6_ips=|list homeproxy.control.wan_direct_ipv4_ips=|list homeproxy.control.wan_direct_ipv6_ips=|
 file etc/homeproxy/cache.db: 
 
 ===== scenario: F-custom-routing-nothing-configured (start) =====
@@ -1927,5 +1962,5 @@ file var/run/homeproxy/fw4_post.nft:
 file var/run/homeproxy/homeproxy.log: 
 file var/run/homeproxy/known-good/sing-box-c.json: {|	"log": {},|	"inbounds": [|		{|			"tag": "dns-in",|			"listen_port": 5333|		},|		{|			"tag": "mixed-in",|			"listen_port": 5330|		}|	],|	"outbounds": []|}|
 file var/run/homeproxy/known-good/sing-box-s.json: {|	"log": {},|	"inbounds": [],|	"outbounds": []|}|
-file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.infra.self_mark=|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_address=|
+file var/run/homeproxy/known-good/uci-snapshot.txt: homeproxy.config.main_node=nil|homeproxy.config.main_udp_node=nil|homeproxy.config.proxy_mode=redirect_tproxy|homeproxy.config.routing_mode=bypass_mainland_china|homeproxy.config.routing_port=|homeproxy.config.ipv6_support=0|homeproxy.config.china_dns_server=|homeproxy.infra.self_mark=|homeproxy.infra.redirect_port=|homeproxy.infra.tproxy_port=|homeproxy.infra.tproxy_mark=101|homeproxy.infra.tun_mark=102|homeproxy.infra.tun_name=singtun0|homeproxy.infra.tun_addr4=|homeproxy.infra.tun_addr6=|homeproxy.infra.dns_redirect=|homeproxy.infra.dns_port=5333|homeproxy.infra.common_port=|homeproxy.infra.table_mark=100|homeproxy.routing.bypass_cn_traffic=|homeproxy.routing.default_outbound=direct-out|homeproxy.server.enabled=1|homeproxy.control.lan_proxy_mode=|list homeproxy.control.listen_interfaces=|list homeproxy.control.lan_direct_ipv4_ips=|list homeproxy.control.lan_direct_ipv6_ips=|list homeproxy.control.lan_direct_mac_addrs=|list homeproxy.control.lan_proxy_ipv4_ips=|list homeproxy.control.lan_proxy_ipv6_ips=|list homeproxy.control.lan_proxy_mac_addrs=|list homeproxy.control.lan_gaming_mode_ipv4_ips=|list homeproxy.control.lan_gaming_mode_ipv6_ips=|list homeproxy.control.lan_gaming_mode_mac_addrs=|list homeproxy.control.lan_global_proxy_ipv4_ips=|list homeproxy.control.lan_global_proxy_ipv6_ips=|list homeproxy.control.lan_global_proxy_mac_addrs=|list homeproxy.control.wan_proxy_ipv4_ips=|list homeproxy.control.wan_proxy_ipv6_ips=|list homeproxy.control.wan_direct_ipv4_ips=|list homeproxy.control.wan_direct_ipv6_ips=|
 file etc/homeproxy/cache.db: 

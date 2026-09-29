@@ -81,30 +81,71 @@ hp_same_file() {
 
 # hp_restore_known_good_uci <good-dir>
 # Re-apply the UCI snapshot written by hp_promote_known_good (the keys that
-# drive the firewall / dnsmasq / nft layer: proxy_mode, routing_mode,
-# self_mark, tun_name, tun_address).  Returns 0 on success, 1 when the
-# snapshot is missing - the rollback path logs and continues, since a
-# missing snapshot just means the install is older than the snapshot
-# feature (best-effort).
+# steer the firewall / dnsmasq / nft layer - see HP_INTERCEPT_SCALARS in
+# runtime/service.sh). Returns 0 on success, 1 when the snapshot is missing -
+# the rollback path logs and continues, since a missing snapshot just means
+# the install is older than the snapshot feature (best-effort).
 #
-# The commit below is what makes this safe: every `uci set` is staged and
-# only becomes visible when uci commit succeeds.  A partial failure
-# leaves UCI unchanged; the rollback caller logs and the next reload
-# path will see the same failing configuration it just rolled back from,
-# so the failure mode stays bounded (no new corruption).
+# Two passes over the file, because the snapshot carries two shapes:
+#
+#   homeproxy.<section>.<option>=<value>   scalar, replayed with `uci set`
+#   list homeproxy.<section>.<option>=a,b  UCI list, replayed with
+#                                         `uci delete` + `uci add_list`
+#
+# A list replayed through `uci set` becomes a *string*, and the firewall
+# validators (ipv4_to_nftarr / iface_to_nftarr) reject a non-array by
+# returning null - so the ACL rules reading it would silently disappear and
+# the rollback would come back with the wrong clients exempted.
+#
+# The commit below is what makes this safe: every write is staged and only
+# becomes visible when uci commit succeeds.  A partial failure leaves UCI
+# unchanged; the rollback caller logs and the next reload path will see the
+# same failing configuration it just rolled back from, so the failure mode
+# stays bounded (no new corruption).
 hp_restore_known_good_uci() {
 	local good_dir="$1"
 	local snap="$good_dir/uci-snapshot.txt"
 
 	[ -s "$snap" ] || return 1
 
-	local key value saved=0
+	local key value lkey el saved=0
+
+	# Pass 1: scalars. `uci set key=` with an empty value is how UCI spells
+	# "the option was not set", so a key that was absent in the known-good
+	# state is removed again here rather than surviving as a failing value.
+	# stdin is closed for every uci call so none of them can swallow the
+	# file the loop is reading.
 	while IFS='=' read -r key value; do
-		[ -n "$key" ] || continue
-		uci set "$key=$value" || return 1
+		case "$key" in
+		""|list\ *|"#"*) continue ;;
+		esac
+		uci set "$key=$value" </dev/null || return 1
 		saved=1
 	done < "$snap"
 
-	[ "$saved" = "1" ] && uci commit homeproxy || return 1
+	# Pass 2: list options. `uci delete` on an option that is not there is
+	# expected - the known-good state may simply never have had this list -
+	# so its exit status is deliberately ignored.  An empty recorded value
+	# therefore means "absent or empty", and the delete is the whole
+	# operation: a list the failing configuration added does not survive.
+	while IFS='=' read -r key value; do
+		case "$key" in
+		list\ *) lkey="${key#list }" ;;
+		*) continue ;;
+		esac
+		uci delete "$lkey" >/dev/null 2>&1 </dev/null
+		saved=1
+		[ -n "$value" ] || continue
+		while :; do
+			case "$value" in
+			*,*) el="${value%%,*}"; value="${value#*,}" ;;
+			*) el="$value"; value="" ;;
+			esac
+			uci add_list "$lkey=$el" </dev/null || return 1
+			[ -n "$value" ] || break
+		done
+	done < "$snap"
+
+	[ "$saved" = "1" ] && uci commit homeproxy </dev/null || return 1
 	return 0
 }

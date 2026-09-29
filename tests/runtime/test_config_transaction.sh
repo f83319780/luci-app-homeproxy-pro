@@ -131,19 +131,47 @@ PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR" >/dev/null 2>&1
 expect "uci restore: missing snapshot returns 1" "$?" "1"
 
 # Happy path: snapshot present, all keys applied, commit called.
+# The snapshot format carries the UCI type, because `uci set` on a list option
+# stores a string and the firewall validators then reject it (review
+# 2026-09-29, docs/review-report-20260929-full.md §1.5): lists are replayed
+# with `uci delete` + `uci add_list`.
 : > "$HP_TEST_UCI_OUT"
 write_uci_stub
 printf 'homeproxy.config.proxy_mode=tproxy\n' > "$SNAP"
 printf 'homeproxy.config.routing_mode=bypass_mainland_china\n' >> "$SNAP"
 printf 'homeproxy.infra.self_mark=100\n' >> "$SNAP"
 printf 'homeproxy.infra.tun_name=singtun0\n' >> "$SNAP"
-printf 'homeproxy.infra.tun_address=172.16.0.1/30\n' >> "$SNAP"
+printf 'homeproxy.infra.tun_addr4=172.16.0.1/30\n' >> "$SNAP"
+printf 'list homeproxy.control.lan_proxy_ipv4_ips=192.168.1.10,192.168.1.11\n' >> "$SNAP"
+printf 'list homeproxy.control.wan_proxy_ipv4_ips=\n' >> "$SNAP"
 PATH="$BIN:$PATH" hp_restore_known_good_uci "$SNAP_DIR"
 expect "uci restore: happy path returns 0" "$?" "0"
-expect "uci restore: 5 keys applied" \
-	"$(grep -c 'homeproxy\.' "$HP_TEST_UCI_OUT")" "5"
+expect "uci restore: 5 scalars applied" \
+	"$(grep -c '^set homeproxy\.' "$HP_TEST_UCI_OUT")" "5"
 expect "uci restore: proxy_mode applied" \
-	"$(grep -c 'homeproxy.config.proxy_mode=tproxy$' "$HP_TEST_UCI_OUT")" "1"
+	"$(grep -c '^set homeproxy.config.proxy_mode=tproxy$' "$HP_TEST_UCI_OUT")" "1"
+# The phantom key that used to be in the snapshot: nothing reads
+# `infra.tun_address`, and arch-guard guard 43 now fails if it comes back.
+expect "uci restore: tun_addr4 applied (not the phantom tun_address)" \
+	"$(grep -c '^set homeproxy.infra.tun_addr4=172.16.0.1/30$' "$HP_TEST_UCI_OUT")" "1"
+# A list must never go through `uci set`: that would store a string and
+# ipv4_to_nftarr() would return null, silently dropping the ACL rule.
+expect "uci restore: list is deleted before it is re-added" \
+	"$(grep -c '^delete homeproxy.control.lan_proxy_ipv4_ips$' "$HP_TEST_UCI_OUT")" "1"
+expect "uci restore: list elements re-added one by one" \
+	"$(grep -c '^add_list homeproxy.control.lan_proxy_ipv4_ips=' "$HP_TEST_UCI_OUT")" "2"
+expect "uci restore: first list element" \
+	"$(grep -c '^add_list homeproxy.control.lan_proxy_ipv4_ips=192.168.1.10$' "$HP_TEST_UCI_OUT")" "1"
+expect "uci restore: second list element" \
+	"$(grep -c '^add_list homeproxy.control.lan_proxy_ipv4_ips=192.168.1.11$' "$HP_TEST_UCI_OUT")" "1"
+expect "uci restore: no list key is ever passed to uci set" \
+	"$(grep -c '^set list ' "$HP_TEST_UCI_OUT")" "0"
+# An empty recorded list means "absent or empty": the delete is the whole
+# operation, so a list the failing configuration added does not survive.
+expect "uci restore: empty list still dropped" \
+	"$(grep -c '^delete homeproxy.control.wan_proxy_ipv4_ips$' "$HP_TEST_UCI_OUT")" "1"
+expect "uci restore: empty list adds no element" \
+	"$(grep -c '^add_list homeproxy.control.wan_proxy_ipv4_ips=' "$HP_TEST_UCI_OUT")" "0"
 expect "uci restore: commit homeproxy called" \
 	"$(grep -c 'commit homeproxy$' "$HP_TEST_UCI_OUT")" "1"
 
