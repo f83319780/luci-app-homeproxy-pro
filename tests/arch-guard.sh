@@ -1919,6 +1919,32 @@ OK)
 	fail "unexpected attachExperimental scan result: $AE_RESULT" ;;
 esac
 
+echo "== guard 42: NAPTR_BYPASS_SUFFIXES is the only domain_suffix qtype-35 source =="
+
+# Review (2026-09-29, docs/review-report-20260929.md §2.2.1, P2 #4): the three
+# NAPTR (qtype 35) bypass suffixes (r.10086.cn, 10086.cn, pub.3gppnetwork.org)
+# used to be inlined into a push() call inside append_proxy_dns() and the
+# comment that explained them was on the same line as the push. The fix
+# extracted the list to a module-level constant NAPTR_BYPASS_SUFFIXES and
+# moved the rationale to the constant's own comment block. This guard
+# pins the actual invariant: a constant declaration exists, AND the
+# qtype-35 DNS rule's domain_suffix field references that constant
+# (not a hand-rolled literal array, which would re-inline the list).
+DNS_UC="$ROOT/root/etc/homeproxy/scripts/generator/dns.uc"
+NAPTR_CONST="$(grep -nE '^(const|var)\s+NAPTR_BYPASS_SUFFIXES\s*=' "$DNS_UC" || true)"
+NAPTR_USE="$(grep -nE '^\s*domain_suffix:\s*NAPTR_BYPASS_SUFFIXES\b' "$DNS_UC" || true)"
+NAPTR_LITERAL_USE="$(grep -nE '^\s*domain_suffix:\s*\[' "$DNS_UC" || true)"
+if [ -z "$NAPTR_CONST" ]; then
+	fail "NAPTR_BYPASS_SUFFIXES constant missing in generator/dns.uc"
+elif [ -z "$NAPTR_USE" ]; then
+	fail "the qtype-35 DNS rule does not reference NAPTR_BYPASS_SUFFIXES; the constant is dead code"
+elif [ -n "$NAPTR_LITERAL_USE" ]; then
+	fail "domain_suffix uses a literal array; route it through NAPTR_BYPASS_SUFFIXES instead:"
+	printf '      %s\n' "$NAPTR_LITERAL_USE"
+else
+	pass "the qtype-35 DNS rule references NAPTR_BYPASS_SUFFIXES (no inline literal)"
+fi
+
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
