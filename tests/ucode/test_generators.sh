@@ -996,34 +996,37 @@ import { readfile } from 'fs';
 
 const config = json(readfile(ARGV[0]));
 
+const rules = config.dns?.rules || [];
 let found = false;
-for (let r in (config.dns?.rules || [])) {
+printf('PROBE_DEBUG rules_count=%d\n', length(rules));
+for (let r in rules) {
 	const qt = r.query_type;
+	printf('PROBE_DEBUG rule_qt=%s\n', qt ? 'set' : 'unset');
 	if (!qt || qt[0] !== 35)
 		continue;
 	found = true;
 	const sf = r.domain_suffix;
 	if (!sf) {
-		console.log('PROBE_FAIL: qtype-35 rule has no domain_suffix');
+		printf('PROBE_FAIL: qtype-35 rule has no domain_suffix\n');
 		exit(1);
 	}
 	if (sf[0] !== 'r.10086.cn') {
-		console.log('PROBE_FAIL: qtype-35 domain_suffix[0] = ' + sf[0]);
+		printf('PROBE_FAIL: qtype-35 domain_suffix[0] = %s\n', sf[0]);
 		exit(1);
 	}
 	if (sf[1] !== '10086.cn') {
-		console.log('PROBE_FAIL: qtype-35 domain_suffix[1] = ' + sf[1]);
+		printf('PROBE_FAIL: qtype-35 domain_suffix[1] = %s\n', sf[1]);
 		exit(1);
 	}
 	if (sf[2] !== 'pub.3gppnetwork.org') {
-		console.log('PROBE_FAIL: qtype-35 domain_suffix[2] = ' + sf[2]);
+		printf('PROBE_FAIL: qtype-35 domain_suffix[2] = %s\n', sf[2]);
 		exit(1);
 	}
-	console.log('PROBE_OK');
+	printf('PROBE_OK\n');
 	exit(0);
 }
 if (!found) {
-	console.log('PROBE_FAIL: no qtype-35 rule');
+	printf('PROBE_FAIL: no qtype-35 rule\n');
 	exit(1);
 }
 EOF
