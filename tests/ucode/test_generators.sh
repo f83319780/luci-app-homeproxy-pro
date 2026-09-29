@@ -884,16 +884,31 @@ import { readfile } from 'fs';
 
 const config = json(readfile(ARGV[0]));
 
-printf('RULESET_HAS_GEOSITE: %s\n',
-	config.route?.rule_set?.find(r => r.tag === 'geosite-cn') ? 'yes' : 'no');
+let has_geosite = 'no';
+for (let rs in (config.route?.rule_set || [])) {
+	if (rs.tag === 'geosite-cn') {
+		has_geosite = 'yes';
+		break;
+	}
+}
+printf('RULESET_HAS_GEOSITE: %s\n', has_geosite);
+
+let refs_geosite = 'no';
 for (let r in (config.route?.rules || [])) {
 	const rs = r.rule_set;
 	if (!rs)
 		continue;
-	const refs = Array.isArray(rs) ? rs : [rs];
-	if (refs.indexOf('geosite-cn') !== -1)
-		printf('ROUTE_RULE_REFERENCES_GEOSITE: %s\n', 'yes');
+	const refs = (type(rs) === 'array') ? rs : [rs];
+	for (let x in refs) {
+		if (x === 'geosite-cn') {
+			refs_geosite = 'yes';
+			break;
+		}
+	}
+	if (refs_geosite === 'yes')
+		break;
 }
+printf('ROUTE_RULE_REFERENCES_GEOSITE: %s\n', refs_geosite);
 printf('DONE\n');
 EOF
 
@@ -1081,7 +1096,7 @@ fi
 #    '\toption path' and a no-leading-TAB pattern does not match.
 run_case_type_error local-ruleset-bad-path "outside the homeproxy whitelist" \
 	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
-	"s#\toption path '__RULESET_DIR__/test.srs'#\toption path '/etc/passwd'#"
+	's#\toption path '\''__RULESET_DIR__/test.srs'\''#\toption path '\''/etc/passwd'\''#'
 
 # 6) P3 #8 / §4.2.2 (extra_tags die() on missing {tag}): not exercised
 #    here - the multi-tag branch in generator/ruleset.uc needs a ruleset
