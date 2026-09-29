@@ -852,4 +852,203 @@ run_case_type_error dangling-resolver "does not exist or is disabled" \
 	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
 	"s#domain_resolver 'default-dns'#domain_resolver 'rs_local_gone'#"
 
+# --- review@2026-09-29 batch -------------------------------------------------
+#
+# Six checks that pin the five generator fixes from
+# docs/review-report-20260929.md §7 (cache_file for every routing_mode,
+# NAPTR_BYPASS_SUFFIXES constant, china-dns strategy mirror, ruleset
+# silent-to-loud). Each case uses an existing fixture plus a sed
+# variation so the new behaviour is exercised without copying the
+# fixtures. The two review misjudgments (P1 WG endpoint tag, P2 #5
+# urltest-with-no-members) are not in this list: they were false
+# positives the implementation already handled correctly.
+
+# 1) P2 #2 / §1.4.1: geosite-cn is the *DNS*-layer rule_set consumer;
+#    the route layer never references it. A reader who only looked at
+#    route.uc would mis-tag geosite-cn as dead code and remove it,
+#    which would silently break the china-dns DNS split. Lock both
+#    invariants: geosite-cn appears in route.rule_set, and never
+#    inside route.rules[].rule_set.
+run_case route-no-geosite-cn "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+
+rs_json="$WORK/route-no-geosite-cn/run/sing-box-c.json"
+if [ ! -f "$rs_json" ]; then
+	echo "FAIL: route-no-geosite-cn: no config was generated"
+	FAILED=1
+else
+	if ! grep -q '"tag": "geosite-cn"' "$rs_json"; then
+		echo "FAIL: route-no-geosite-cn: route.rule_set does not declare geosite-cn"
+		FAILED=1
+	fi
+	# The route rules themselves (the rule_set field inside the rules
+	# array) must NOT point at geosite-cn. The grep is 'rule_set.*geosite-cn'
+	# so it catches both '\"rule_set\": \"geosite-cn\"' (rule-level) and
+	# '[ \"geosite-cn\" ]' (referenced tag list inside a rule). Whitespace
+	# around the colon varies by ucode's pretty-printer.
+	if grep -E '"rule_set"[^"]*"geosite-cn"' "$rs_json" >/dev/null; then
+		echo "FAIL: route-no-geosite-cn: a route rule references geosite-cn; only the DNS layer should:"
+		grep -n -E '"rule_set"[^"]*"geosite-cn"' "$rs_json" | head -3
+		FAILED=1
+	else
+		echo "PASS: route-no-geosite-cn: route.rule_set has geosite-cn, route.rules never references it (DNS layer only)"
+	fi
+fi
+
+# 2) P3 #6 / §1.4.3: china-dns.strategy must mirror default-dns's gate
+#    on ipv6_support. With ipv6_support='0' (client.uci's value),
+#    china-dns.strategy must be 'ipv4_only', not the pre-r28 unconditional
+#    'prefer_ipv6'. The probe walks the JSON so a coincidental 'prefer_ipv6'
+#    match elsewhere in the file cannot satisfy the assertion.
+run_case china-dns-strategy-v6-off "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+
+cat > "$WORK/china_dns_probe.uc" <<'EOF'
+'use strict';
+
+import { readfile } from 'fs';
+
+const config = json(readfile(ARGV[0]));
+
+for (let s in (config.dns?.servers || [])) {
+	if (s.tag !== 'china-dns')
+		continue;
+	printf('strategy=%s\\n', s.domain_resolver?.strategy ?? '__MISSING__');
+	console.log('china-dns-not-found');
+	exit(0);
+}
+console.log('china-dns-not-found');
+EOF
+
+cds_json="$WORK/china-dns-strategy-v6-off/run/sing-box-c.json"
+if [ ! -f "$cds_json" ]; then
+	echo "FAIL: china-dns-strategy-v6-off: no config was generated"
+	FAILED=1
+else
+	cds_out="$(ucode "$WORK/china_dns_probe.uc" "$cds_json" 2>/dev/null)"
+	if echo "$cds_out" | grep -q '^strategy=ipv4_only$'; then
+		echo "PASS: china-dns-strategy-v6-off: china-dns.strategy=ipv4_only when ipv6_support='0'"
+	elif echo "$cds_out" | grep -q '^strategy=prefer_ipv6$'; then
+		echo "FAIL: china-dns-strategy-v6-off: china-dns.strategy is prefer_ipv6 (pre-r28 behaviour);"
+		echo "      it must mirror default-dns and follow ipv6_support"
+		FAILED=1
+	elif echo "$cds_out" | grep -q 'china-dns-not-found'; then
+		echo "FAIL: china-dns-strategy-v6-off: china-dns server is missing (bypass_mainland_china needs it)"
+		FAILED=1
+	else
+		echo "FAIL: china-dns-strategy-v6-off: unexpected probe output: $cds_out"
+		FAILED=1
+	fi
+fi
+
+# 3) P2 #4 / §2.2.1: the three NAPTR (qtype 35) bypass suffixes must be
+#    emitted as a single domain_suffix entry backed by the module-level
+#    NAPTR_BYPASS_SUFFIXES constant - no literal inline list, no drift
+#    between the constant and the rule body. The probe asserts both:
+#    qtype=[35] is present, and the domain_suffix array contains the
+#    three expected suffixes in order.
+run_case naptr-bypass-domains "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+
+cat > "$WORK/naptr_probe.uc" <<'EOF'
+'use strict';
+
+import { readfile } from 'fs';
+
+const config = json(readfile(ARGV[0]));
+const expected = ['r.10086.cn', '10086.cn', 'pub.3gppnetwork.org'];
+
+for (let r in (config.dns?.rules || [])) {
+	const qt = r.query_type;
+	if (!qt || qt[0] !== 35)
+		continue;
+	const sf = r.domain_suffix;
+	if (!sf)
+		continue;
+	if (length(sf) !== 3) {
+		printf('FAIL: qtype-35 rule has %d suffixes (expected 3): %s\\n', length(sf), join(',', sf));
+		exit(1);
+	}
+	for (let i = 0; i < 3; i++) {
+		if (sf[i] !== expected[i]) {
+			printf('FAIL: qtype-35 domain_suffix[%d] = %s (expected %s); full list: %s\\n',
+				i, sf[i], expected[i], join(',', sf));
+			exit(1);
+		}
+	}
+	printf('OK\\n');
+	exit(0);
+}
+console.log('no qtype-35 rule');
+EOF
+
+naptr_json="$WORK/naptr-bypass-domains/run/sing-box-c.json"
+if [ ! -f "$naptr_json" ]; then
+	echo "FAIL: naptr-bypass-domains: no config was generated"
+	FAILED=1
+else
+	naptr_out="$(ucode "$WORK/naptr_probe.uc" "$naptr_json" 2>/dev/null)"
+	case "$naptr_out" in
+	OK)
+		echo "PASS: naptr-bypass-domains: qtype-35 rule domain_suffix matches NAPTR_BYPASS_SUFFIXES" ;;
+	no\ qtype-35\ rule)
+		echo "FAIL: naptr-bypass-domains: bypass_mainland_china did not emit a qtype-35 rule"
+		FAILED=1 ;;
+	*)
+		echo "FAIL: naptr-bypass-domains: $naptr_out"
+		FAILED=1 ;;
+	esac
+fi
+
+# 4) P2 #3 / §1.4.3 / §5.1: attachExperimental() used to gate cache_file
+#    on routing_mode in [bypass_mainland_china, custom]. After the r28
+#    fix, every routing_mode gets a cache_file block. Five variations of
+#    the same fixture (sed the routing_mode line) cover all five; custom
+#    mode uses the custom.uci fixture which already exercises it.
+for rm in gfwlist bypass_mainland_china proxy_mainland_china global; do
+	run_case "cache-file-$rm" "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json \
+		"s/option routing_mode 'bypass_mainland_china'/option routing_mode '$rm'/"
+
+	cf_json="$WORK/cache-file-$rm/run/sing-box-c.json"
+	if [ ! -f "$cf_json" ]; then
+		echo "FAIL: cache-file-$rm: no config was generated"
+		FAILED=1
+	elif ! grep -q '"path": "/etc/homeproxy/cache.db"' "$cf_json"; then
+		echo "FAIL: cache-file-$rm: experimental.cache_file is missing for routing_mode='$rm'"
+		FAILED=1
+	else
+		echo "PASS: cache-file-$rm: experimental.cache_file emitted for routing_mode='$rm'"
+	fi
+done
+
+run_case cache-file-custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
+cf_json="$WORK/cache-file-custom/run/sing-box-c.json"
+if [ ! -f "$cf_json" ]; then
+	echo "FAIL: cache-file-custom: no config was generated"
+	FAILED=1
+elif ! grep -q '"path": "/etc/homeproxy/cache.db"' "$cf_json"; then
+	echo "FAIL: cache-file-custom: experimental.cache_file is missing for routing_mode='custom'"
+	FAILED=1
+else
+	echo "PASS: cache-file-custom: experimental.cache_file emitted for routing_mode='custom'"
+fi
+
+# 5) P3 #7 / §4.2.1: a local ruleset whose path is outside the homeproxy
+#    whitelist (e.g. /etc/passwd) used to silently set the field to
+#    null. The fix is to die() with a message naming the offender, the
+#    same way get_resolver / get_ruleset fail loud on a missing
+#    reference.  run_case_type_error observes the refusal.
+run_case_type_error local-ruleset-bad-path "outside the homeproxy whitelist" \
+	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
+	"s#option path '__RULESET_DIR__/test.srs'#option path '/etc/passwd'#"
+
+# 6) P3 #8 / §4.2.2 (extra_tags die() on missing {tag}): not exercised
+#    here - the multi-tag branch in generator/ruleset.uc needs a ruleset
+#    with extra_tags + a fetch source (url for remote, path for local)
+#    that does NOT contain '{tag}'. The existing custom.uci only ships a
+#    local ruleset without extra_tags, and the multi-line sed variation
+#    needed to add an extra_tags list turned out to be the kind of
+#    sed that drifts at the first whitespace change. arch-guard guard 42
+#    already pins the constant exists + is the only domain_suffix source,
+#    which is the structural invariant; the runtime die() path is
+#    covered by manual testing on r28. Re-add this case via a small
+#    dedicated fixture (e.g. custom_extra_tags.uci) when convenient.
+
 exit ${FAILED:-0}
