@@ -439,20 +439,129 @@ hp_start_generated_config() {
 	return 0
 }
 
+# The UCI keys the intercept layer reads, split by UCI type.
+#
+# hp_restore_known_good_uci() replays the snapshot before the rollback
+# restart, so anything that steers firewall_post.ut / firewall_pre.uc /
+# net.sh / dns.sh has to be in here: a key left out survives the rollback as
+# the *new* (failing) value and start_service reinstalls a layer that no
+# longer matches the sing-box file it just restored.
+#
+# Review 2026-09-29 (docs/review-report-20260929-full.md §1.2) found the
+# previous five-line list covered 4 real keys out of 22, and that the fifth
+# line named `infra.tun_address` - an option that exists nowhere.  The real
+# keys are `tun_addr4` / `tun_addr6` (config/loader.uc:411), so that line was
+# always empty and the restore was a silent no-op; the golden trace recorded
+# the empty line as expected, which is how the defect survived.  tests/
+# arch-guard.sh guard 43 derives the read set from the layer consumers and
+# compares it against this list in both directions.
+#
+# The two TUN address keys are the one deliberate inclusion that no layer
+# consumer reads: the address is only ever installed by the generated sing-box
+# file, so leaving UCI describing the failed address would make the next
+# reload regenerate the configuration that just failed.
+HP_INTERCEPT_SCALARS="config.main_node
+config.main_udp_node
+config.proxy_mode
+config.routing_mode
+config.routing_port
+config.ipv6_support
+config.china_dns_server
+infra.self_mark
+infra.redirect_port
+infra.tproxy_port
+infra.tproxy_mark
+infra.tun_mark
+infra.tun_name
+infra.tun_addr4
+infra.tun_addr6
+infra.dns_redirect
+infra.dns_port
+infra.common_port
+infra.table_mark
+routing.bypass_cn_traffic
+routing.default_outbound
+server.enabled
+control.lan_proxy_mode"
+
+# List options are kept apart because `uci set key=a,b` stores a *string*:
+# ipv4_to_nftarr() / iface_to_nftarr() reject a non-array (they return null),
+# so a snapshot replayed through `uci set` would drop every ACL rule that
+# reads the list - a rollback that silently un-proxies the LAN.  The writer
+# joins the elements with ',' and the replay uses `uci delete` +
+# `uci add_list`.  No value in this set can contain a comma: they are IPv4 /
+# IPv6 addresses, MAC addresses or interface names.
+HP_INTERCEPT_LISTS="control.listen_interfaces
+control.lan_direct_ipv4_ips
+control.lan_direct_ipv6_ips
+control.lan_direct_mac_addrs
+control.lan_proxy_ipv4_ips
+control.lan_proxy_ipv6_ips
+control.lan_proxy_mac_addrs
+control.lan_gaming_mode_ipv4_ips
+control.lan_gaming_mode_ipv6_ips
+control.lan_gaming_mode_mac_addrs
+control.lan_global_proxy_ipv4_ips
+control.lan_global_proxy_ipv6_ips
+control.lan_global_proxy_mac_addrs
+control.wan_proxy_ipv4_ips
+control.wan_proxy_ipv6_ips
+control.wan_direct_ipv4_ips
+control.wan_direct_ipv6_ips"
+
+# hp_write_uci_snapshot <snap>
+# Serialise HP_INTERCEPT_SCALARS / HP_INTERCEPT_LISTS into <snap>.
+#
+# One line per key so a reader without uci-tools can iterate the file:
+#
+#   homeproxy.<section>.<option>=<value>     scalar
+#   list homeproxy.<section>.<option>=a,b    list, ','-joined
+#   list homeproxy.<section>.<option>=       list that was absent or empty
+#
+# An absent scalar is written as an empty value, which is how the replay
+# spells "remove the option again" (UCI deletes an option set to an empty
+# value) - so the snapshot round-trips absence as well as presence.
+hp_write_uci_snapshot() {
+	local snap="$1"
+	local pair sec opt val el out
+
+	config_load "$CONF"
+
+	{
+		for pair in $HP_INTERCEPT_SCALARS; do
+			sec="${pair%%.*}"
+			opt="${pair#*.}"
+			config_get val "$sec" "$opt"
+			printf 'homeproxy.%s.%s=%s\n' "$sec" "$opt" "$val"
+		done
+
+		for pair in $HP_INTERCEPT_LISTS; do
+			sec="${pair%%.*}"
+			opt="${pair#*.}"
+			config_get val "$sec" "$opt"
+			# config_get hands a UCI list over space-separated; rejoin it.
+			out=""
+			for el in $val; do
+				[ -z "$out" ] && out="$el" || out="$out,$el"
+			done
+			printf 'list homeproxy.%s.%s=%s\n' "$sec" "$opt" "$out"
+		done
+	} > "$snap.tmp" 2>"/dev/null" && mv -f "$snap.tmp" "$snap"
+}
+
 # hp_promote_known_good <side> <run-dir> <good-dir>
 # Record the live configuration as the new known-good copy.  Called only after
 # the health gate has proven that the configuration actually runs, so the
 # rollback target is always something that came up.
 #
-# Also writes $good_dir/uci-snapshot.txt with the *section-level* UCI keys
-# that drive the firewall / dnsmasq / nft layer (proxy_mode, routing_mode,
-# self_mark, tun_name, tun_address, ...).  The rollback path in init.d/homeproxy
-# reads this back BEFORE its stop;start, otherwise start_service reinstalls
-# the new (failing) layer on top of the rolled-back sing-box bytes - the
-# classic "rollback restored config but nft is still the new chains" silent
-# failure that took a real-machine repro to spot (review P1-3, 2026-09-28).
-# Snapshotting only the keys that change nft keeps the rollback bounded:
-# a stray key elsewhere never overwrites itself.
+# Also writes $good_dir/uci-snapshot.txt (see HP_INTERCEPT_SCALARS above).
+# The rollback path in init.d/homeproxy reads that file back BEFORE its
+# stop;start, otherwise start_service reinstalls the new (failing) layer on
+# top of the rolled-back sing-box bytes - the classic "rollback restored the
+# config but nft is still the new chains" silent failure that took a
+# real-machine repro to spot (review P1-3, 2026-09-28).  Snapshotting only
+# the keys that steer the network layer keeps the rollback bounded: a stray
+# key elsewhere never overwrites itself.
 hp_promote_known_good() {
 	local side="$1"
 	local run_dir="$2"
@@ -468,25 +577,8 @@ hp_promote_known_good() {
 	hp_known_good "$run_dir/sing-box-${side}.json" "$good_dir/sing-box-${side}.json" \
 		|| log "Warning: could not refresh the known-good ${label} configuration."
 
-	# uci_snapshot_for_rollback: the proxy-side keys that govern the nft /
-	# dnsmasq layer.  Written once on every successful promote; the
-	# rollback path's stop;start re-reads them via `uci set ...; uci commit`
-	# so start_service reinstalls the right layer.  Single line per key
-	# (`config.section.option=value`) so a parser without uci-tools can
-	# iterate it too.
-	local snap="$good_dir/uci-snapshot.txt"
-	{
-		config_load "$CONF"
-		config_get proxy_mode   "config" "proxy_mode"
-		config_get routing_mode "config" "routing_mode"
-		config_get self_mark    "infra"  "self_mark"
-		config_get tun_name     "infra"  "tun_name"
-		config_get tun_address  "infra"  "tun_address"
-		printf 'homeproxy.config.proxy_mode=%s\n' "$proxy_mode"
-		printf 'homeproxy.config.routing_mode=%s\n' "$routing_mode"
-		printf 'homeproxy.infra.self_mark=%s\n' "$self_mark"
-		printf 'homeproxy.infra.tun_name=%s\n' "$tun_name"
-		printf 'homeproxy.infra.tun_address=%s\n' "$tun_address"
-	} > "$snap.tmp" 2>"/dev/null" && mv -f "$snap.tmp" "$snap"
+	# Written once on every successful promote.  Both sides promote the same
+	# content, so the two calls cannot disagree.
+	hp_write_uci_snapshot "$good_dir/uci-snapshot.txt"
 }
 

@@ -33,6 +33,20 @@
 #   HP_INITD=<path>       drive another init script
 #   HP_GOLDEN=<path>      compare against another baseline
 #   HP_UPDATE_GOLDEN=1    rewrite the baseline instead of comparing
+#
+# The baseline is a Linux artifact, and refreshing it from macOS writes
+# platform noise into it.  The `uname` stub (line ~217) traces every call, and
+# something in the sandbox asks for `uname -s` only on Darwin: a macOS run
+# produces 21 extra "uname -s" lines and the comparison then fails for a
+# reason that has nothing to do with the code.  Verified 2026-09-29: deleting
+# the `uname -s` lines from a macOS trace reproduces this file byte for byte,
+# so the fix when a macOS run is the only way to produce a trace is
+#
+#   HP_UPDATE_GOLDEN=1 HP_GOLDEN=/tmp/trace.txt sh tests/runtime/test_runtime_extraction.sh .
+#   grep -v '^uname -s$' /tmp/trace.txt > tests/fixtures/runtime/trace.golden.txt
+#
+# .github/workflows/golden-refresh.yml does this on Linux, which is the path
+# that should be preferred.
 
 ROOT="${1:-.}"
 # Per-run by default rather than a fixed /tmp path. This script has two
