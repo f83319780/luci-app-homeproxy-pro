@@ -1867,6 +1867,58 @@ else
 	printf '      %s\n' "$ACTION_ENUM"
 fi
 
+echo "== guard 41: experimental.cache_file is unconditional in attachExperimental() =="
+
+# Review (2026-09-29, docs/review-report-20260929.md §1.4.3 / §5.1, P2 #3):
+# attachExperimental() used to wrap the experimental.cache_file block in
+# `if (routing_mode in ['bypass_mainland_china', 'custom'])`, leaving
+# gfwlist / proxy_mainland_china / global with cold-start DNS on every
+# reload.  cache_file is a fresh-install no-op and the file is the only
+# piece of state the generator writes outside /etc/config/homeproxy, so
+# gating it on routing_mode buys nothing and lost DNS cache for 3 modes.
+# The fix removed the gate; this guard pins the unconditional emission so
+# a future refactor (e.g. adding a 'cache_file.enabled: 0' opt-out) does
+# not silently re-introduce the routing_mode gate.
+AE_RESULT="$(python3 - "$ROOT/root/etc/homeproxy/scripts/generator/common.uc" <<'PY' || echo __SCAN_FAILED__
+import re, sys, pathlib
+src = pathlib.Path(sys.argv[1]).read_text()
+m = re.search(r'^export function attachExperimental\b.*?\n\};',
+              src, re.MULTILINE | re.DOTALL)
+if not m:
+    print('__NO_FUNCTION__'); sys.exit()
+body = m.group(0)
+# Strip /* ... */ comments so a commented-out gate does not trip the check.
+body_nc = re.sub(r'/\*.*?\*/', '', body, flags=re.DOTALL)
+# Look for an `if (... routing_mode ...)` gate anywhere in the body.
+gate = re.search(r'\bif\s*\([^)]*\brouting_mode\b', body_nc)
+if gate:
+    print('GATED: ' + gate.group(0).strip()); sys.exit()
+# Verify the unconditional shape: `config.experimental = { ... }` containing
+# `cache_file:` must appear, both outside any `if (...)` block.
+if not re.search(r'config\.experimental\s*=\s*\{', body_nc):
+    print('NO_EXPERIMENTAL_BLOCK'); sys.exit()
+if 'cache_file:' not in body_nc:
+    print('NO_CACHE_FILE_FIELD'); sys.exit()
+print('OK')
+PY
+)"
+case "$AE_RESULT" in
+__SCAN_FAILED__)
+	fail "the attachExperimental scan could not run - fix the guard before trusting a pass" ;;
+__NO_FUNCTION__)
+	fail "attachExperimental() not found in generator/common.uc" ;;
+NO_EXPERIMENTAL_BLOCK)
+	fail "attachExperimental() does not assign config.experimental (cache_file regression)" ;;
+NO_CACHE_FILE_FIELD)
+	fail "attachExperimental() does not emit cache_file (cache_file regression)" ;;
+GATED:*)
+	fail "attachExperimental() must not gate cache_file on routing_mode: ${AE_RESULT#GATED: }" ;;
+OK)
+	pass "attachExperimental() emits cache_file unconditionally for every routing_mode" ;;
+*)
+	fail "unexpected attachExperimental scan result: $AE_RESULT" ;;
+esac
+
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
