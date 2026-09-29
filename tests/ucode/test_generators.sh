@@ -999,9 +999,11 @@ const config = json(readfile(ARGV[0]));
 const rules = config.dns?.rules || [];
 let found = false;
 printf('PROBE_DEBUG rules_count=%d\n', length(rules));
+let i = 0;
 for (let r in rules) {
+	i++;
 	const qt = r.query_type;
-	printf('PROBE_DEBUG rule_qt=%s\n', qt ? 'set' : 'unset');
+	printf('PROBE_DEBUG i=%d qt_type=%s\n', i, type(qt));
 	if (!qt || qt[0] !== 35)
 		continue;
 	found = true;
@@ -1025,6 +1027,7 @@ for (let r in rules) {
 	printf('PROBE_OK\n');
 	exit(0);
 }
+printf('PROBE_DEBUG loop_iters=%d found=%s\n', i, found ? 'yes' : 'no');
 if (!found) {
 	printf('PROBE_FAIL: no qtype-35 rule\n');
 	exit(1);
