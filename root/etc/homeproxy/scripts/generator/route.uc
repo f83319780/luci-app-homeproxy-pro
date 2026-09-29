@@ -26,7 +26,7 @@
 
 'use strict';
 
-import { isEmpty, strToInt, strToTime, strToBool, parse_port } from '../homeproxy.uc';
+import { isEmpty, strToInt, strToTime, strToBool, parse_port, HP_DIR } from '../homeproxy.uc';
 
 
 import { get_outbound, get_resolver, get_ruleset, get_direct_override } from './common.uc';
@@ -107,6 +107,19 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 		});
 		push(config.route.rules, {
 			rule_set: 'geoip-cn',
+			action: 'route',
+			outbound: 'direct-out'
+		});
+		/* geoip-cn.srs is upstream's list; the firewall's mainland set is
+		 * built from our own china_ip4.txt (firewall_post.ut reads it
+		 * directly).  The two disagree - the bundled list has 8.152.0.0/13
+		 * (Alibaba Cloud) and geoip-cn.srs does not - so a connection into
+		 * that range passes the firewall as "not mainland" and would then be
+		 * sent direct by the rule above instead of to the proxy.  This local
+		 * rule-set is generated from the same china_ip4.txt, which is what
+		 * makes both sides decide from one list. */
+		push(config.route.rules, {
+			rule_set: 'china-ip',
 			action: 'route',
 			outbound: 'direct-out'
 		});
@@ -204,6 +217,21 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 			url: 'https://raw.githubusercontent.com/SagerNet/sing-geosite/rule-set/geosite-geolocation-cn.srs',
 			update_interval: '24h',
 			download_detour: 'main-out'
+		});
+
+		/* Local, and not downloaded: it is generated from the same
+		 * china_ip4.txt the firewall renders homeproxy_mainland_addr_v4
+		 * from, so the two cannot drift apart.  `type: local` is watched by
+		 * sing-box with fswatch, so when the resource updater replaces the
+		 * file the running instance reloads it in place - no restart and,
+		 * more importantly, no second copy of the list to keep in sync.
+		 * China IPv6 is deliberately absent: the firewall only fills the v6
+		 * set when ipv6_support is on, and the client refuses to resolve
+		 * AAAA when it is off. */
+		push(config.route.rule_set, {
+			type: 'local',
+			tag: 'china-ip',
+			path: HP_DIR + '/resources/china_ip4.json'
 		});
 	}
 

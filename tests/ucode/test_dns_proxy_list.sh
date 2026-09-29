@@ -68,6 +68,15 @@ stage_case() {
 	printf '%s\n' "$DIRECT_DOMAIN" > "$dir/resources/direct_list.txt"
 	printf '%s\n' "$PROXY_DOMAIN" > "$dir/resources/proxy_list.txt"
 
+	# The client config carries a `type: local` rule-set generated from
+	# china_ip4.txt; sing-box opens that path during `check`, and on a router
+	# hp_prepare_runtime_files generates it before the config is used.
+	if ! ucode -S "$ROOT/root/etc/homeproxy/scripts/runtime/china_ip_ruleset.uc" \
+		"$ROOT/root/etc/homeproxy/resources/china_ip4.txt" "$dir/resources/china_ip4.json" \
+		>>"$dir/resources/china_ip4.log" 2>&1; then
+		printf '{"version":3,"rules":[{"ip_cidr":["192.0.2.0/24"]}]}\n' > "$dir/resources/china_ip4.json"
+	fi
+
 	VALIDATE_DATA="${HP_VALIDATE_DATA:-/sbin/validate_data}"
 	sed -e "s#^export const HP_DIR = '/etc/homeproxy';#export const HP_DIR = '$dir';#" \
 	    -e "s#^export const RUN_DIR = '/var/run/homeproxy';#export const RUN_DIR = '$dir/run';#" \
