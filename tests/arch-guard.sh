@@ -2064,6 +2064,71 @@ fi
 rm -rf "$SNAP_TMP"
 trap - EXIT INT TERM
 
+# ---------------------------------------------------------------------------
+# guard 44: a failed start must leave its reason behind
+#
+# Two independent losses, both observed on 192.168.1.1 on 2026-09-29:
+#
+#   1. stop_service used to `rm -f` the instance logs.  A failed start is
+#      followed by a stop, so the log of the run that failed was deleted by
+#      the very rollback meant to recover the service.  start_service now
+#      rotates to .log.prev instead, and the rm must not creep back.
+#
+#   2. The bigger one: sing-box's own logger is only opened once the instance
+#      is up, so every error that makes a *start* fail (bind conflicts, bad
+#      certificates, unreadable rule-sets) is written to stderr, which
+#      procd_set_param stderr 1 hands to logd.  sing-box-c.log was measurably
+#      1 byte (empty) on every failed start, and the only copy of "listen tcp
+#      0.0.0.0:80: bind: address already in use" lived in the syslog ring
+#      buffer.  LuCI only reads homeproxy.log, so the user saw
+#      "did not come up" and nothing else.
+#      hp_log_singbox_diagnostic() copies those lines into homeproxy.log.
+#
+# Both failure paths (start_service and reload_service) must call it, or the
+# reason is lost on whichever path the user happened to be on.
+# ---------------------------------------------------------------------------
+LOG_TMP="$(mktemp -d)"
+
+# 1. the instance logs must not be in stop_service's rm -f list any more
+sed -n '/^stop_service()/,/^}/p' "$ROOT/root/etc/init.d/homeproxy" > "$LOG_TMP/stop"
+sed -n '/rm -f "\$RUN_DIR/,/failed-dns/p' "$LOG_TMP/stop" | tr -d '\\\n' > "$LOG_TMP/rmline"
+if grep -qE 'sing-box-[cs]\.log"' "$LOG_TMP/rmline"; then
+	fail "stop_service still deletes the instance logs; a failed start's log is removed by the rollback that is supposed to recover it:"
+	grep -oE 'sing-box-[cs]\.log' "$LOG_TMP/rmline" | sort -u | while IFS= read -r p; do
+		printf '      rm -f %s\n' "$p"
+	done
+elif [ ! -s "$LOG_TMP/rmline" ]; then
+	fail "could not locate stop_service's rm -f line; the guard is not proving anything"
+else
+	pass "stop_service keeps the instance logs and only removes the regenerated .json + markers"
+fi
+
+# 2. the diagnostic collector must exist and be wired into both failure paths
+if ! grep -q '^hp_log_singbox_diagnostic()' "$ROOT/root/etc/init.d/homeproxy"; then
+	fail "hp_log_singbox_diagnostic() is gone; a failed start no longer explains itself in homeproxy.log"
+elif ! grep -q 'command -v logread' "$ROOT/root/etc/init.d/homeproxy"; then
+	fail "hp_log_singbox_diagnostic() no longer guards on logread's absence; it would abort the recovery path on a build without it"
+elif [ "$(grep -c 'hp_log_singbox_diagnostic "\$failed"' "$ROOT/root/etc/init.d/homeproxy")" -ne 2 ]; then
+	fail "hp_log_singbox_diagnostic() must be called from BOTH failure paths (start_service and reload_service); found $(grep -c 'hp_log_singbox_diagnostic "\$failed"' "$ROOT/root/etc/init.d/homeproxy") call(s)"
+elif ! grep -q '\[ "\$instance" = "sing-box-c" \] || return 0' "$ROOT/root/etc/init.d/homeproxy"; then
+	fail "hp_log_singbox_diagnostic() no longer refuses a non-client instance; sing-box's stderr carries no instance name, so a server call would attribute the client's error to the server"
+elif ! grep -q "awk '!seen\[\$0\]++'" "$ROOT/root/etc/init.d/homeproxy"; then
+	fail "the collector no longer de-duplicates; procd respawn fills the whole allowance with one repeated line"
+else
+	pass "a failed start copies sing-box's own stderr reason into homeproxy.log on both paths"
+fi
+
+# 3. the collector must not be able to abort the recovery path
+if grep -A2 '^hp_log_singbox_diagnostic()' "$ROOT/root/etc/init.d/homeproxy" \
+	| grep -qE '^\s*(set -e|exit 1)'; then
+	fail "hp_log_singbox_diagnostic() can abort the caller; a diagnostic must never turn into a second failure"
+else
+	pass "a failure to collect a diagnostic cannot fail the recovery path"
+fi
+
+rm -rf "$LOG_TMP"
+trap - EXIT INT TERM
+
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then

@@ -38,6 +38,7 @@
 'use strict';
 
 const path = require('path');
+const fsMod = require('fs');
 const { loadLuciModule } = require('./lib/luci-module.js');
 
 const root = path.resolve(process.argv[2] || '.');
@@ -383,15 +384,46 @@ function testLogViewWiring() {
 	if (!pollHandlers)
 		return Promise.resolve();
 
-	/* One tick reads one file per registered target, keyed by basename. */
+	/* One tick reads one file per registered target, keyed by basename, plus
+	 * the preserved previous run of each sing-box log.  The .prev probe is
+	 * deliberately sing-box-only: homeproxy.log is append-only and is never
+	 * rotated (hp_rotate_instance_log in runtime/service.sh only touches the
+	 * two instance logs), so reading a homeproxy.log.prev would be a
+	 * guaranteed miss on every tick.
+	 *
+	 * The failure this guards is the one that hides a root cause: if the
+	 * previous run's log is not read, a failed start's real reason ("address
+	 * already in use", an unreadable certificate) is invisible, because the
+	 * rollback restart truncates sing-box-c.log right after. */
 	return Promise.resolve(pollHandlers.read()).then(() => {
-		check('status.js: the poll reads each log by basename',
-			JSON.stringify(reads.slice().sort()) === JSON.stringify([
-				'/var/run/homeproxy/homeproxy.log',
-				'/var/run/homeproxy/sing-box-c.log',
-				'/var/run/homeproxy/sing-box-s.log'
-			].sort()),
+		const expected = [
+			'/var/run/homeproxy/homeproxy.log',
+			'/var/run/homeproxy/sing-box-c.log',
+			'/var/run/homeproxy/sing-box-s.log',
+			'/var/run/homeproxy/sing-box-c.log.prev',
+			'/var/run/homeproxy/sing-box-s.log.prev'
+		];
+		const got = reads.slice().sort();
+
+		check('status.js: the poll reads each log by basename and the sing-box .prev companions',
+			JSON.stringify(got) === JSON.stringify(expected.slice().sort()),
 			JSON.stringify(reads));
+		check('status.js: the poll never probes a homeproxy.log.prev',
+			!reads.includes('/var/run/homeproxy/homeproxy.log.prev'),
+			JSON.stringify(reads));
+
+		/* readLogFile() maps a missing file to null, and a path the ACL does
+		 * not grant fails the same way - so an ungranted .prev path would
+		 * simply never render, with no error anywhere.  Cross-check the
+		 * paths this poll actually reads against the shipped ACL instead of
+		 * trusting the two files to have been kept in step. */
+		const acl_path = path.join(root, 'root/usr/share/rpcd/acl.d/luci-app-homeproxy.json');
+		const acl = JSON.parse(fsMod.readFileSync(acl_path, 'utf8'));
+		const granted = Object.keys(acl['luci-app-homeproxy'].read.file);
+		const ungranted = [...new Set(reads)].filter((p) => !granted.includes(p));
+
+		check('status.js: every log path the poll reads is granted by the ACL',
+			ungranted.length === 0, 'not granted: ' + JSON.stringify(ungranted));
 	});
 }
 

@@ -25,6 +25,15 @@ const css = '				\
 	padding: .5rem;			\
 	word-break: break-all;		\
 	margin: 0;			\
+}					\
+#log_textarea pre.prev-run {		\
+	opacity: .65;			\
+}					\
+#log_textarea hr.run-separator {	\
+	border: 0;			\
+	border-top: 1px dashed currentColor;	\
+	opacity: .35;			\
+	margin: .25rem 0;		\
 }';
 
 const hp_dir = '/var/run/homeproxy';
@@ -49,11 +58,49 @@ const hp_dir = '/var/run/homeproxy';
  * textareas share the `#log_textarea` id and cannot be told apart by id. */
 const log_targets = {};
 
+/* Read one log file, mapping a missing file to null instead of throwing.
+ * Only the optional .prev probe treats every failure as "absent"; the live
+ * log keeps the explicit error handling below. */
+function readLogFile(path) {
+	return fs.read_direct(path, 'text')
+		.then((res) => res)
+		.catch(() => null);
+}
+
 function readRuntimeLog(filename) {
-	return fs.read_direct(String.format('%s/%s.log', hp_dir, filename), 'text')
-		.then((res) => E('pre', { 'wrap': 'pre' }, [
-			res.trim() || _('Log is empty.')
-		]))
+	const base = String.format('%s/%s.log', hp_dir, filename);
+	/* A failed start's own log is the only place the real reason appears
+	 * ("address already in use", an unreadable certificate, a rule-set that
+	 * will not download), and the rollback restart would truncate it.  The
+	 * runtime keeps one generation as <name>.log.prev (see
+	 * hp_rotate_instance_log in runtime/service.sh), so show it above the
+	 * current run whenever there is one.
+	 *
+	 * No label is drawn on purpose: adding a translatable string here means
+	 * regenerating po/templates/homeproxy.pot, and the sing-box log lines
+	 * carry timestamps already, so the boundary is the divider and the
+	 * operator can tell the two runs apart by time. */
+	const prevPath = (filename === 'homeproxy')
+		? Promise.resolve(null)          /* homeproxy.log is append-only */
+		: readLogFile(base + '.prev');
+
+	return Promise.all([fs.read_direct(base, 'text'), prevPath])
+		.then(([cur, prev]) => {
+			if (cur === null)
+				return E('pre', { 'wrap': 'pre' }, [ _('Log file does not exist.') ]);
+
+			const parts = [];
+
+			if (prev !== null && prev.trim())
+				parts.push(
+					E('pre', { 'wrap': 'pre', 'class': 'prev-run' }, [ prev.trim() ]),
+					E('hr', { 'class': 'run-separator' })
+				);
+
+			parts.push(E('pre', { 'wrap': 'pre' }, [ cur.trim() || _('Log is empty.') ]));
+
+			return parts.length > 1 ? E('div', {}, parts) : parts[0];
+		})
 		.catch((err) => {
 			if (err.toString().includes('NotFoundError'))
 				return E('pre', { 'wrap': 'pre' }, [ _('Log file does not exist.') ]);

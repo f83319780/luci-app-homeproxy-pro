@@ -5,7 +5,9 @@
 			"file": {
 				"/var/run/homeproxy/homeproxy.log": [ "read" ],
 				"/var/run/homeproxy/sing-box-c.log": [ "read" ],
-				"/var/run/homeproxy/sing-box-s.log": [ "read" ]
+				"/var/run/homeproxy/sing-box-s.log": [ "read" ],
+				"/var/run/homeproxy/sing-box-c.log.prev": [ "read" ],
+				"/var/run/homeproxy/sing-box-s.log.prev": [ "read" ]
 			},
 			"ubus": {
 				"service": [ "list" ],

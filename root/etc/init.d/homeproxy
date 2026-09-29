@@ -89,6 +89,70 @@ log() {
 	echo -e "$(date "+%Y-%m-%d %H:%M:%S") [DAEMON] $*" >> "$LOG_PATH"
 }
 
+# hp_log_singbox_diagnostic <instance-name>
+# Copy the last few fatal lines sing-box emitted into $LOG_PATH, attributed to
+# <instance-name>, so the reason a start failed is visible in LuCI.
+#
+# Why this exists: the generated config points sing-box's own logger at
+# /var/run/homeproxy/sing-box-<side>.log, but that logger is only opened once
+# the service is up.  Everything before that - and that includes exactly the
+# errors that make a start fail (bind conflicts, unreadable rule-sets, a bad
+# certificate) - is written to stderr, which procd_set_param stderr 1 hands to
+# logd.  So sing-box-<side>.log is empty on a failed start and the actual
+# reason only ever exists in the syslog ring buffer, where the next crash-loop
+# respawn or a logd rotation overwrites it.
+#
+# Attribution caveat, and why this is only called for the client: sing-box does
+# not put its own name in a stderr line, and procd's stderr redirection does not
+# add the instance name either, so there is nothing in the buffer to filter on.
+# The <instance-name> is the caller's claim, not something read back out.  That
+# claim is sound for the client only: when the client has just failed to come
+# up, the newest sing-box error in the buffer is by construction the client's.
+# For the server the same call would attribute whatever the client last said,
+# so it is deliberately not made.
+#
+# This does not replace the instance log: once the instance is up, its own
+# output does land there, and clean_log.sh keeps trimming it.  It covers only
+# the pre-listening window, which is the one that matters for a rollback.
+#
+# Best-effort by design.  logread is absent on some builds, the buffer may
+# already have rolled, and a failure to collect a diagnostic must never turn
+# into a second failure on the path that is already recovering the service.
+#
+# procd respawns a crashing instance several times a second, so the same line
+# is normally in the buffer 5-6 times over; the awk de-duplicates before the
+# tail, otherwise one bind conflict fills the whole allowance with one reason.
+hp_log_singbox_diagnostic() {
+	local instance="$1"
+	local stamp line
+
+	# Only the client can be attributed safely - see the caveat above.  A
+	# caller reaching for the server gets nothing rather than a plausible
+	# line that blames the wrong process.
+	[ "$instance" = "sing-box-c" ] || return 0
+
+	command -v logread >/dev/null 2>&1 || return 0
+
+	# Strip the ANSI colour codes sing-box emits, the syslog priority
+	# prefix and the pid, keeping only "<text> [msg] <what went wrong>".
+	lines="$(logread 2>/dev/null \
+		| grep -E "sing-box(\[[0-9]+\])?: " \
+		| grep -Ei 'FATAL|ERROR' \
+		| sed -E -e 's/\x1b\[[0-9;]*m//g' \
+		      -e 's/^.*sing-box(\[[0-9]+\])?: //' \
+		| tail -n 20 \
+		| awk '!seen[$0]++' \
+		| tail -n 3)" || return 0
+
+	[ -n "$lines" ] || return 0
+
+	stamp="$(date "+%Y-%m-%d %H:%M:%S")"
+	printf '%s\n' "$lines" | while IFS= read -r line; do
+		[ -n "$line" ] || continue
+		echo -e "$stamp [DAEMON] $instance: $line" >> "$LOG_PATH"
+	done
+}
+
 # hp_client_outbound_node <routing-mode> <dest-var>
 # Read the client's "main node" reference into <dest-var>.
 #
@@ -387,6 +451,7 @@ service_started() {
 		# reload_service are not the same shell invocation.
 		printf '%s\n' "$failed" > "$RUN_DIR/failed-side"
 		log "Error: $failed did not come up with the new configuration."
+		hp_log_singbox_diagnostic "$failed"
 		# The intercept rules were installed by start_service before this
 		# gate ran, and on the *start* path nothing else takes them back
 		# down: the LAN would keep sending TCP to the redirect port and DNS
@@ -454,8 +519,14 @@ stop_service() {
 	# through hp_release_stale_intercept() in start_service.
 	[ "${HP_RELOAD_IN_PROGRESS:-0}" = "1" ] || hp_dnsmasq_remove_snippets "$DNSMASQ_DIR"
 
-	rm -f "$RUN_DIR/sing-box-c.json" "$RUN_DIR/sing-box-c.log" \
-		"$RUN_DIR/sing-box-s.json" "$RUN_DIR/sing-box-s.log" \
+	# The .json configs are regenerated on every start, so they go.  The .log
+	# files do NOT: they are the only record of why the previous run failed
+	# (a bind conflict, a bad certificate, a port already owned by something
+	# else).  start_service rotates them to .log.prev, which is where the LuCI
+	# log viewer and clean_log.sh pick them up, so deleting them here would
+	# throw away exactly the evidence a failed stop/start needs to keep.
+	rm -f "$RUN_DIR/sing-box-c.json" \
+		"$RUN_DIR/sing-box-s.json" \
 		"$RUN_DIR/failed-side" "$RUN_DIR/failed-firewall" "$RUN_DIR/failed-dns"
 	# A released marker only means something within one start; a stop clears it
 	# so the next start does not reinstall a layer it is about to install anyway.
@@ -595,6 +666,9 @@ reload_service() {
 	fi
 
 	log "Error: $failed did not come up with the new configuration, rolling back."
+	# Collect sing-box's own stderr before the rollback stops the instance and
+	# procd's respawn loop overwrites the ring buffer with the good run.
+	hp_log_singbox_diagnostic "$failed"
 
 	# Review P1-3 (2026-09-28): restore the nft-layer-driving UCI keys
 	# *before* the rolled-back stop;start.  Without this, start_service()

@@ -117,6 +117,47 @@ hp_clear_autoupdate_cron() {
 	/etc/init.d/cron restart >"/dev/null" 2>&1 || log "Warning: failed to restart cron."
 }
 
+# hp_rotate_instance_log <run-dir> <name> <enabled>
+# Truncate the per-instance log before a start, but keep whatever the
+# previous run wrote as <name>.log.prev.
+#
+# The reason this is not a plain `echo >` is the rollback path.  A failed
+# start writes the actual cause into the log - "address already in use",
+# a certificate that cannot be read, a rule-set that will not download -
+# and then reload_service restarts the service, which truncates it again.
+# What the operator was left with was the health gate's own verdict
+#
+#   Error: sing-box-c did not come up with the new configuration.
+#
+# and no way to find out why.  That is precisely the case the rollback
+# exists for, and it is the moment the reason matters most.
+#
+# One generation is kept, not a series: the .prev file is replaced on every
+# start, so it can never grow without bound, and clean_log.sh trims it on
+# the same 50 KB rule as the live logs.  A run that logged nothing (the
+# normal case - the default log level is `warn`) leaves no .prev behind, so
+# a healthy router does not accumulate stale files.
+#
+# The rotation is a `mv` inside the same directory, so it is atomic and the
+# file sing-box is about to open never appears missing.
+hp_rotate_instance_log() {
+	local run_dir="$1"
+	local name="$2"
+	local enabled="$3"
+	local live="$run_dir/${name}.log"
+	local prev="$run_dir/${name}.log.prev"
+
+	[ "$enabled" = "1" ] || return 0
+
+	if [ -s "$live" ]; then
+		mv -f "$live" "$prev" 2>/dev/null \
+			&& log "Notice: kept the previous ${name} log at ${prev}." \
+			|| log "Warning: could not preserve the previous ${name} log; a failed start will leave no reason behind."
+	fi
+
+	echo > "$live"
+}
+
 # hp_prepare_runtime_files <hp-dir> <run-dir> <routing-mode> <client> <server>
 # Create the mode-specific working files, truncate the instance logs and hand
 # every runtime file to the sing-box user.  <client>/<server> are "1"/"0".
@@ -149,9 +190,9 @@ hp_prepare_runtime_files() {
 			|| log "Warning: failed to hand ${hp_dir}/ruleset to sing-box."
 	fi
 
-	[ "$client_enabled" = "1" ] && echo > "$run_dir/sing-box-c.log"
+	hp_rotate_instance_log "$run_dir" "sing-box-c" "$client_enabled"
+	hp_rotate_instance_log "$run_dir" "sing-box-s" "$server_enabled"
 	if [ "$server_enabled" = "1" ]; then
-		echo > "$run_dir/sing-box-s.log"
 		if mkdir -p "$hp_dir/certs" 2>"/dev/null"; then
 			# The server runs jailed as the sing-box user and reads its
 			# certificate, key and ECH config from this directory, while an
