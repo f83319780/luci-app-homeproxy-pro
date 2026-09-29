@@ -1946,6 +1946,125 @@ else
 fi
 
 echo
+echo "== guard 43: the rollback UCI snapshot matches the keys the intercept layer reads =="
+
+# Review 2026-09-29 (docs/review-report-20260929-full.md §1.2-1.4, P2 #1/#2).
+#
+# reload_service rolls back by restoring the known-good sing-box file *and*
+# replaying a UCI snapshot of the keys that steer the network layer - the
+# second half exists because start_service reinstalls the nft / dnsmasq
+# layer from CURRENT UCI, so without it a rollback would restore the sing-box
+# bytes and leave the failing layer in place (review P1-3, 2026-09-28).
+#
+# That snapshot was a hand-maintained five-line list. It named four real
+# keys out of the twenty-two the layer reads, and the fifth line was
+# `infra.tun_address` - an option that exists nowhere; the real ones are
+# `tun_addr4` / `tun_addr6` (config/loader.uc). So the line was always empty,
+# the replay was a no-op for it, and tests/fixtures/runtime/trace.golden.txt
+# recorded the empty line as the expected shape. A test that pins the format
+# cannot notice that a key does not exist.
+#
+# The lesson is the one this file already states: compare the layers to each
+# other instead of to a hand-written list. The read set below is extracted
+# from the four files that actually build the intercept layer, and the two
+# directions are checked:
+#
+#   read - snapshot   a key the layer reads was left out of the rollback
+#   snapshot - read   a key nothing reads is in the rollback (the ghost-key
+#                     case; the declared extras below are the only ones
+#                     allowed)
+#
+# init.d/homeproxy is deliberately NOT in the read set: its config_get calls
+# serve the health gate (health_probe_*) and the cron (subscription.*), which
+# do not steer the layer. Every key it reads that *does* steer the layer is
+# also read by firewall_post.ut, so nothing is lost by excluding it.
+# Pure shell on purpose: the first version of this guard ran the extraction
+# from a python3 heredoc, and dash (which is what `sh` is on CI, and what
+# tests/run.sh:176 invokes it with) did not recognise the heredoc inside the
+# command substitution - the file failed to parse at all.  grep / sed / awk
+# are already this script's only tools, so nothing is lost.
+SNAP_TMP="$(mktemp -d)"
+trap 'rm -rf "$SNAP_TMP"' EXIT INT TERM
+
+SNAP_POST="$ROOT/root/etc/homeproxy/scripts/firewall_post.ut"
+SNAP_PRE="$ROOT/root/etc/homeproxy/scripts/firewall_pre.uc"
+SNAP_NET="$ROOT/root/etc/homeproxy/scripts/runtime/net.sh"
+SNAP_DNS="$ROOT/root/etc/homeproxy/scripts/runtime/dns.sh"
+SNAP_SVC="$ROOT/root/etc/homeproxy/scripts/runtime/service.sh"
+
+for f in "$SNAP_POST" "$SNAP_PRE" "$SNAP_NET" "$SNAP_DNS" "$SNAP_SVC"; do
+	if [ ! -r "$f" ]; then
+		fail "guard 43 cannot read $f - fix the guard before trusting a pass"
+		break
+	fi
+done
+
+# The read set: uci.get(cfgname, '<section>', '<option>') in the two firewall
+# scripts, plus the control_options array (walked through a loop variable, so
+# its members are the only place those keys are spelled out), plus
+# config_get / config_get_bool in the two runtime modules.  `dhcp.<dnsmasq>`
+# is another package's config and is deliberately not matched.
+{
+	grep -hoE "uci\.get\(cfgname, *'[a-z_]+', *'[a-z_0-9]+'\)" "$SNAP_POST" "$SNAP_PRE" 2>/dev/null \
+		| sed -E "s/.*'([a-z_]+)', *'([a-z_0-9]+)'.*/\1.\2/"
+	sed -n '/const control_options = \[/,/\];/p' "$SNAP_POST" 2>/dev/null \
+		| grep -oE '"[a-z_0-9]+"' | tr -d '"' | sed 's/^/control./'
+	grep -hoE 'config_get[a-z_]* +[a-z_0-9]+ +"[a-z_]+" +"[a-z_0-9]+"' "$SNAP_NET" "$SNAP_DNS" 2>/dev/null \
+		| sed -E 's/.*"([a-z_]+)" +"([a-z_0-9]+)"/\1.\2/'
+} 2>/dev/null | grep -E '^[a-z_]+\.[a-z_0-9]+$' | sort -u > "$SNAP_TMP/read"
+
+# The snapshot the writer declares: the keys listed in the two shell string
+# constants in runtime/service.sh.  Both ends of a block need care: the first
+# key sits on the opening `HP_INTERCEPT_*="` line and the last one shares its
+# line with the closing quote, so neither is a line of its own.  Dropping
+# either would make the guard report a key the source does declare - which is
+# exactly the false positive that appeared while this was being written.
+awk '
+	/^HP_INTERCEPT_(SCALARS|LISTS)="/ {
+		inblock = 1
+		line = $0
+		sub(/^HP_INTERCEPT_(SCALARS|LISTS)="/, "", line)
+		gsub(/"/, "", line)
+		if (line ~ /^[a-z_]+\.[a-z_0-9]+$/) print line
+		next
+	}
+	inblock && /^[a-z_]+\.[a-z_0-9]+"?$/ { gsub(/"/, ""); print; next }
+' "$SNAP_SVC" 2>/dev/null | sort -u > "$SNAP_TMP/snap"
+
+# Declared extras: read by the generator (context.uc -> inbound.uc), never by
+# a layer consumer.  The TUN address only reaches the device through the
+# generated file, so a rollback that left UCI describing the failed address
+# would make the next reload regenerate the configuration that just failed.
+printf '%s\n' infra.tun_addr4 infra.tun_addr6 | sort -u > "$SNAP_TMP/extras"
+
+# Direction 1: a key the layer reads was left out of the rollback snapshot.
+comm -23 "$SNAP_TMP/read" "$SNAP_TMP/snap" > "$SNAP_TMP/missing"
+# Direction 2: a key nothing reads is in the snapshot - the tun_address case.
+comm -23 "$SNAP_TMP/snap" "$SNAP_TMP/read" | comm -23 - "$SNAP_TMP/extras" > "$SNAP_TMP/ghost"
+# Direction 3: a declared extra is no longer snapshotted.  The extras are an
+# allowlist, so without this they would silently become optional and dropping
+# one from HP_INTERCEPT_SCALARS would go unnoticed.
+comm -23 "$SNAP_TMP/extras" "$SNAP_TMP/snap" > "$SNAP_TMP/unused"
+
+if [ ! -s "$SNAP_TMP/read" ]; then
+	fail "the intercept-layer read set came out empty - the extraction is broken, not the code"
+elif [ -s "$SNAP_TMP/missing" ]; then
+	fail "these keys steer the intercept layer but are not in the rollback UCI snapshot:"
+	while IFS= read -r k; do printf '      %s\n' "$k"; done < "$SNAP_TMP/missing"
+elif [ -s "$SNAP_TMP/ghost" ]; then
+	fail "the rollback UCI snapshot names keys no layer consumer reads (the tun_address case):"
+	while IFS= read -r k; do printf '      %s\n' "$k"; done < "$SNAP_TMP/ghost"
+elif [ -s "$SNAP_TMP/unused" ]; then
+	fail "these keys are declared as snapshot-only but are not in HP_INTERCEPT_SCALARS:"
+	while IFS= read -r k; do printf '      %s\n' "$k"; done < "$SNAP_TMP/unused"
+else
+	pass "the rollback UCI snapshot covers every intercept-layer key and names no unread key"
+fi
+
+rm -rf "$SNAP_TMP"
+trap - EXIT INT TERM
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
