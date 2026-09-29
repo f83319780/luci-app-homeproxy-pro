@@ -1101,7 +1101,7 @@ fi
 #    '\toption path' and a no-leading-TAB pattern does not match.
 run_case_type_error local-ruleset-bad-path "outside the homeproxy whitelist" \
 	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
-	"s%^[[:space:]]*option path '__RULESET_DIR__/test.srs'%    option path '/etc/passwd'%"
+	"s%^[[:space:]]*option path '/tmp/homeproxy_test_ruleset\\.[^/]*/local-ruleset-bad-path/test.srs'%    option path '/etc/passwd'%"
 
 # 6) P3 #8 / §4.2.2 (extra_tags die() on missing {tag}): not exercised
 #    here - the multi-tag branch in generator/ruleset.uc needs a ruleset
