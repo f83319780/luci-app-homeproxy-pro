@@ -871,25 +871,49 @@ run_case_type_error dangling-resolver "does not exist or is disabled" \
 #    inside route.rules[].rule_set.
 run_case route-no-geosite-cn "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
 
+# The probe walks the JSON and emits exactly one sentinel line per
+# assertion.  A flat grep cannot be scoped to route.rules alone: the
+# generated file also has dns.rules[].rule_set = ["geosite-cn"], and a
+# grep that catches the substring would fire even when the route layer
+# is clean.  Each line starts with a distinct prefix so the shell
+# match below never falls through to '*' on a real probe success.
+cat > "$WORK/route_rules_probe.uc" <<'EOF'
+'use strict';
+
+import { readfile } from 'fs';
+
+const config = json(readfile(ARGV[0]));
+
+printf('RULESET_HAS_GEOSITE: %s\n',
+	config.route?.rule_set?.find(r => r.tag === 'geosite-cn') ? 'yes' : 'no');
+for (let r in (config.route?.rules || [])) {
+	const rs = r.rule_set;
+	if (!rs)
+		continue;
+	const refs = Array.isArray(rs) ? rs : [rs];
+	if (refs.indexOf('geosite-cn') !== -1)
+		printf('ROUTE_RULE_REFERENCES_GEOSITE: %s\n', 'yes');
+}
+printf('DONE\n');
+EOF
+
 rs_json="$WORK/route-no-geosite-cn/run/sing-box-c.json"
 if [ ! -f "$rs_json" ]; then
 	echo "FAIL: route-no-geosite-cn: no config was generated"
 	FAILED=1
 else
-	if ! grep -q '"tag": "geosite-cn"' "$rs_json"; then
+	rs_probe="$(ucode "$WORK/route_rules_probe.uc" "$rs_json" 2>/dev/null)"
+	# grep substring matches, not case-pattern '*...*)' which is a syntax
+	# error in this version of bash (* is not allowed immediately before ')').
+	if ! printf '%s\n' "$rs_probe" | grep -q '^RULESET_HAS_GEOSITE: yes$'; then
 		echo "FAIL: route-no-geosite-cn: route.rule_set does not declare geosite-cn"
 		FAILED=1
 	fi
-	# The route rules themselves (the rule_set field inside the rules
-	# array) must NOT point at geosite-cn. The grep is 'rule_set.*geosite-cn'
-	# so it catches both '\"rule_set\": \"geosite-cn\"' (rule-level) and
-	# '[ \"geosite-cn\" ]' (referenced tag list inside a rule). Whitespace
-	# around the colon varies by ucode's pretty-printer.
-	if grep -E '"rule_set"[^"]*"geosite-cn"' "$rs_json" >/dev/null; then
-		echo "FAIL: route-no-geosite-cn: a route rule references geosite-cn; only the DNS layer should:"
-		grep -n -E '"rule_set"[^"]*"geosite-cn"' "$rs_json" | head -3
+	if printf '%s\n' "$rs_probe" | grep -q '^ROUTE_RULE_REFERENCES_GEOSITE: yes$'; then
+		echo "FAIL: route-no-geosite-cn: a route rule references geosite-cn; only the DNS layer should"
 		FAILED=1
-	else
+	fi
+	if [ "$FAILED" = 0 ]; then
 		echo "PASS: route-no-geosite-cn: route.rule_set has geosite-cn, route.rules never references it (DNS layer only)"
 	fi
 fi
@@ -944,7 +968,10 @@ fi
 #    NAPTR_BYPASS_SUFFIXES constant - no literal inline list, no drift
 #    between the constant and the rule body. The probe asserts both:
 #    qtype=[35] is present, and the domain_suffix array contains the
-#    three expected suffixes in order.
+#    three expected suffixes in order. The probe exits 0 on success
+#    and emits one PROBE_OK line; failure exits non-zero with a
+#    PROBE_FAIL line whose prefix is unique enough to ignore carriage-
+#    / odd-whitespace cases.
 run_case naptr-bypass-domains "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
 
 cat > "$WORK/naptr_probe.uc" <<'EOF'
@@ -960,23 +987,25 @@ for (let r in (config.dns?.rules || [])) {
 	if (!qt || qt[0] !== 35)
 		continue;
 	const sf = r.domain_suffix;
-	if (!sf)
-		continue;
+	if (!sf) {
+		console.log('PROBE_FAIL: qtype-35 rule has no domain_suffix');
+		exit(1);
+	}
 	if (length(sf) !== 3) {
-		printf('FAIL: qtype-35 rule has %d suffixes (expected 3): %s\\n', length(sf), join(',', sf));
+		console.log('PROBE_FAIL: qtype-35 rule has ' + length(sf) + ' suffixes (expected 3): ' + join(',', sf));
 		exit(1);
 	}
 	for (let i = 0; i < 3; i++) {
 		if (sf[i] !== expected[i]) {
-			printf('FAIL: qtype-35 domain_suffix[%d] = %s (expected %s); full list: %s\\n',
-				i, sf[i], expected[i], join(',', sf));
+			console.log('PROBE_FAIL: qtype-35 domain_suffix[' + i + '] = ' + sf[i] + ' (expected ' + expected[i] + ')');
 			exit(1);
 		}
 	}
-	printf('OK\\n');
+	console.log('PROBE_OK');
 	exit(0);
 }
-console.log('no qtype-35 rule');
+console.log('PROBE_FAIL: no qtype-35 rule');
+exit(1);
 EOF
 
 naptr_json="$WORK/naptr-bypass-domains/run/sing-box-c.json"
@@ -985,24 +1014,24 @@ if [ ! -f "$naptr_json" ]; then
 	FAILED=1
 else
 	naptr_out="$(ucode "$WORK/naptr_probe.uc" "$naptr_json" 2>/dev/null)"
-	case "$naptr_out" in
-	OK)
-		echo "PASS: naptr-bypass-domains: qtype-35 rule domain_suffix matches NAPTR_BYPASS_SUFFIXES" ;;
-	no\ qtype-35\ rule)
-		echo "FAIL: naptr-bypass-domains: bypass_mainland_china did not emit a qtype-35 rule"
-		FAILED=1 ;;
-	*)
-		echo "FAIL: naptr-bypass-domains: $naptr_out"
-		FAILED=1 ;;
-	esac
+	if [ "$naptr_out" = "PROBE_OK" ]; then
+		echo "PASS: naptr-bypass-domains: qtype-35 rule domain_suffix matches NAPTR_BYPASS_SUFFIXES"
+	else
+		echo "FAIL: naptr-bypass-domains: ${naptr_out#PROBE_FAIL: }"
+		FAILED=1
+	fi
 fi
 
 # 4) P2 #3 / §1.4.3 / §5.1: attachExperimental() used to gate cache_file
 #    on routing_mode in [bypass_mainland_china, custom]. After the r28
-#    fix, every routing_mode gets a cache_file block. Five variations of
-#    the same fixture (sed the routing_mode line) cover all five; custom
-#    mode uses the custom.uci fixture which already exercises it.
-for rm in gfwlist bypass_mainland_china proxy_mainland_china global; do
+#    fix, every routing_mode gets a cache_file block. Four sed
+#    variations of the same fixture cover gfwlist / proxy_mainland_china
+#    / global (they need a real main_node, which client.uci has via
+#    main_node='urltest'). bypass_mainland_china is already exercised
+#    by the unmodified client.uci, and custom.mode uses the custom.uci
+#    fixture below. The loop skips the no-op variation to avoid
+#    "the fixture variation matched nothing" from run_case.
+for rm in gfwlist proxy_mainland_china global; do
 	run_case "cache-file-$rm" "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json \
 		"s/option routing_mode 'bypass_mainland_china'/option routing_mode '$rm'/"
 
@@ -1017,6 +1046,19 @@ for rm in gfwlist bypass_mainland_china proxy_mainland_china global; do
 		echo "PASS: cache-file-$rm: experimental.cache_file emitted for routing_mode='$rm'"
 	fi
 done
+
+# bypass_mainland_china is the unmodified client.uci - same case, separate label.
+run_case cache-file-bypass_mainland_china "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
+cf_json="$WORK/cache-file-bypass_mainland_china/run/sing-box-c.json"
+if [ ! -f "$cf_json" ]; then
+	echo "FAIL: cache-file-bypass_mainland_china: no config was generated"
+	FAILED=1
+elif ! grep -q '"path": "/etc/homeproxy/cache.db"' "$cf_json"; then
+	echo "FAIL: cache-file-bypass_mainland_china: experimental.cache_file is missing for routing_mode='bypass_mainland_china'"
+	FAILED=1
+else
+	echo "PASS: cache-file-bypass_mainland_china: experimental.cache_file emitted for routing_mode='bypass_mainland_china'"
+fi
 
 run_case cache-file-custom "$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json
 cf_json="$WORK/cache-file-custom/run/sing-box-c.json"
@@ -1034,10 +1076,12 @@ fi
 #    whitelist (e.g. /etc/passwd) used to silently set the field to
 #    null. The fix is to die() with a message naming the offender, the
 #    same way get_resolver / get_ruleset fail loud on a missing
-#    reference.  run_case_type_error observes the refusal.
+#    reference.  run_case_type_error observes the refusal. The sed
+#    pattern needs the leading TAB - custom.uci's path line starts with
+#    '\toption path' and a no-leading-TAB pattern does not match.
 run_case_type_error local-ruleset-bad-path "outside the homeproxy whitelist" \
 	"$ROOT/tests/fixtures/generators/custom.uci" generate_client.uc sing-box-c.json \
-	"s#option path '__RULESET_DIR__/test.srs'#option path '/etc/passwd'#"
+	"s#\toption path '__RULESET_DIR__/test.srs'#\toption path '/etc/passwd'#"
 
 # 6) P3 #8 / §4.2.2 (extra_tags die() on missing {tag}): not exercised
 #    here - the multi-tag branch in generator/ruleset.uc needs a ruleset
