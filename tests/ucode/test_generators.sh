@@ -864,10 +864,15 @@ run_case_type_error dangling-resolver "does not exist or is disabled" \
 # are out; structural assertions against the emitted bytes are in.
 
 # 1) P2 #2 / §1.4.1: geosite-cn is the *DNS*-layer rule_set consumer.
-#    The route layer never references it. Lock both invariants:
-#    route.rule_set has a tag: "geosite-cn" entry (2-level indent in
-#    the pretty-printed JSON), and no route.rules[] entry has
-#    rule_set: "geosite-cn" (those entries are at 3-level indent).
+#    The route layer never references it as a rule_set value (route.rule_set
+#    declares it as a tag). Indent cannot disambiguate dns.rules[] from
+#    route.rules[] (both pretty-print at 4 tabs on the testbed; both are
+#    bare-string `"rule_set": "..."`), so use count-based invariants:
+#      - "tag": "geosite-cn" appears at least once (route.rule_set)
+#      - "rule_set": "geosite-cn" appears EXACTLY once (dns.rules only;
+#        route.rules must NOT add a second one).
+#    A route regression that adds `"rule_set": "geosite-cn"` to route.rules
+#    bumps the count to 2 and fails loud.
 run_case route-no-geosite-cn "$ROOT/tests/fixtures/generators/client.uci" generate_client.uc sing-box-c.json
 
 rs_json="$WORK/route-no-geosite-cn/run/sing-box-c.json"
@@ -875,19 +880,19 @@ if [ ! -f "$rs_json" ]; then
 	echo "FAIL: route-no-geosite-cn: no config was generated"
 	FAILED=1
 else
-	if ! grep -qE '^			"tag": "geosite-cn",$' "$rs_json"; then
-		echo "FAIL: route-no-geosite-cn: route.rule_set does not declare geosite-cn"
+	rs_tag_count="$(grep -c '"tag": "geosite-cn"' "$rs_json")"
+	rs_ruleset_count="$(grep -c '"rule_set": "geosite-cn"' "$rs_json")"
+	if [ "$rs_tag_count" -lt 1 ]; then
+		echo "FAIL: route-no-geosite-cn: route.rule_set does not declare geosite-cn (tag count=$rs_tag_count, want >=1)"
 		FAILED=1
 	fi
-	# 3-level indent + rule_set + '\"geosite-cn\"' — only matches route.rules[],
-	# not route.rule_set (2-level indent), not dns.rules (different path).
-	if grep -E '^				"rule_set": "geosite-cn"' "$rs_json" >/dev/null; then
-		echo "FAIL: route-no-geosite-cn: a route rule references geosite-cn (only DNS layer should):"
-		grep -nE '^				"rule_set": "geosite-cn"' "$rs_json"
+	if [ "$rs_ruleset_count" -ne 1 ]; then
+		echo "FAIL: route-no-geosite-cn: expected exactly 1 '\"rule_set\": \"geosite-cn\"' line (dns.rules only); got $rs_ruleset_count"
+		grep -n '"rule_set": "geosite-cn"' "$rs_json" | sed 's/^/      /'
 		FAILED=1
 	fi
-	if [ "$FAILED" = 0 ]; then
-		echo "PASS: route-no-geosite-cn: route.rule_set has geosite-cn, route.rules never references it (DNS layer only)"
+	if [ "$rs_tag_count" -ge 1 ] && [ "$rs_ruleset_count" -eq 1 ]; then
+		echo "PASS: route-no-geosite-cn: route.rule_set has geosite-cn (tag=$rs_tag_count); route.rules never references it (rule_set=$rs_ruleset_count, dns only)"
 	fi
 fi
 
@@ -906,13 +911,16 @@ if [ ! -f "$cds_json" ]; then
 	echo "FAIL: china-dns-strategy-v6-off: no config was generated"
 	FAILED=1
 else
-	# Extract the 6 lines that follow the china-dns tag (tag, domain_resolver
-	# open/close, server/strategy inside). Strategy appears 4 lines after tag.
+	# Pull the strategy line that follows china-dns, then strip the
+	# pretty-printer's leading whitespace before the case match (grep
+	# preserves indent; the case patterns do not).
 	cds_strategy="$(grep -A 6 '"tag": "china-dns"' "$cds_json" | grep '"strategy":' | head -1)"
-	case "$cds_strategy" in
-	'"strategy": "ipv4_only"'*)
+	cds_strategy_trimmed="${cds_strategy#"${cds_strategy%%[![:space:]]*}"}"
+	cds_value="$(printf '%s\n' "$cds_strategy_trimmed" | sed -n 's/.*"strategy": *"\([^"]*\)".*/\1/p')"
+	case "$cds_value" in
+	ipv4_only)
 		echo "PASS: china-dns-strategy-v6-off: china-dns.strategy=ipv4_only when ipv6_support='0'" ;;
-	'"strategy": "prefer_ipv6"'*)
+	prefer_ipv6)
 		echo "FAIL: china-dns-strategy-v6-off: china-dns.strategy is prefer_ipv6 (pre-r28 behaviour);"
 		echo "      it must mirror default-dns and follow ipv6_support"
 		FAILED=1 ;;
@@ -921,7 +929,7 @@ else
 		grep -A 6 '"tag": "china-dns"' "$cds_json"
 		FAILED=1 ;;
 	*)
-		echo "FAIL: china-dns-strategy-v6-off: unexpected strategy line: $cds_strategy"
+		echo "FAIL: china-dns-strategy-v6-off: unexpected strategy: $cds_value (line: $cds_strategy)"
 		FAILED=1 ;;
 	esac
 fi
