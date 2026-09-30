@@ -237,13 +237,16 @@ hp_procd_client_instance() {
 		# guessed subset.  procd orders the mounts by path, so this parent is
 		# bound before the read-write cache.db below and cannot shadow it.
 		procd_add_jail_mount "$hp_dir/"
-		# cache_file is enabled for bypass_mainland_china and custom alike
-		# (generator/common.uc:attachExperimental), so both need the file
-		# writable inside the jail.
-		case "$routing_mode" in
-		"bypass_mainland_china"|"custom")
-			procd_add_jail_mount_rw "$hp_dir/cache.db" ;;
-		esac
+		# cache_file is emitted unconditionally (generator/common.uc:
+		# attachExperimental takes the routing mode and never reads it), so
+		# every mode's sing-box opens this file and dies with
+		#   initialize cache-file: open /etc/homeproxy/cache.db: read-only file system
+		# if it is bound read-only - which is what the mode-gated mount here
+		# did for global / gfwlist / proxy_mainland_china.  The instance then
+		# failed its health gate and the intercept layer was reverted, so
+		# switching to one of those modes took the whole network off the
+		# proxy.
+		procd_add_jail_mount_rw "$hp_dir/cache.db"
 		procd_add_jail_mount "$hp_dir/certs/"
 		# The certificate path gate accepts /etc/acme as well (a client TLS
 		# certificate managed by acme.sh), so the client jail has to carry it

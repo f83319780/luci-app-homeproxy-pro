@@ -92,15 +92,24 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 			outbound: 'direct-out'
 		});
 
-	/* Bypass CN traffic: resolve the destination first, then route by IP.
-	   sing-box does not match an IP-based rule set (geoip-cn) against a domain
-	   destination unless it is resolved first, so add an explicit resolve
-	   action; geoip-cn then sends China IPs to direct and everything else falls
-	   through to main-out (proxy). This avoids relying on the geosite-* domain
-	   lists, which can mis-classify foreign domains (e.g. Google's gvt2.com
-	   beacons) as "cn" and send them direct to time out. Keep the direct-domain
-	   fast-path above for known direct domains. */
-	if (ctx.routing_mode === 'bypass_mainland_china') {
+	/* Split by destination IP, in both directions.
+	 *
+	 * sing-box does not match an IP-based rule set (geoip-cn) against a
+	 * domain destination unless it is resolved first, so an explicit resolve
+	 * action comes first.  Which way the split points is the mode's default
+	 * policy (ctx.proxy_fallback):
+	 *
+	 *   bypass/global/gfwlist  mainland -> direct, the rest falls through to
+	 *                          main-out (proxy)
+	 *   proxy_mainland_china   mainland -> proxy, the rest falls through to
+	 *                          direct-out
+	 *
+	 * Using geoip-cn rather than the geosite-* domain lists is deliberate:
+	 * those mis-classify foreign domains (Google's gvt2.com beacons) as "cn"
+	 * and would send them direct to time out.  Keep the direct-domain
+	 * fast-path above for known direct domains. */
+	if (ctx.routing_mode === 'bypass_mainland_china'
+		|| ctx.routing_mode === 'proxy_mainland_china') {
 		push(config.route.rules, {
 			action: 'resolve',
 			strategy: (ctx.ipv6_support !== '1') ? 'prefer_ipv4' : null
@@ -108,8 +117,10 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 		push(config.route.rules, {
 			rule_set: 'geoip-cn',
 			action: 'route',
-			outbound: 'direct-out'
+			outbound: ctx.proxy_fallback ? 'direct-out' : 'main-out'
 		});
+	}
+	if (ctx.routing_mode === 'bypass_mainland_china') {
 		/* geoip-cn.srs is upstream's list; the firewall's mainland set is
 		 * built from our own china_ip4.txt (firewall_post.ut reads it
 		 * directly).  The two disagree - the bundled list has 8.152.0.0/13
@@ -117,7 +128,9 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 		 * that range passes the firewall as "not mainland" and would then be
 		 * sent direct by the rule above instead of to the proxy.  This local
 		 * rule-set is generated from the same china_ip4.txt, which is what
-		 * makes both sides decide from one list. */
+		 * makes both sides decide from one list.  In
+		 * proxy_mainland_china it is not needed twice: the geoip-cn rule
+		 * already selects the mainland side for the proxy. */
 		push(config.route.rules, {
 			rule_set: 'china-ip',
 			action: 'route',
@@ -147,7 +160,10 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 			override_port: main_override.override_port
 		});
 
-	config.route.final = 'main-out';
+	/* The route half of the mode's default policy - the other consumer of
+	 * ctx.proxy_fallback, and the reason dns.final and this line are
+	 * asserted together per mode. */
+	config.route.final = ctx.proxy_fallback ? 'main-out' : 'direct-out';
 
 	/* --- proxy-mode rule_set block ----------------------------------- */
 
@@ -175,7 +191,13 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 			]
 		});
 
-	if (ctx.routing_mode === 'bypass_mainland_china') {
+	/* Both mainland modes split on geoip-cn, so both need it declared - it is
+	 * what the route rule added above matches.  `proxy_mainland_china` used
+	 * to reach this point without it and sing-box refused the whole config
+	 * with "initialize rule[3]: rule-set not found: geoip-cn", which the
+	 * health gate turned into a rollback and an unproxied network. */
+	if (ctx.routing_mode === 'bypass_mainland_china'
+		|| ctx.routing_mode === 'proxy_mainland_china') {
 		/*
 		 * Fetched straight from the upstream SagerNet repositories and
 		 * downloaded through the selected node. A direct fetch depends on
@@ -183,18 +205,22 @@ function build_route_proxy(config, dm, ctx, direct_overrides) {
 		 * makes it fail intermittently; the files total ~250 KB per
 		 * day, so proxying the download costs almost nothing.
 		 *
-		 * Both geosite-cn and geoip-cn are still emitted, but they are
-		 * consumed by different blocks:
+		 * Both rule_sets are emitted, but they are consumed by different
+		 * blocks:
 		 *
-		 *   geoip-cn  - referenced by the route rule above (line 105) to
-		 *               split CN destinations to direct-out.
+		 *   geoip-cn  - referenced by the route rule above to split
+		 *               destinations by IP: mainland -> direct-out in
+		 *               bypass_mainland_china, mainland -> main-out in
+		 *               proxy_mainland_china.
 		 *   geosite-cn - referenced only by the DNS rule in
-		 *               generator/dns.uc line 135-139 (rule_set: geosite-cn
-		 *               -> server: china-dns); the route layer never
-		 *               matches it. Sing-box still loads and keeps the
-		 *               rule-set in memory even when only one block
-		 *               references it, so removing it would also break the
-		 *               DNS split.
+		 *               generator/dns.uc (rule_set: geosite-cn ->
+		 *               server: china-dns); the route layer never matches
+		 *               it. Sing-box still loads and keeps the rule-set in
+		 *               memory even when only one block references it, so
+		 *               removing it would also break the DNS split.  It is
+		 *               only declared for bypass_mainland_china because that
+		 *               is the only mode whose DNS chain routes through
+		 *               china-dns.
 		 *
 		 * History: a third geosite-noncn used to be declared here as well,
 		 * but no rule referenced it and sing-box still loaded and updated
