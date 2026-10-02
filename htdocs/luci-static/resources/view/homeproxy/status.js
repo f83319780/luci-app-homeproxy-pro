@@ -83,12 +83,21 @@ function getConnStat(o, site) {
 				return hp.rpcCall('connection_check', [site],
 						{ params: ['site'], expect: { '': {} } }).then((ret) => {
                                         let ele = o.default.firstElementChild.nextElementSibling;
+					/* The address family comes back with the verdict rather than
+					 * being read here: form.Map has no formvalue() in this LuCI
+					 * (an earlier revision called it and threw), and the backend
+					 * is the only layer that knows which family it probed. With
+					 * IPv6 support on, "passed" now means the IPv6 path works,
+					 * and a failure says the node cannot carry IPv6 - which is
+					 * the truth, not a wget retry-order artefact. IPv4/IPv6 are
+					 * protocol names, so they are appended untranslated. */
+					let fam = ret.family ? ' (' + ret.family + ')' : '';
 					if (ret.result) {
 						ele.style.setProperty('color', 'green');
-                                                ele.innerHTML = _('passed');
+                                                ele.innerHTML = _('passed') + fam;
 					} else {
 						ele.style.setProperty('color', 'red');
-                                                ele.innerHTML = _('failed');
+                                                ele.innerHTML = _('failed') + fam;
 					}
 				});
 			})
@@ -249,18 +258,10 @@ return view.extend({
 		s = m.section(form.NamedSection, 'config', 'homeproxy', _('Connection check'));
 		s.anonymous = true;
 
-		/* The backend probes the address family the configuration has, so the
-		 * label has to say which one or "passed" is unfalsifiable: with IPv6
-		 * support on, a failure here means the node cannot carry IPv6 egress
-		 * (true, and worth knowing), not that the proxy is down. The family is
-		 * a protocol name rather than prose, so it stays untranslated; only the
-		 * label pattern goes through the catalogue. */
-		const family = (m.formvalue('config', 'ipv6_support') === '1') ? 'IPv6' : 'IPv4';
-
-		o = s.option(form.DummyValue, '_check_baidu', _('BaiDu (%s)').format(family));
+		o = s.option(form.DummyValue, '_check_baidu', _('BaiDu'));
 		o.cfgvalue = L.bind(getConnStat, this, o, 'baidu');
 
-		o = s.option(form.DummyValue, '_check_google', _('Google (%s)').format(family));
+		o = s.option(form.DummyValue, '_check_google', _('Google'));
 		o.cfgvalue = L.bind(getConnStat, this, o, 'google');
 
 		s = m.section(form.NamedSection, 'config', 'homeproxy', _('Resources management'));

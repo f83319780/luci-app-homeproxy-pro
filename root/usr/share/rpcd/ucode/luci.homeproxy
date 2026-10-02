@@ -226,9 +226,16 @@ const methods = {
 			 * sees. With IPv6 support off, DNS hands out no AAAA at all, so
 			 * -4 states explicitly what used to happen by accident. */
 			const uci = cursor();
-			const family = ((uci.get('homeproxy', 'config', 'ipv6_support') || '0') === '1') ? '-6' : '-4';
+			const family = ((uci.get('homeproxy', 'config', 'ipv6_support') || '0') === '1') ? 'IPv6' : 'IPv4';
 
-			return { result: (system(`/usr/bin/wget ${family} --spider -qT3 ${shellQuote(url)} 2>"/dev/null"`, 3100) === 0) };
+			return {
+				result: (system(`/usr/bin/wget -${(family === 'IPv6') ? '6' : '4'} --spider -qT3 ${shellQuote(url)} 2>"/dev/null"`, 3100) === 0),
+				/* The backend already knows which family it probed, and it is the
+				 * only layer that can know without the view re-reading UCI. The
+				 * view shows this next to the verdict, which is where a "passed"
+				 * finally means something checkable. */
+				family: family
+			};
 		}
 	},
 

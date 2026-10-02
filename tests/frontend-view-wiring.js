@@ -118,22 +118,12 @@ function makeForm() {
 		form[name].__name__ = name;
 	}
 
-	/* form.Map.formvalue() reads a value out of the form being edited, so it
-	 * lives on the Map rather than on a section. status.js uses it to label
-	 * the connection check with the address family it probes, which is why
-	 * this stub grew the method; it answers from an explicit fixture instead
-	 * of a blanket null for the same reason the section-level one above does -
-	 * a view branching on a form value must be able to reach both arms, or the
-	 * arm that never runs is invisible. '1' = IPv6 support on. */
 	form.Map = class {
 		constructor(title) { this.title = title; this.sections = []; }
 		section(kind, name) {
 			const section = new MockSection(kind && kind.__name__ ? kind.__name__ : String(kind), name);
 			this.sections.push(section);
 			return section;
-		}
-		formvalue(sectionId, option) {
-			return (sectionId === 'config' && option === 'ipv6_support') ? '1' : null;
 		}
 		render() { return this; }
 	};

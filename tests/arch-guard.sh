@@ -2303,9 +2303,9 @@ echo "== guard 48: the connection check probes the configured address family =="
 # seven AAAA records (Google) spends -T3 on each, so it blew the 3100 ms
 # system() budget and the button said "failed" while the same request over
 # IPv4 worked; Baidu passed only because its IPv6 goes out direct. Pin the two
-# halves: the backend has to force the family, and the label has to say which
+# halves: the backend has to force the family, and the verdict has to say which
 # one, or "passed" stays unfalsifiable.
-if grep -qF 'wget ${family} --spider' "$RPC" &&
+if grep -qF "wget -\${(family === 'IPv6') ? '6' : '4'} --spider" "$RPC" &&
    grep -qF "uci.get('homeproxy', 'config', 'ipv6_support')" "$RPC"; then
 	pass "connection_check forces the address family from homeproxy.config.ipv6_support"
 else
@@ -2313,13 +2313,30 @@ else
 	fail "busybox wget happens to try first, which is how a working proxy reads as failed"
 fi
 
-# The label and the probe must not drift: one forcing -6 while the row says
-# IPv4 is worse than either being wrong on its own.
-if grep -qF "_('BaiDu (%s)').format(family)" "$VIEWS/view/homeproxy/status.js" &&
-   grep -qF "_('Google (%s)').format(family)" "$VIEWS/view/homeproxy/status.js"; then
-	pass "both check rows name the family they probe"
+if grep -qF "family: family" "$RPC"; then
+	pass "the probed family is returned so the view can report it"
 else
-	fail "a check row no longer states which address family it probes"
+	fail "the response does not carry the family it probed, so the label cannot be"
+	fail "trusted - and the only way to get it in the view is to re-read UCI there"
+fi
+
+# The view must take the family from that response. An earlier revision called
+# form.Map.formvalue(), which does not exist in this LuCI: the status page
+# threw "m.formvalue is not a function" on a real router, and it only reached
+# CI because the stubs had been given the same invented method. The stubs must
+# keep modelling what LuCI actually provides, so a call the device does not
+# have fails here instead of on someone's router.
+if grep -qF "let fam = ret.family ?" "$VIEWS/view/homeproxy/status.js"; then
+	pass "the view reports the family the backend returned"
+else
+	fail "the view no longer shows which family was probed"
+fi
+
+if grep -rqE "\bm\.formvalue\(" "$VIEWS/view/homeproxy/"; then
+	fail "a view calls form.Map.formvalue(), which this LuCI does not provide -"
+	fail "  (formvalue lives on a section; the map has no such method)"
+else
+	pass "no view calls the non-existent form.Map.formvalue()"
 fi
 
 echo
