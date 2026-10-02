@@ -249,10 +249,18 @@ return view.extend({
 		s = m.section(form.NamedSection, 'config', 'homeproxy', _('Connection check'));
 		s.anonymous = true;
 
-		o = s.option(form.DummyValue, '_check_baidu', _('BaiDu'));
+		/* The backend probes the address family the configuration has, so the
+		 * label has to say which one or "passed" is unfalsifiable: with IPv6
+		 * support on, a failure here means the node cannot carry IPv6 egress
+		 * (true, and worth knowing), not that the proxy is down. The family is
+		 * a protocol name rather than prose, so it stays untranslated; only the
+		 * label pattern goes through the catalogue. */
+		const family = (m.formvalue('config', 'ipv6_support') === '1') ? 'IPv6' : 'IPv4';
+
+		o = s.option(form.DummyValue, '_check_baidu', _('BaiDu (%s)').format(family));
 		o.cfgvalue = L.bind(getConnStat, this, o, 'baidu');
 
-		o = s.option(form.DummyValue, '_check_google', _('Google'));
+		o = s.option(form.DummyValue, '_check_google', _('Google (%s)').format(family));
 		o.cfgvalue = L.bind(getConnStat, this, o, 'google');
 
 		s = m.section(form.NamedSection, 'config', 'homeproxy', _('Resources management'));

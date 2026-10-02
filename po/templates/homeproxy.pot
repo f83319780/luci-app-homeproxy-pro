@@ -276,8 +276,8 @@ msgstr ""
 msgid "BBR profile (1.14)"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:252
-msgid "BaiDu"
+#: htdocs/luci-static/resources/view/homeproxy/status.js:260
+msgid "BaiDu (%s)"
 msgstr ""
 
 #: htdocs/luci-static/resources/homeproxy.js:258
@@ -370,15 +370,15 @@ msgstr ""
 msgid "China DNS server"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:261
+#: htdocs/luci-static/resources/view/homeproxy/status.js:269
 msgid "China IPv4 list version"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:265
+#: htdocs/luci-static/resources/view/homeproxy/status.js:273
 msgid "China IPv6 list version"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:269
+#: htdocs/luci-static/resources/view/homeproxy/status.js:277
 msgid "China list version"
 msgstr ""
 
@@ -999,7 +999,7 @@ msgstr ""
 msgid "GET"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:273
+#: htdocs/luci-static/resources/view/homeproxy/status.js:281
 msgid "GFW list version"
 msgstr ""
 
@@ -1029,7 +1029,7 @@ msgstr ""
 msgid "Generate"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:277
+#: htdocs/luci-static/resources/view/homeproxy/status.js:285
 msgid "GitHub token"
 msgstr ""
 
@@ -1057,8 +1057,8 @@ msgstr ""
 msgid "Global settings"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:255
-msgid "Google"
+#: htdocs/luci-static/resources/view/homeproxy/status.js:263
+msgid "Google (%s)"
 msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client/dns.js:138
@@ -1133,7 +1133,7 @@ msgstr ""
 
 #: htdocs/luci-static/resources/view/homeproxy/client.js:70
 #: htdocs/luci-static/resources/view/homeproxy/client.js:119
-#: htdocs/luci-static/resources/view/homeproxy/status.js:299
+#: htdocs/luci-static/resources/view/homeproxy/status.js:307
 #: root/usr/share/luci/menu.d/luci-app-homeproxy.json:3
 msgid "HomeProxy"
 msgstr ""
@@ -2221,7 +2221,7 @@ msgid ""
 "that lookup on this router."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:258
+#: htdocs/luci-static/resources/view/homeproxy/status.js:266
 msgid "Resources management"
 msgstr ""
 
@@ -2346,8 +2346,8 @@ msgstr ""
 msgid "Same as main node"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:284
-#: htdocs/luci-static/resources/view/homeproxy/status.js:290
+#: htdocs/luci-static/resources/view/homeproxy/status.js:292
+#: htdocs/luci-static/resources/view/homeproxy/status.js:298
 msgid "Save"
 msgstr ""
 
@@ -3255,7 +3255,7 @@ msgstr ""
 msgid "quic-go / uquic chrome"
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:302
+#: htdocs/luci-static/resources/view/homeproxy/status.js:310
 msgid "sing-box client"
 msgstr ""
 
@@ -3277,7 +3277,7 @@ msgid ""
 "(Password above) must be 12-255 bytes for v6."
 msgstr ""
 
-#: htdocs/luci-static/resources/view/homeproxy/status.js:305
+#: htdocs/luci-static/resources/view/homeproxy/status.js:313
 msgid "sing-box server"
 msgstr ""
 

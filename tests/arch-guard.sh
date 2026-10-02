@@ -2296,6 +2296,33 @@ else
 fi
 
 echo
+echo "== guard 48: the connection check probes the configured address family =="
+
+# The button used to run `wget --spider` with no family, so its answer was
+# about busybox wget's retry order rather than about the proxy. A target with
+# seven AAAA records (Google) spends -T3 on each, so it blew the 3100 ms
+# system() budget and the button said "failed" while the same request over
+# IPv4 worked; Baidu passed only because its IPv6 goes out direct. Pin the two
+# halves: the backend has to force the family, and the label has to say which
+# one, or "passed" stays unfalsifiable.
+if grep -qF 'wget ${family} --spider' "$RPC" &&
+   grep -qF "uci.get('homeproxy', 'config', 'ipv6_support')" "$RPC"; then
+	pass "connection_check forces the address family from homeproxy.config.ipv6_support"
+else
+	fail "connection_check does not force an address family - the result is whatever"
+	fail "busybox wget happens to try first, which is how a working proxy reads as failed"
+fi
+
+# The label and the probe must not drift: one forcing -6 while the row says
+# IPv4 is worse than either being wrong on its own.
+if grep -qF "_('BaiDu (%s)').format(family)" "$VIEWS/view/homeproxy/status.js" &&
+   grep -qF "_('Google (%s)').format(family)" "$VIEWS/view/homeproxy/status.js"; then
+	pass "both check rows name the family they probe"
+else
+	fail "a check row no longer states which address family it probes"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"

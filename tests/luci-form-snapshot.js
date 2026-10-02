@@ -224,6 +224,18 @@ form.Value.extend = function (obj) {
 	return cls;
 };
 
+/* Values formvalue() hands back, keyed "<section>/<option>".
+ *
+ * form.Map.formvalue() did not exist in this stub until status.js started
+ * using it to label the connection check with the address family it probes.
+ * It is modelled from an explicit fixture rather than returning undefined for
+ * everything: a view that branches on a form value would otherwise always
+ * take the falsy arm, the snapshot would look stable, and the other arm would
+ * never run anywhere - the "a test that stages its own inputs cannot see
+ * production" trap in its purest form. ipv6_support is '1' here so the
+ * snapshot pins the branch a user with IPv6 enabled actually sees. */
+const formValues = { 'config/ipv6_support': '1' };
+
 form.Map = class {
 	constructor(title) { this.title = title; this.sections = []; }
 	section(kind, name) {
@@ -231,6 +243,7 @@ form.Map = class {
 		this.sections.push(section);
 		return section;
 	}
+	formvalue(sectionId, name) { return formValues[`${sectionId}/${name}`]; }
 	render() { return { sections: this.sections.map((s) => s.toJSON()) }; }
 };
 
