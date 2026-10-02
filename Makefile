@@ -5,6 +5,7 @@
 
 include $(TOPDIR)/rules.mk
 
+LUCI_TITLE:=The modern ImmortalWrt proxy platform for ARM64/AMD64 (sing-box 1.14)
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:= \
 	+sing-box \
