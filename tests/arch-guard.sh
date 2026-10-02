@@ -2133,6 +2133,143 @@ else
 fi
 
 echo
+echo "== guard 46: IPv6 is only handled when mainland IPv6 is classifiable =="
+
+# issue #4 / the china_ip6 defect share one root cause: every IPv6 decision
+# was keyed off ipv6_support, a flag that says what the user *wants*, not
+# whether the two halves of the split can agree on what "mainland" means.
+# geoip-cn.srs and china_ip4.json are IPv4-only, so with IPv6 on a mainland
+# destination reached over IPv6 matched no rule on either side and fell
+# through to the default - the proxy.  The firewall half was worse than
+# useless in the empty-list case: nft accepts `elements = { }`, so the
+# mainland v6 return matched nothing while the file looked fine.
+#
+# The invariants, all of which had to be introduced together:
+#   a) the template derives v6_handled from the list, not from the flag
+#   b) the v6 route rule exists, so the route half can classify
+#   c) the DNS cn-fallback match names the same v6 rule-set
+#   d) both halves ask the *same* question, so neither can name a tag the
+#      other never declared
+#   e) the degraded state is announced, not silent
+
+# (a) The template must not branch on the raw flag anywhere. A single
+# remaining `ipv6_support === '1'` gate is a v6 path that ignores whether the
+# list can classify anything - the exact shape of the original defect.
+#
+# Scoped to template *tags* on purpose: the header legitimately tests the flag
+# twice in plain code (defining v6_handled, and building the degraded-warning
+# string), and a substring search over the whole file flags those too. What
+# must not exist is a `{% ... %}` that branches on the raw flag.
+leftover_v6_gates="$(grep -nE "\{%[^%]*ipv6_support[^%]*%\}" "$SCRIPTS/firewall_post.ut" || true)"
+if [ -n "$leftover_v6_gates" ]; then
+	fail "firewall_post.ut still gates an IPv6 path on the raw ipv6_support flag:"
+	printf '%s\n' "$leftover_v6_gates" | sed 's/^/      /'
+else
+	pass "no template tag in firewall_post.ut branches on the raw ipv6_support flag"
+fi
+
+# v6_handled must be the conjunction, not a rename of the flag.
+if grep -q "v6_handled = (ipv6_support === '1') && cn_ipv6_ready" "$SCRIPTS/firewall_post.ut"; then
+	pass "v6_handled requires both the flag and a usable china_ip6 list"
+else
+	fail "v6_handled is no longer (ipv6_support === '1') && cn_ipv6_ready - a v6 path"
+	fail "can be re-enabled without the list that makes it correct"
+fi
+
+# (b) The route half. Its absence is the silent proxy hop.
+if grep -q "rule_set: 'china-ip6'" "$SCRIPTS/generator/route.uc"; then
+	pass "the route block carries a china-ip6 rule"
+else
+	fail "no china-ip6 route rule - a mainland IPv6 destination matches nothing and"
+	fail "falls through to final, which is the proxy in bypass_mainland_china"
+fi
+
+# (c) The DNS half, or the answer for a mainland AAAA keeps coming from the
+# proxy resolver even though the route side would now send it direct.
+cn_fb_block="$(sed -n '/cn_fallback/,/^		}/p' "$SCRIPTS/generator/dns.uc" || true)"
+if printf '%s' "$cn_fb_block" | grep -q "china-ip6"; then
+	pass "the cn-fallback response match covers china-ip6 as well as geoip-cn"
+else
+	fail "cn-fallback still matches geoip-cn only; the DNS half of the IPv6 split"
+	fail "is not in agreement with the route half"
+fi
+
+# (d) One question, asked once, by the one layer allowed to ask it.  The
+# route rule and the DNS match must reference the same rule-set: if one of
+# them decides the file is there and the other decides it is not, one names
+# a tag the other never declared and sing-box rejects the whole config.  The
+# stat therefore belongs in the CLI's env (guard 27 forbids fs under
+# generator/) and reaches both halves as one context field.
+ctx_flag="$(grep -c 'china_ip6_ready' "$SCRIPTS/generator/context.uc")"
+route_flag="$(grep -c 'ctx.china_ip6_ready' "$SCRIPTS/generator/route.uc")"
+dns_flag="$(grep -c 'ctx.china_ip6_ready' "$SCRIPTS/generator/dns.uc")"
+env_flag="$(grep -c 'china_ip6_ready' "$SCRIPTS/generate_client.uc")"
+if [ "$ctx_flag" -ge 1 ] && [ "$route_flag" -ge 1 ] && [ "$dns_flag" -ge 1 ] && [ "$env_flag" -ge 1 ]; then
+	pass "one context field (china_ip6_ready) decides it for both halves, and the"
+	pass "  CLI that is allowed to stat the file is the one that sets it"
+else
+	fail "the route half ($route_flag), the DNS half ($dns_flag), the context ($ctx_flag)"
+	fail "and the CLI env ($env_flag) do not all read one china_ip6_ready flag - a"
+	fail "disagreement makes one of them name a rule-set the other never declared"
+fi
+
+# The default must be pessimistic. An env that forgot the field (the server
+# path, a future caller) must not turn "no file" into "assume there is one".
+if grep -q "china_ip6_ready: (env?.china_ip6_ready === true)" "$SCRIPTS/generator/context.uc"; then
+	pass "china_ip6_ready defaults to false when the caller did not resolve it"
+else
+	fail "china_ip6_ready is not defaulting to false - a caller that omits it would"
+	fail "emit a rule naming a rule-set file that may not exist"
+fi
+
+# (e) The degraded state has to be visible without tcpdump: a log line on
+# every start, and a rule comment that survives into `nft list ruleset`.
+if grep -q "WARNING: IPv6 support is ON but" "$RUNTIME/service.sh"; then
+	pass "service.sh logs the unusable-china_ip6 state on every start"
+else
+	fail "service.sh says nothing when IPv6 is on but china_ip6.txt is unusable -"
+	fail "the user is left with an unexplained, unproxied IPv6 path"
+fi
+
+if grep -q 'comment "!homeproxy: WARNING china_ip6' "$SCRIPTS/firewall_post.ut"; then
+	pass "the degraded state is also carried as an nft rule comment, so"
+	pass "  nft list ruleset shows it without reading the log"
+else
+	fail "the degraded state is not announced in the ruleset itself"
+fi
+
+# (f) No `{% else %}` in the template at all.
+#
+# This one is here because it cost a full round trip to find: the warning was
+# first written as `{% if <degraded> %} ... {% else %} ... {% endif %}` around
+# each of the three jump rules.  The dstnat jump is at the top level and
+# rendered fine, so the obvious test - "render the template, see the comment"
+# - passed for it.  The same block inside the `{% if (match(proxy_mode,
+# /tproxy/)) %}` and `{% if (match(proxy_mode, /tun/)) %}` chain blocks aborts
+# the render with "Syntax error: Expecting expression" pointing at the *endif*
+# line, several hundred lines away from the real cause.  ucode's own tests do
+# not run here and no local check catches it, so the invariant is pinned as a
+# ban instead: the file never used an else branch before this change, and the
+# warning is now an interpolated string (v6_warn_comment) precisely so it does
+# not have to.
+else_count="$(grep -cE '^[[:space:]]*\{% else %\}' "$SCRIPTS/firewall_post.ut")"
+if [ "$else_count" -eq 0 ]; then
+	pass "firewall_post.ut uses no {% else %} - the construct utpl mis-parses when"
+	pass "  nested in the tproxy/tun chain blocks (the warning is a string instead)"
+else
+	fail "firewall_post.ut has $else_count {% else %} block(s); utpl fails to parse an"
+	fail "else branch nested inside the tproxy/tun chain blocks and blames the endif"
+fi
+
+# The warning has to stay a string, not creep back into a tag.
+if grep -q "const v6_warn_comment" "$SCRIPTS/firewall_post.ut" &&
+   grep -q "{{ v6_warn_comment }}" "$SCRIPTS/firewall_post.ut"; then
+	pass "the degraded warning is an interpolated string used by the jump rules"
+else
+	fail "v6_warn_comment is gone - the degraded state has no in-ruleset marker again"
+fi
+
+echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then
 	echo "ARCHITECTURE GUARD FAILED"
