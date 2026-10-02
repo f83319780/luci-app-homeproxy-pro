@@ -74,36 +74,27 @@
 
 ## 自编译（OpenWrt buildroot）
 
-从 GitHub 拉源码自编译时，本包依赖 `feeds/luci/luci.mk`，有几处和直接装官方 apk 不一样，容易踩：
-
-**1. 包目录名不影响产物名。** `luci.mk` 的翻译包名取自**目录名**而不是 `PKG_NAME`，所以直接 clone 成仓库名（`luci-app-homeproxy-pro`）时，早期版本会产出 `luci-i18n-homeproxy-pro-zh-cn-*.apk`，与官方发布的 `luci-i18n-homeproxy-zh-cn-*.apk` 对不上，看起来像"没编译出中文包"。Makefile 现在用 `LUCI_BASENAME:=homeproxy` 钉死了这个名字，**无论目录叫什么都会产出 `luci-i18n-homeproxy-zh-cn`**，与发布版一致。arch-guard 49 负责防它再漂回去。
-
-**2. 翻译包默认不构建，必须先勾选语言。** i18n 子包的开关是 `LUCI_LANG_zh_Hans`（luci.mk 里 `DEFAULT:=LUCI_LANG_zh_Hans||(ALL&&m)`），tristate 不勾就是 `n`。没勾时**不会报错**，只会打一行警告然后跳过：
-
-```
-WARNING: skipping luci-i18n-homeproxy-zh-cn -- package not selected
+```sh
+make menuconfig
 ```
 
-所以 `make menuconfig` 里要走到 **LuCI → Translations → 简体中文 (zh_Hans)** 勾上，再存盘。
-
-**3. 本包不编译 sing-box。** 系统固件必须自带 sing-box 1.14+，否则依赖解析直接失败。自编译前先确认你的固件有。
-
-编译命令（`-j1` 便于看完整日志）：
+勾选 **luci-app-homeproxy**，以及 **LuCI → Translations → 简体中文 (zh_Hans)**。
+后者不勾的话翻译包不会构建，且不报错，只在日志里留一行
+`WARNING: skipping luci-i18n-homeproxy-zh-cn -- package not selected`。
 
 ```sh
-make menuconfig                                     # 勾 luci-app-homeproxy + 简体中文
 make package/luci-app-homeproxy-pro/compile V=s -j1
 ls bin/packages/<target>/<subtarget>/base/ | grep -i homeproxy
 ```
 
-最后一条应当同时看到两个包：
+应同时得到两个包：
 
 ```
 luci-app-homeproxy-28.10.1.14-r37.apk
 luci-i18n-homeproxy-zh-cn-28.10.1.14-r37.apk
 ```
 
-**排查**：如果只看到主包，先看编译日志里有没有上面那行 `WARNING: skipping ...` —— 有就是第 2 条（语言没勾）；没有但 `base/` 里的文件名和上面不一致，就是目录名导致的旧行为。
+本包不编译 sing-box，固件须自带 1.14+，否则依赖解析失败。
 
 ## 已知限制
 
