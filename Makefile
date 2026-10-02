@@ -22,7 +22,7 @@ LUCI_DEPENDS:= \
 	+ucode-mod-digest
 
 PKG_NAME:=luci-app-homeproxy
-PKG_VERSION:=28.9.1.14
+PKG_VERSION:=28.10.1.14
 PKG_RELEASE:=35
 
 # Only files the package actually ships belong here.  The previous list named
