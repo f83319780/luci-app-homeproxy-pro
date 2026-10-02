@@ -2339,6 +2339,50 @@ else
 	pass "no view calls the non-existent form.Map.formvalue()"
 fi
 
+echo "== guard 49: the i18n package name cannot drift from PKG_NAME =="
+
+# luci.mk names the translation package from the *checkout directory*, not from
+# PKG_NAME:
+#
+#     LUCI_NAME?=$(notdir ${CURDIR})
+#     LUCI_BASENAME?=$(patsubst luci-$(LUCI_TYPE)-%,%,$(LUCI_NAME))
+#     define Package/luci-i18n-$(LUCI_BASENAME)-$(1)
+#
+# PKG_NAME is pinned to luci-app-homeproxy here, so with the repository cloned
+# under its own name (luci-app-homeproxy-pro, which is what every self-compiler
+# gets) the feed build emitted luci-i18n-homeproxy-pro-zh-cn while the published
+# apk was named by build-pkg.sh from PKG_NAME and came out
+# luci-i18n-homeproxy-zh-cn. Two names, one project, and the person self-building
+# concludes the translation package is missing (issue #5).
+#
+# The check is that LUCI_BASENAME agrees with the PKG_NAME the release path uses,
+# computed here from the Makefile the way luci.mk would - not by re-deriving it
+# from this repository's own directory name, which is precisely the thing that
+# was wrong and would make the assertion vacuous.
+MAKEFILE="$ROOT/Makefile"
+MK_PKG_NAME="$(sed -n 's/^PKG_NAME:=//p' "$MAKEFILE" 2>"/dev/null" | head -1)"
+MK_LUCI_BASENAME="$(sed -n 's/^LUCI_BASENAME:=//p' "$MAKEFILE" 2>"/dev/null" | head -1)"
+
+if [ -z "$MK_PKG_NAME" ]; then
+	fail "PKG_NAME is not declared in the Makefile - nothing to keep the i18n name tied to"
+elif [ -z "$MK_LUCI_BASENAME" ]; then
+	fail "LUCI_BASENAME is not pinned, so the i18n package name follows the checkout"
+	fail "  directory: cloning as luci-app-homeproxy-pro yields luci-i18n-homeproxy-pro-zh-cn"
+	fail "  while the release path names it luci-i18n-homeproxy-zh-cn (issue #5)"
+else
+	# luci.mk strips the "luci-<type>-" prefix; type is the 2nd dash-field.
+	mk_type="$(printf '%s' "$MK_PKG_NAME" | awk -F- '{print $2}')"
+	mk_expected_basename="$(printf '%s' "$MK_PKG_NAME" | sed -n "s/^luci-${mk_type}-//p")"
+
+	if [ "$MK_LUCI_BASENAME" = "$mk_expected_basename" ]; then
+		pass "LUCI_BASENAME matches PKG_NAME, so the i18n package is named the same"
+		pass "  in the feed build and in the release (luci-i18n-${MK_LUCI_BASENAME}-zh-cn)"
+	else
+		fail "LUCI_BASENAME is '$MK_LUCI_BASENAME' but PKG_NAME '$MK_PKG_NAME' implies"
+		fail "  '$mk_expected_basename' - the self-built i18n package will not match the release"
+	fi
+fi
+
 echo
 printf '%s checks, %s failures\n' "$checks" "$([ "$FAILED" = 0 ] && echo 0 || echo 'nonzero')"
 if [ "$FAILED" != 0 ]; then

@@ -25,6 +25,19 @@ PKG_NAME:=luci-app-homeproxy
 PKG_VERSION:=28.10.1.14
 PKG_RELEASE:=37
 
+# luci.mk derives the translation package's name from the *directory* name
+# (LUCI_NAME -> LUCI_BASENAME), not from PKG_NAME above. Left to itself it
+# means the same source tree produces luci-i18n-homeproxy-zh-cn when the
+# checkout is called luci-app-homeproxy and luci-i18n-homeproxy-pro-zh-cn when
+# it is called luci-app-homeproxy-pro - which is the name this repository
+# carries on GitHub, and therefore the name every self-compiler gets.  The
+# released apk/ipk pair is named by .github/build-pkg.sh, which builds from
+# PKG_NAME and never reads LUCI_BASENAME, so a self-compiled i18n package did
+# not match the published one (issue #5).  Pinning it here makes the feed
+# build agree with the release regardless of what the directory is called;
+# arch-guard 49 keeps the two names from drifting apart again.
+LUCI_BASENAME:=homeproxy
+
 # Only files the package actually ships belong here.  The previous list named
 # four paths that exist nowhere in the tree - certs/ and ruleset/ are created at
 # runtime, and the two *_list.txt files are written by the LuCI ACL editor - so
