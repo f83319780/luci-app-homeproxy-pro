@@ -69,12 +69,18 @@ function resolve_env(dm) {
 		 * firewall has already degraded to passing IPv6 through, with a
 		 * warning in the ruleset and the log.
 		 *
-		 * lstat(), not access(): access() returns null on this ucode build
-		 * whether or not the file is there, so it cannot answer the question
-		 * at all - a check written as `access(...) === 0` is false for a
-		 * perfectly good rule-set and silently disables the whole IPv6 split.
-		 * lstat() returns the stat object when the path exists and null when
-		 * it does not, which is the signal we need. */
+		 * lstat(), not the two-argument access(). fs.access() on this ucode
+		 * build answers only in its one-argument form: access(path) returns
+		 * true for an existing path and null for a missing one, while
+		 * access(path, mode) returns null either way. The two-argument form
+		 * is therefore the worst possible choice here - it reports every
+		 * file as missing, so this flag would be permanently false and the
+		 * whole IPv6 split would stay switched off with nothing logged. The
+		 * one-argument call sites elsewhere in the tree (homeproxy.uc's
+		 * cleanup_exec_dir) are correct and must stay as they are.
+		 * lstat() is used because it is unambiguous - there is no second
+		 * argument to get wrong - and because the neighbouring stderr-size
+		 * check in homeproxy.uc already reads sizes through it. */
 		china_ip6_ready: lstat(HP_DIR + '/resources/china_ip6.json') !== null
 	};
 

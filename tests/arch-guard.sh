@@ -2238,35 +2238,61 @@ else
 	fail "the degraded state is not announced in the ruleset itself"
 fi
 
-# (f) No `{% else %}` in the template at all.
+# (f) The degraded warning stays a single interpolated string.
 #
-# This one is here because it cost a full round trip to find: the warning was
-# first written as `{% if <degraded> %} ... {% else %} ... {% endif %}` around
-# each of the three jump rules.  The dstnat jump is at the top level and
-# rendered fine, so the obvious test - "render the template, see the comment"
-# - passed for it.  The same block inside the `{% if (match(proxy_mode,
-# /tproxy/)) %}` and `{% if (match(proxy_mode, /tun/)) %}` chain blocks aborts
-# the render with "Syntax error: Expecting expression" pointing at the *endif*
-# line, several hundred lines away from the real cause.  ucode's own tests do
-# not run here and no local check catches it, so the invariant is pinned as a
-# ban instead: the file never used an else branch before this change, and the
-# warning is now an interpolated string (v6_warn_comment) precisely so it does
-# not have to.
-else_count="$(grep -cE '^[[:space:]]*\{% else %\}' "$SCRIPTS/firewall_post.ut")"
-if [ "$else_count" -eq 0 ]; then
-	pass "firewall_post.ut uses no {% else %} - the construct utpl mis-parses when"
-	pass "  nested in the tproxy/tun chain blocks (the warning is a string instead)"
+# An earlier version of this guard banned `{% else %}` outright, on the
+# strength of a render failure traced to "utpl cannot parse an else branch
+# nested in the tproxy/tun chain blocks".  That diagnosis was wrong and the
+# ban with it: the failure only ever reproduced in stubbed copies of the
+# template, never in the template itself - the else-form renders fine on the
+# target, and else at top level, nested one level and nested two levels all
+# render fine in isolation.  The interpolation is kept because it is one
+# string instead of three copies of a comment, not because else is banned.
+#
+# What is worth pinning is the thing that was actually verified: the warning
+# has to be present on the jump rules, in a form that survives into
+# `nft list ruleset`.
+if grep -q "const v6_warn_comment" "$SCRIPTS/firewall_post.ut" &&
+   [ "$(grep -c "{{ v6_warn_comment }}" "$SCRIPTS/firewall_post.ut")" -eq 3 ]; then
+	pass "the degraded warning is one string interpolated into all three jump rules"
 else
-	fail "firewall_post.ut has $else_count {% else %} block(s); utpl fails to parse an"
-	fail "else branch nested inside the tproxy/tun chain blocks and blames the endif"
+	fail "v6_warn_comment is gone or no longer used by all three jump rules - the"
+	fail "degraded state has no in-ruleset marker again"
 fi
 
-# The warning has to stay a string, not creep back into a tag.
-if grep -q "const v6_warn_comment" "$SCRIPTS/firewall_post.ut" &&
-   grep -q "{{ v6_warn_comment }}" "$SCRIPTS/firewall_post.ut"; then
-	pass "the degraded warning is an interpolated string used by the jump rules"
+echo
+echo "== guard 47: fs.access() is only ever called with one argument =="
+
+# Found on the target, not by reading: this ucode build's fs.access() answers
+# in its one-argument form only.  access(path) returns true for an existing
+# path and null for a missing one; access(path, mode) returns null for both.
+# A two-argument call therefore reports every file as missing, and the caller
+# cannot tell that from "the file is not there" - the exact shape of a
+# silently disabled feature.  The IPv6 split shipped broken this way once:
+# generate_client.uc asked access(path, 0) === 0, which is false even for a
+# perfectly good china_ip6.json, so route/DNS stayed silent about mainland
+# IPv6 while every log line said everything was fine.
+#
+# The one-argument call sites are correct and are not what this guards.
+# Comment lines are filtered out the way guard 27 does it: this file, and the
+# source it guards, both have to be able to *name* the bad form in prose.
+bad_access="$(grep -rnE '\baccess\([^)]*,' --include='*.uc' "$SCRIPTS" 2>/dev/null |
+	grep -vE ':[0-9]+:[[:space:]]*(\*|/\*|//|#)' || true)"
+if [ -z "$bad_access" ]; then
+	pass "no fs.access() call passes a second argument (the form that always says 'missing')"
 else
-	fail "v6_warn_comment is gone - the degraded state has no in-ruleset marker again"
+	fail "a two-argument fs.access() call reads as 'path does not exist' for every path:"
+	printf '%s\n' "$bad_access" | sed 's/^/      /'
+	fail "  use the one-argument form, or lstat() (which the stderr-size check already uses)"
+fi
+
+# And the reason this is worth a guard rather than a comment: the failure is
+# invisible. Both spellings compile, both run, and the wrong one produces a
+# correct-looking config that is quietly missing a whole feature.
+if grep -q "lstat(HP_DIR + '/resources/china_ip6.json')" "$SCRIPTS/generate_client.uc"; then
+	pass "the china-ip6 presence check goes through lstat(), which cannot be mis-called"
+else
+	fail "the china-ip6 presence check no longer uses lstat()"
 fi
 
 echo

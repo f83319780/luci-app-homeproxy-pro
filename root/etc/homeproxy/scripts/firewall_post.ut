@@ -204,23 +204,15 @@ const v6_handled = (ipv6_support === '1') && cn_ipv6_ready;
 
 /* The degraded-state warning, as a ready-made nft comment suffix.
  *
- * Computed here and interpolated into the jump rules rather than wrapped
- * around them in `{% if %} ... {% else %} ... {% endif %}`: utpl does not
- * accept an `{% else %}` in the position this needs.  Two of the three jump
- * rules sit inside the `{% if (match(proxy_mode, /tproxy/)) %}` and
- * `{% if (match(proxy_mode, /tun/)) %}` chain blocks, and an else branch
- * nested inside those aborts the render with "Expecting expression" pointing
- * at the endif - while the identical block at the top level (the dstnat
- * jump) renders fine, so the error names the wrong line and reads like a
- * syntax error in the rule itself.  Verified on the target: top-level form
- * parses, nested form does not.  One interpolated string sidesteps the
- * question entirely, and the rule text is identical in both branches anyway
- * - only the comment differs.
- *
  * A real `comment` rather than a `#` line on purpose: fw4 keeps `#` lines
  * only in the generated file, while a rule comment is part of the rule and
  * survives into `nft list ruleset` - which is where someone debugging "why
- * is my IPv6 not going through the proxy" actually looks. */
+ * is my IPv6 not going through the proxy" actually looks.
+ *
+ * Computed once and interpolated into all three jump rules rather than
+ * wrapped around each of them: the rule text is identical either way, only
+ * the comment differs, and one string is one place to change if the wording
+ * ever has to. */
 const v6_warn_comment = ((ipv6_support === '1') && !cn_ipv6_ready)
 	? ' comment "!homeproxy: WARNING china_ip6.txt has 0 usable prefixes - IPv6 is NOT proxied, run update_resources.sh china_ip6"'
 	: '';
