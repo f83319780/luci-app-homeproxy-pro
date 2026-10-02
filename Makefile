@@ -5,13 +5,6 @@
 
 include $(TOPDIR)/rules.mk
 
-LUCI_TITLE:=The modern ImmortalWrt proxy platform for ARM64/AMD64 (sing-box 1.14)
-# Pure ucode/JS payload with no compiled code, so the package itself is arch
-# independent. The real arch constraint comes from the +sing-box dependency,
-# which the feed builds for every architecture Go supports (aarch64, arm,
-# mipsel, riscv64, x86_64, ...); where no sing-box package exists, dependency
-# resolution refuses the install. Checked against the ImmortalWrt 25.12.1
-# package index (sing-box 1.14.0-r1 published for all of the above).
 LUCI_PKGARCH:=all
 LUCI_DEPENDS:= \
 	+sing-box \
@@ -25,25 +18,8 @@ PKG_NAME:=luci-app-homeproxy
 PKG_VERSION:=28.10.1.14
 PKG_RELEASE:=37
 
-# luci.mk derives the translation package's name from the *directory* name
-# (LUCI_NAME -> LUCI_BASENAME), not from PKG_NAME above. Left to itself it
-# means the same source tree produces luci-i18n-homeproxy-zh-cn when the
-# checkout is called luci-app-homeproxy and luci-i18n-homeproxy-pro-zh-cn when
-# it is called luci-app-homeproxy-pro - which is the name this repository
-# carries on GitHub, and therefore the name every self-compiler gets.  The
-# released apk/ipk pair is named by .github/build-pkg.sh, which builds from
-# PKG_NAME and never reads LUCI_BASENAME, so a self-compiled i18n package did
-# not match the published one (issue #5).  Pinning it here makes the feed
-# build agree with the release regardless of what the directory is called;
-# arch-guard 49 keeps the two names from drifting apart again.
 LUCI_BASENAME:=homeproxy
 
-# Only files the package actually ships belong here.  The previous list named
-# four paths that exist nowhere in the tree - certs/ and ruleset/ are created at
-# runtime, and the two *_list.txt files are written by the LuCI ACL editor - so
-# those declarations did nothing.  What is listed instead is the resource data
-# the router updates by itself: on a running device those files are newer than
-# the ones in the package, and without this an upgrade would overwrite them.
 define Package/luci-app-homeproxy/conffiles
 /etc/config/homeproxy
 /etc/homeproxy/resources/china_ip4.txt
