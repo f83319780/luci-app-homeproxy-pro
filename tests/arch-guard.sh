@@ -1009,15 +1009,43 @@ fi
 # No shipped file may cite docs/.  The whole directory is gitignored, so every
 # pointer to it is a dead link in a fresh clone - that is how README.md
 # came to reference an agent guide and an improvement plan that no
-# contributor can open.  Kept here (with the docs/ pattern, not the names)
-# so the rule cannot quietly come back.
-DEAD_DOCS="$(grep -rlE 'docs/(adr|architecture-improvement-plan|homeproxy_architecture_refactor_agent_guide|audit-report|next-step-plan)' \
+# contributor can open.
+#
+# The pattern is deliberately *shape*-based, not a list of names.  An earlier
+# version enumerated the offending documents
+# (adr|architecture-improvement-plan|homeproxy_architecture_refactor_agent_guide|
+# audit-report|next-step-plan) and therefore only ever caught those five: the
+# next document to be written - the gap analysis, the dated review reports -
+# walked straight past it, and a dozen comments across the generators, the
+# views and the test suite kept citing
+# `docs/linux.json 与 pro 的差距分析.md` with no gate noticing.
+# Matching `docs/` followed by anything catches every present and future name.
+#
+# The anchor is what keeps it from crying wolf.  `htdocs/` contains the
+# substring `docs/`, and so does the `/docs/` of an external URL such as
+# https://github.com/anytls/anytls-go/blob/v0.0.8/docs/uri_scheme.md - both
+# are legitimate and must not be flagged.  Requiring the character before
+# `docs/` to be neither alphanumeric nor `_`, `.`, `/`, `-` or `:` excludes
+# exactly those two shapes and keeps every real citation.
+DEAD_DOCS="$(grep -rlE '(^|[^:A-Za-z0-9_./-])docs/[^[:space:]]' \
 	"$ROOT/README.md" "$ROOT/root" "$ROOT/htdocs" 2>/dev/null || true)"
 if [ -z "$DEAD_DOCS" ]; then
 	pass "no shipped file cites the gitignored docs/ tree"
 else
 	fail "these shipped files cite docs/ (gitignored, absent from every clone):"
 	printf '%s\n' "$DEAD_DOCS"
+fi
+
+# The same rule for the test tree, minus this file: a dead citation inside a
+# test is just as unresolvable for a contributor reading the failure, and the
+# generator suite carried six of them.
+DEAD_DOCS_TESTS="$(grep -rlE '(^|[^:A-Za-z0-9_./-])docs/[^[:space:]]' \
+	"$ROOT/tests" 2>/dev/null | grep -v 'tests/arch-guard\.sh$' || true)"
+if [ -z "$DEAD_DOCS_TESTS" ]; then
+	pass "no test file cites the gitignored docs/ tree either"
+else
+	fail "these test files cite docs/ (gitignored, absent from every clone):"
+	printf '%s\n' "$DEAD_DOCS_TESTS"
 fi
 
 echo
@@ -1716,9 +1744,8 @@ echo "== guard 38: append_custom_dns emits the HTTPS/SVCB reject as its first DN
 
 # The proxy path emits this reject (append_proxy_dns line 102); the custom
 # path used to rely on whatever the user wrote, so a rule that targets the
-# same query_type could shadow the safety net.  The fix (see
-# docs/linux.json 与 pro 的差距分析.md §2.2) prepends the same literal in
-# append_custom_dns.  Two checks keep that ordering:
+# same query_type could shadow the safety net.  The fix prepends the same
+# literal in append_custom_dns.  Two checks keep that ordering:
 #
 #   (a) the literal appears in BOTH append_proxy_dns and append_custom_dns;
 #   (b) the second occurrence (the one inside append_custom_dns) comes
@@ -1732,7 +1759,7 @@ if [ "$reject_count" -eq 2 ]; then
 	pass "the HTTPS/SVCB reject appears in both append_proxy_dns and append_custom_dns"
 else
 	fail "expected 2 occurrences of 'query_type: [64, 65]' in generator/dns.uc, found $reject_count"
-	fail "the custom path lost its built-in reject; see §2.2 of the gap analysis"
+	fail "the custom path lost its built-in reject (see guard 38 in this file)"
 fi
 
 # (b): the custom-path reject is the SECOND occurrence (append_custom_dns
@@ -1759,9 +1786,7 @@ fi
 
 echo "== guard 39: sniffer_advanced_mode default stays at '0' =="
 
-# §2.7 (linux.json 与 pro 的差距分析.md): the advanced-mode sniff profile
-
-# §2.7 (linux.json 与 pro 的差距分析.md): the advanced-mode sniff profile
+# The advanced-mode sniff profile
 # (100ms / universal list) is gated behind a UCI opt-in so an upgrade
 # does not change the sniffer behaviour.  The default must remain '0';
 # the generator falls back to '0' on a missing UCI value, and the
@@ -1869,7 +1894,7 @@ fi
 
 echo "== guard 41: experimental.cache_file is unconditional in attachExperimental() =="
 
-# Review (2026-09-29, docs/review-report-20260929.md §1.4.3 / §5.1, P2 #3):
+# The 2026-09-29 review (P2 #3) found:
 # attachExperimental() used to wrap the experimental.cache_file block in
 # `if (routing_mode in ['bypass_mainland_china', 'custom'])`, leaving
 # gfwlist / proxy_mainland_china / global with cold-start DNS on every
@@ -1921,7 +1946,7 @@ esac
 
 echo "== guard 42: NAPTR_BYPASS_SUFFIXES is the only domain_suffix qtype-35 source =="
 
-# Review (2026-09-29, docs/review-report-20260929.md §2.2.1, P2 #4): the three
+# The 2026-09-29 review (P2 #4) found: the three
 # NAPTR (qtype 35) bypass suffixes (r.10086.cn, 10086.cn, pub.3gppnetwork.org)
 # used to be inlined into a push() call inside append_proxy_dns() and the
 # comment that explained them was on the same line as the push. The fix
@@ -1948,7 +1973,7 @@ fi
 echo
 echo "== guard 43: the rollback UCI snapshot matches the keys the intercept layer reads =="
 
-# Review 2026-09-29 (docs/review-report-20260929-full.md §1.2-1.4, P2 #1/#2).
+# The 2026-09-29 review (P2 #1 / #2) found:
 #
 # reload_service rolls back by restoring the known-good sing-box file *and*
 # replaying a UCI snapshot of the keys that steer the network layer - the
